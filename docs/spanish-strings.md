@@ -44,7 +44,7 @@ Change a wording there; this file is a copy for reading.
 | Earlier blessing / Later blessing | Bendición anterior / Bendición siguiente | VoiceOver, the arrows |
 | New blessing | Nueva bendición | |
 | From Dad | De Dad | |
-| When a blessing is recorded, its light appears here. | Cuando se grabe una bendición, su luz aparecerá aquí. | |
+| When a blessing is recorded, a light appears here. | Cuando se grabe una bendición, una luz aparecerá aquí. | |
 | No blessings yet | Todavía no hay bendiciones | |
 | One blessing since June 2024 | Una bendición desde junio de 2024 | Counts are in words up to twelve |
 | Five blessings since June 2024 | Cinco bendiciones desde junio de 2024 | |
@@ -284,18 +284,28 @@ Shown once, on a fresh install. The app's name is the same in both languages.
 | Free. No account. No ads. | Gratis. Sin cuenta. Sin anuncios. |
 | Continue | Continuar |
 | A few things first | Primero, unas cosas |
-| The phone will ask for each of these. Each has a reason. | El teléfono te preguntará por cada una. Cada una tiene su razón. |
+| Tap Allow beside each, and the phone will ask. | Toca Permitir junto a cada una y el teléfono te preguntará. |
 | Microphone | Micrófono |
 | To hear the blessing as it is given. | Para oír la bendición mientras se da. |
 | Speech recognition | Reconocimiento de voz |
 | To write the words down, on this phone. | Para escribir las palabras, en este teléfono. |
 | Location | Ubicación |
-| To find the sky above you. Allow Once is enough. | Para encontrar el cielo sobre ti. Con «Permitir una vez» basta. |
+| To find the sky above you, not the Salt Lake Temple's. Allow Once is enough. | Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con «Permitir una vez» basta. |
 | To keep your blessings locked. | Para mantener tus bendiciones bloqueadas. |
-| Off. You can turn it on in Settings. | Desactivado. Puedes activarlo en Configuración. |
-| Off. The sky above the Salt Lake Temple will be used. | Desactivada. Se usará el cielo sobre el Templo de Salt Lake. |
-| Allowed (read by VoiceOver for the quiet mark: "Microphone: allowed") | Permitido ("Micrófono: permitido") ★ "permitido" stays masculine for every row, agreeing with the permission, not the row's name ("Ubicación: permitido"). "Permitida" for Ubicación is the other choice. |
-| The phone is asking now ("The phone is asking for Microphone now") | El teléfono está preguntando ("El teléfono está preguntando por Micrófono") |
+| Required (beside the microphone's and speech recognition's titles) | Obligatorio ★ "Necesario" is softer; both agree with micrófono and reconocimiento. |
+| Optional (beside location's and Face ID's) | Opcional |
+| Allow (each row's button) | Permitir |
+| Allow microphone (VoiceOver, for that button; "Allow speech recognition", "Allow location", "Allow Face ID") | Permitir micrófono ("Permitir reconocimiento de voz", "Permitir ubicación", "Permitir Face ID") ★ without the article, as iOS labels its own switches. |
+| Off (a refused row, beside its Settings button) | Desactivado; Desactivada for Ubicación |
+| Settings (that button) | Configuración ★ the open question of "Ajustes" or "Configuración" applies here too. |
+| Open Settings to allow microphone (VoiceOver, for that button) | Abrir Configuración para permitir micrófono |
+| Not answered yet (VoiceOver, a row not yet answered) | Sin responder |
+| The sky above the Salt Lake Temple will be used. (location refused) | Se usará el cielo sobre el Templo de Salt Lake. |
+| Allow the microphone and speech recognition to go on. (above Continue while it is unavailable) | Permite el micrófono y el reconocimiento de voz para seguir. |
+| Allow the microphone to go on. | Permite el micrófono para seguir. |
+| Allow speech recognition to go on. | Permite el reconocimiento de voz para seguir. |
+| Allowed (VoiceOver, a row's state: "Microphone. Required. To hear the blessing as it is given. Allowed") | Permitido ★ stays masculine for every row, agreeing with the permission, not the row's name. "Permitida" for Ubicación is the other choice. |
+| The phone is asking now (VoiceOver, while a row's question is up) | El teléfono está preguntando |
 | Try a few words first? | ¿Probar primero con unas palabras? |
 | Say anything, then hold Amen. You will see what the phone wrote. Nothing is kept. | Di cualquier cosa y luego mantén presionado Amén. Verás lo que escribió el teléfono. No se guarda nada. |
 | Try it | Probar |

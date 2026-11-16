@@ -211,7 +211,7 @@ void main() {
     expect(find.byKey(const Key('older')), findsNothing);
     expect(find.byKey(const Key('newer')), findsNothing);
     expect(find.byKey(const Key('list')), findsNothing);
-    expect(find.text('When a blessing is recorded, its light appears here.'), findsOneWidget);
+    expect(find.text('When a blessing is recorded, a light appears here.'), findsOneWidget);
     expect(find.byKey(const Key('new')), findsOneWidget);
     expect(find.text('No blessings yet'), findsOneWidget);
     await wait(800);

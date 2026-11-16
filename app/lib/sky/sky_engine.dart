@@ -54,8 +54,9 @@ class SkyView {
   static const opening = SkyView(fov: 80, cy: .15, exp: 1, st: 1, orb: 0, lights: 0, solo: 0, names: 0, ring: 1.1);
   /// The welcome, and the practice's result: the same sky, dimmer.
   static const welcome = SkyView(fov: 80, cy: .32, exp: .5, st: .7, orb: 0, lights: 0, solo: 0, names: 0, ring: .7);
-  /// The permissions screen and the rehearsal's question: dimmer still.
-  static const dim = SkyView(fov: 84, cy: .3, exp: .38, st: .6, orb: 0, lights: 0, solo: 0, names: 0, ring: .5);
+  /// The permissions screen and the rehearsal's question: dimmer still, the camera where the
+  /// welcome left it, so the sky stays still as the screens slide across it.
+  static const dim = SkyView(fov: 80, cy: .32, exp: .38, st: .6, orb: 0, lights: 0, solo: 0, names: 0, ring: .5);
 }
 
 class _Glide {
@@ -107,6 +108,10 @@ class SkyEngine extends ChangeNotifier {
 
   /// Seconds since the sky started.
   double clock = 0;
+
+  /// Held still: the first run's opening while the app cannot be seen (a system question over it,
+  /// Control Centre, the app switcher), so it is not over before anyone sees it.
+  bool frozen = false;
 
   // Camera, eased every frame toward the goal.
   double ra = 0, dec = 0;
@@ -363,6 +368,7 @@ class SkyEngine extends ChangeNotifier {
   // ---- frame ----
 
   void step(double dt) {
+    if (frozen) return;
     clock += dt;
     final k = 1 - math.exp(-dt * 3.2);
     fov += (_goalFov - fov) * k;

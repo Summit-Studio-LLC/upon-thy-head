@@ -3,8 +3,8 @@
 #
 #   tool/phone.sh [options]
 #
-#   (nothing)      build in profile mode (real speed), install, open
-#   --release      build in release mode instead (exactly what people would get)
+#   (nothing)      build in release mode (exactly what people would get), install, open
+#   --profile      build in profile mode instead (for measuring speed; iOS then asks about the local network)
 #   --seed         start with the five sample blessings (only if the phone has none yet)
 #   --dense        start with the 120 test blessings (only if the phone has none yet)
 #   --check        include the phone check page, and open it at launch
@@ -26,7 +26,7 @@ say() { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
 
-mode=profile seed= check=0 spanish=0 log=0 report=0 phone= buildonly=0
+mode=release seed= check=0 spanish=0 log=0 report=0 phone= buildonly=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --release) mode=release ;;
@@ -170,7 +170,7 @@ list_phones() { awk -F'|' '{ printf "  %s  %s (%s, iOS %s)\n", $1, $3, $4, $5 }'
 
 args_again() {
   local a=()
-  [[ $mode == release ]] && a+=(--release)
+  [[ $mode == profile ]] && a+=(--profile)
   [[ $seed == true ]] && a+=(--seed)
   [[ $seed == dense ]] && a+=(--dense)
   [[ $check == 1 ]] && a+=(--check)

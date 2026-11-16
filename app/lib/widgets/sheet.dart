@@ -5,7 +5,7 @@ import 'buttons.dart';
 
 /// The prototype's `.sheet`: a raised panel rising from the bottom edge.
 /// With [barrier], the rest of the screen dims and a tap on it calls [onDismiss].
-class Sheet extends StatelessWidget {
+class Sheet extends StatefulWidget {
   const Sheet({
     super.key,
     required this.palette,
@@ -24,8 +24,39 @@ class Sheet extends StatelessWidget {
   final Key? panelKey;
   final VoidCallback? onDismiss;
 
+  /// A sheet is up somewhere: the edge swipe back does nothing then.
+  static bool get anyUp => _up.isNotEmpty;
+  static final Set<_SheetState> _up = {};
+
+  @override
+  State<Sheet> createState() => _SheetState();
+}
+
+class _SheetState extends State<Sheet> {
+  void _track() => widget.on ? Sheet._up.add(this) : Sheet._up.remove(this);
+
+  @override
+  void initState() {
+    super.initState();
+    _track();
+  }
+
+  @override
+  void didUpdateWidget(Sheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _track();
+  }
+
+  @override
+  void dispose() {
+    Sheet._up.remove(this);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final palette = widget.palette, on = widget.on, barrier = widget.barrier, label = widget.label;
+    final child = widget.child, panelKey = widget.panelKey, onDismiss = widget.onDismiss;
     final p = palette;
     // the keyboard pushes the sheet up
     final inset = MediaQuery.viewInsetsOf(context).bottom;

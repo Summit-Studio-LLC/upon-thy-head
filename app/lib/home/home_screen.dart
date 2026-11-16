@@ -41,6 +41,7 @@ import '../sky/sky_view.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/balanced_text.dart';
+import '../widgets/edge_swipe.dart';
 import '../widgets/fade.dart';
 import '../widgets/icons.dart';
 import '../widgets/scrims.dart';
@@ -214,7 +215,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Steps fading out, kept built until they have.
   final Set<Onboard> _leaving = {};
   FirstRunPermissions? _perms;
-  Timer? _openingTimer;
+  PausableTimer? _openingTimer;
+
+  /// First-run steps that move as a step (in from the right, out to the left) rather than fade.
+  final Set<Onboard> _sliding = {};
   bool _openingShared = false;
 
   /// Locked at launch with the rest of the first run still to come: shown once unlocked.
@@ -559,10 +563,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // the opening and the welcome wait while the app cannot be seen (a question over it, Control
+    // Centre, the app switcher), and go on from where they were when it can
+    _setVisible(state == AppLifecycleState.resumed);
     // back from Settings: look again at what is allowed
     if (state == AppLifecycleState.resumed && _stage == Stage.record && !_session.live) {
       _session.checkPermissions(ask: false);
     }
+    // back from the Settings app from a refused row of the first run: look again
+    if (state == AppLifecycleState.resumed && _onboard == Onboard.permissions) unawaited(_perms?.recheck());
     // back from the Settings app after "Use my location": if now allowed, look
     if (state == AppLifecycleState.resumed && _stage == Stage.settings) {
       final w = _where;
@@ -1073,10 +1082,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   late final FirstRunAsker _asker = widget.firstRunAsker ?? NativeFirstRunAsker(_locator);
 
-  /// Move the first run to [next]; the step it leaves stays built while it fades out.
-  void _go(Onboard next) {
+  void _setVisible(bool on) {
+    firstRunVisible.value = on;
+    _engine.frozen = !on && const {Onboard.opening, Onboard.welcome, Onboard.sharedLine}.contains(_onboard);
+  }
+
+  /// Move the first run to [next]; the step it leaves stays built while it fades out. [slide]: the
+  /// two move as a step across the still sky, [FirstRunFade.slide].
+  void _go(Onboard next, {bool slide = false}) {
     final was = _onboard;
     if (was == next) return;
+    if (slide) {
+      _sliding.addAll([was, next]);
+    } else {
+      _sliding
+        ..remove(was)
+        ..remove(next);
+    }
     if (was != Onboard.none && was != Onboard.waiting) {
       _leaving.add(was);
       Timer(const Duration(milliseconds: 650), () {
@@ -1147,8 +1169,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _engine.lineFrom = _engine.clock + .8;
     _engine.lineFor = 1.5;
     _openingTimer?.cancel();
-    _openingTimer = Timer(const Duration(milliseconds: 4000), _afterOpening);
+    _openingTimer = PausableTimer(const Duration(milliseconds: 4000), _afterOpening);
     _go(Onboard.opening);
+    _setVisible(firstRunVisible.value);
   }
 
   void _afterOpening() {
@@ -1157,15 +1180,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _engine.lineFor = 0;
     _engine.setView(SkyView.welcome);
     _go(_openingShared ? Onboard.sharedLine : Onboard.welcome);
+    _setVisible(firstRunVisible.value);
   }
 
   Future<void> _welcomeDone() async {
     if (_onboard != Onboard.welcome) return;
     await _settings?.setFirstRun(FirstRun.permissions);
-    _showPermissions();
+    _showPermissions(slide: true);
   }
 
-  void _showPermissions() {
+  void _showPermissions({bool slide = false}) {
     _perms?.dispose();
     final perms = _perms = FirstRunPermissions(
       asker: _asker,
@@ -1176,26 +1200,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     unawaited(perms.load());
     _engine.setView(SkyView.dim);
-    _go(Onboard.permissions);
+    _engine.frozen = false;
+    _go(Onboard.permissions, slide: slide);
   }
 
-  /// Continue: iOS's questions, one after another; when the last is answered, on by itself.
-  Future<void> _runPermissions() async {
+  /// Continue, open once the microphone and speech recognition are answered: on to the rehearsal
+  /// (or the sky, when the microphone was refused). Location and Face ID may be left: the Salt Lake
+  /// Temple's sky, and the lock asks for Face ID the first time it locks.
+  Future<void> _permissionsContinue() async {
     final perms = _perms;
-    if (perms == null || perms.running || _onboard != Onboard.permissions) return;
-    await perms.run();
-    if (!mounted || !identical(perms, _perms)) return;
+    if (perms == null || !perms.canContinue || _onboard != Onboard.permissions) return;
     // allowed: find the place now, so the first blessing is given under its own sky
-    if (perms.rows.any((r) => r.kind == PermissionKind.location && r.status == RowStatus.allowed)) unawaited(_where?.refresh());
+    if (perms.row(PermissionKind.location)?.status == RowStatus.allowed) unawaited(_where?.refresh());
     unawaited(_lock.recheck());
     await _settings?.setFirstRun(FirstRun.rehearsal);
-    // long enough to see the last mark once Face ID's own scan has gone, then on by itself
-    await Future<void>.delayed(const Duration(milliseconds: 1400));
-    if (mounted && _onboard == Onboard.permissions) await _showRehearsal();
+    if (mounted && _onboard == Onboard.permissions) await _showRehearsal(slide: true);
   }
 
   /// "Try a few words first?", only when the microphone is allowed.
-  Future<void> _showRehearsal() async {
+  Future<void> _showRehearsal({bool slide = false}) async {
     var mic = Permission.undetermined;
     try {
       mic = await _asker.microphone();
@@ -1203,7 +1226,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     if (mic != Permission.granted) return _finishFirstRun();
     _engine.setView(SkyView.dim);
-    _go(Onboard.rehearsal);
+    _go(Onboard.rehearsal, slide: slide);
   }
 
   /// The practice's own folder, in tmp: never the audio folder, so nothing in it is ever kept,
@@ -1347,18 +1370,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   List<Widget> _firstRunLayers(Palette p) {
     bool built(Onboard o) => _onboard == o || _leaving.contains(o);
-    Widget layer(Onboard o, Widget Function() child) =>
-        Positioned.fill(key: ValueKey('fr-${o.name}'), child: FirstRunFade(on: _onboard == o, child: child()));
+    Widget layer(Onboard o, Widget Function() child, {Duration out = const Duration(milliseconds: 450)}) => Positioned.fill(
+          key: ValueKey('fr-${o.name}'),
+          child: FirstRunFade(on: _onboard == o, slide: _sliding.contains(o), outDuration: out, child: child()),
+        );
     return [
-      if (built(Onboard.opening)) layer(Onboard.opening, () => OpeningLayer(palette: p, onTap: _afterOpening)),
-      if (built(Onboard.welcome)) layer(Onboard.welcome, () => WelcomeLayer(palette: p, onContinue: _welcomeDone)),
+      // the name is gone before the welcome's first line begins ([openingOut])
+      if (built(Onboard.opening))
+        layer(Onboard.opening, () => WhileVisible(child: OpeningLayer(palette: p, onTap: _afterOpening)), out: openingOut),
+      if (built(Onboard.welcome)) layer(Onboard.welcome, () => WhileVisible(child: WelcomeLayer(palette: p, onContinue: _welcomeDone))),
       if (built(Onboard.permissions) && _perms != null)
-        layer(Onboard.permissions, () => PermissionsLayer(palette: p, state: _perms!, onContinue: _runPermissions)),
+        layer(Onboard.permissions, () => PermissionsLayer(palette: p, state: _perms!, onContinue: _permissionsContinue)),
       if (built(Onboard.rehearsal))
         layer(Onboard.rehearsal, () => RehearsalAskLayer(palette: p, onTry: _openPractice, onNotNow: _finishFirstRun)),
       if (built(Onboard.practiceResult))
         layer(Onboard.practiceResult, () => PracticeResultLayer(palette: p, session: _session, onContinue: _finishFirstRun)),
-      if (built(Onboard.sharedLine)) layer(Onboard.sharedLine, () => SharedLineLayer(palette: p, onContinue: _sharedContinue)),
+      if (built(Onboard.sharedLine))
+        layer(Onboard.sharedLine, () => WhileVisible(child: SharedLineLayer(palette: p, onContinue: _sharedContinue))),
       if (built(Onboard.sharedPreview))
         layer(
           Onboard.sharedPreview,
@@ -1526,8 +1554,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 inDuration: inTime,
                 outDuration: outTime,
                 delay: delay,
-                child: ReadLayer(
-                  palette: p,
+                child: EdgeSwipeBack(
+                  enabled: _stage == Stage.read && !_locked,
+                  onBack: _closeRead,
+                  child: ReadLayer(
+                    palette: p,
                   blessing: reading,
                   placement: placement,
                   on: _stage == Stage.read,
@@ -1536,6 +1567,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onChanges: () => reading == null ? null : openChanges(reading, from: Stage.read),
                   onDelete: _delete,
                   share: _share,
+                  ),
                 ),
               ),
             ),
@@ -1546,7 +1578,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 inDuration: inTime,
                 outDuration: outTime,
                 delay: delay,
-                child: ListenableBuilder(
+                child: EdgeSwipeBack(
+                  enabled: _stage == Stage.review && !_locked,
+                  onBack: () => _reviewKey.currentState?.back(),
+                  child: ListenableBuilder(
                   listenable: _session,
                   builder: (context, _) => ReviewLayer(
                     key: _reviewKey,
@@ -1566,6 +1601,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       if (b != null) openChanges(b, from: Stage.review);
                     },
                   ),
+                  ),
                 ),
               ),
             ),
@@ -1575,13 +1611,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 on: _stage == Stage.changes,
                 inDuration: inTime,
                 outDuration: outTime,
-                child: ChangesLayer(
+                child: EdgeSwipeBack(
+                  enabled: _stage == Stage.changes && !_locked,
+                  onBack: _closeChanges,
+                  child: ChangesLayer(
                   key: _changesKey,
                   palette: p,
                   blessing: _changing,
                   on: _stage == Stage.changes,
                   onSave: _saveChanges,
                   onDone: _closeChanges,
+                  ),
                 ),
               ),
             ),
@@ -1594,7 +1634,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 delay: delay,
                 child: _where == null || _locked
                     ? const SizedBox.shrink()
-                    : SettingsLayer(
+                    : EdgeSwipeBack(
+                        enabled: _stage == Stage.settings,
+                        onBack: _closeSettings,
+                        child: SettingsLayer(
                         palette: p,
                         lock: _lock,
                         where: _where!,
@@ -1605,6 +1648,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onLanguage: _setRecordingLanguage,
                         onUseLocation: () => _where?.useMyLocation(),
                         onPhoneCheck: phoneCheck ? _openPhoneCheck : null,
+                        ),
                       ),
               ),
             ),

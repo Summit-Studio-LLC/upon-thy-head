@@ -233,7 +233,11 @@ class Strings {
   static String get location => _w.location;
   static String get locationWhy => _w.locationWhy;
   static String get faceIdWhy => _w.faceIdWhy;
-  static String get permissionOff => _w.permissionOff;
+  static String get requiredMark => _w.requiredMark;
+  static String get optionalMark => _w.optionalMark;
+  static String get allowLabel => _w.allowLabel;
+  static String get settingsButton => _w.settingsButton;
+  static String get notAnswered => _w.notAnswered;
   static String get locationOff => _w.locationOff;
   static String get allowed => _w.allowed;
   static String get askingNow => _w.askingNow;
@@ -251,8 +255,10 @@ class Strings {
   static String get practiceFailed => _w.practiceFailed;
   static String get sharedWithYou => _w.sharedWithYou;
   static String get faceIdKeepReason => _w.faceIdKeepReason;
-  static String rowOn(String name) => _w.rowOn(name);
-  static String rowAsking(String name) => _w.rowAsking(name);
+  static String offWord({bool feminine = false}) => _w.offWord(feminine: feminine);
+  static String allowFor(String name) => _w.allowFor(name);
+  static String settingsFor(String name) => _w.settingsFor(name);
+  static String stillNeeded({required bool microphone, required bool speech}) => _w.stillNeeded(microphone: microphone, speech: speech);
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -413,7 +419,11 @@ extension WordsCatalogue on Words {
         'location': location,
         'locationWhy': locationWhy,
         'faceIdWhy': faceIdWhy,
-        'permissionOff': permissionOff,
+        'requiredMark': requiredMark,
+        'optionalMark': optionalMark,
+        'allowLabel': allowLabel,
+        'settingsButton': settingsButton,
+        'notAnswered': notAnswered,
         'locationOff': locationOff,
         'allowed': allowed,
         'askingNow': askingNow,
@@ -489,7 +499,7 @@ class Words {
   String from(String name) => 'From $name';
 
   /// The home screen before the first blessing.
-  String get firstRun => 'When a blessing is recorded, its light appears here.';
+  String get firstRun => 'When a blessing is recorded, a light appears here.';
 
   /// The badge under the count line while drafts wait: "1 to review", "3 to review".
   String toReview(int n) => '$n to review';
@@ -734,16 +744,20 @@ class Words {
   String get welcomeFree => 'Free. No account. No ads.';
   String get continueLabel => 'Continue';
   String get permsTitle => 'A few things first';
-  String get permsLede => 'The phone will ask for each of these. Each has a reason.';
+  String get permsLede => 'Tap Allow beside each, and the phone will ask.';
   String get microphone => 'Microphone';
   String get microphoneWhy => 'To hear the blessing as it is given.';
   String get speechRecognition => 'Speech recognition';
   String get speechWhy => 'To write the words down, on this phone.';
   String get location => 'Location';
-  String get locationWhy => 'To find the sky above you. Allow Once is enough.';
+  String get locationWhy => 'To find the sky above you, not the Salt Lake Temple\'s. Allow Once is enough.';
   String get faceIdWhy => 'To keep your blessings locked.';
-  String get permissionOff => 'Off. You can turn it on in Settings.';
-  String get locationOff => 'Off. The sky above the Salt Lake Temple will be used.';
+  String get locationOff => 'The sky above the Salt Lake Temple will be used.';
+  String get requiredMark => 'Required';
+  String get optionalMark => 'Optional';
+  String get allowLabel => 'Allow';
+  String get settingsButton => 'Settings';
+  String get notAnswered => 'Not answered yet';
   String get allowed => 'Allowed';
   String get askingNow => 'The phone is asking now';
   String get tryTitle => 'Try a few words first?';
@@ -760,8 +774,14 @@ class Words {
   String get practiceFailed => 'The words could not be written this time.';
   String get sharedWithYou => 'A blessing has been shared with you.';
   String get faceIdKeepReason => 'Keep your blessings locked';
-  String rowOn(String name) => '$name: allowed';
-  String rowAsking(String name) => 'The phone is asking for $name now';
+  String offWord({bool feminine = false}) => 'Off';
+  String allowFor(String name) => 'Allow ${_lowerName(name)}';
+  String settingsFor(String name) => 'Open Settings to allow ${_lowerName(name)}';
+  String stillNeeded({required bool microphone, required bool speech}) => microphone && speech
+      ? 'Allow the microphone and speech recognition to go on.'
+      : microphone
+          ? 'Allow the microphone to go on.'
+          : 'Allow speech recognition to go on.';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -844,7 +864,7 @@ class _Spanish implements Words {
   @override
   String from(String name) => 'De $name';
   @override
-  String get firstRun => 'Cuando se grabe una bendición, su luz aparecerá aquí.';
+  String get firstRun => 'Cuando se grabe una bendición, una luz aparecerá aquí.';
   @override
   String toReview(int n) => '$n por revisar';
   @override
@@ -1244,7 +1264,7 @@ class _Spanish implements Words {
   @override
   String get permsTitle => 'Primero, unas cosas';
   @override
-  String get permsLede => 'El teléfono te preguntará por cada una. Cada una tiene su razón.';
+  String get permsLede => 'Toca Permitir junto a cada una y el teléfono te preguntará.';
   @override
   String get microphone => 'Micrófono';
   @override
@@ -1256,13 +1276,21 @@ class _Spanish implements Words {
   @override
   String get location => 'Ubicación';
   @override
-  String get locationWhy => 'Para encontrar el cielo sobre ti. Con «Permitir una vez» basta.';
+  String get locationWhy => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con «Permitir una vez» basta.';
   @override
   String get faceIdWhy => 'Para mantener tus bendiciones bloqueadas.';
   @override
-  String get permissionOff => 'Desactivado. Puedes activarlo en Configuración.';
+  String get locationOff => 'Se usará el cielo sobre el Templo de Salt Lake.';
   @override
-  String get locationOff => 'Desactivada. Se usará el cielo sobre el Templo de Salt Lake.';
+  String get requiredMark => 'Obligatorio';
+  @override
+  String get optionalMark => 'Opcional';
+  @override
+  String get allowLabel => 'Permitir';
+  @override
+  String get settingsButton => 'Configuración';
+  @override
+  String get notAnswered => 'Sin responder';
   @override
   String get allowed => 'Permitido';
   @override
@@ -1296,7 +1324,18 @@ class _Spanish implements Words {
   @override
   String get faceIdKeepReason => 'Mantener tus bendiciones bloqueadas';
   @override
-  String rowOn(String name) => '$name: permitido';
+  String offWord({bool feminine = false}) => feminine ? 'Desactivada' : 'Desactivado';
   @override
-  String rowAsking(String name) => 'El teléfono está preguntando por $name';
+  String allowFor(String name) => 'Permitir ${_lowerName(name)}';
+  @override
+  String settingsFor(String name) => 'Abrir Configuración para permitir ${_lowerName(name)}';
+  @override
+  String stillNeeded({required bool microphone, required bool speech}) => microphone && speech
+      ? 'Permite el micrófono y el reconocimiento de voz para seguir.'
+      : microphone
+          ? 'Permite el micrófono para seguir.'
+          : 'Permite el reconocimiento de voz para seguir.';
 }
+
+/// A row's name inside a sentence: "Microphone" reads "microphone"; "Face ID" stays as it is.
+String _lowerName(String name) => name.substring(1) == name.substring(1).toLowerCase() ? name[0].toLowerCase() + name.substring(1) : name;

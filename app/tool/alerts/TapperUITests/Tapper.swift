@@ -17,6 +17,8 @@ import XCTest
 ///    Amen; `ok <label>` or `missing …`
 ///  - `appswipeup`: drag the app's page up, to scroll it
 ///  - `appdismiss`: swipe the app's presented sheet down
+///  - `appenabled <label>`: whether the app's button with that label is enabled now: `yes`, `no` or
+///    `missing`
 ///  - `applabels`: the labels of the buttons and rows the app shows now (for writing scripts)
 ///  - `files <name>`: open the Files app, go to On My iPhone, and tap the file whose name starts with
 ///    <name>, as a person opens a file they were sent; `ok <label>` or `missing …`
@@ -71,6 +73,9 @@ final class Tapper: XCTestCase {
           let sheet = app.collectionViews.firstMatch
           if sheet.exists { sheet.swipeDown(velocity: .fast) } else { app.swipeDown(velocity: .fast) }
         }
+      case "appenabled":
+        let e = XCUIApplication(bundleIdentifier: appBundle).buttons.matching(NSPredicate(format: "label == %@", arg)).firstMatch
+        answer = e.exists ? (e.isEnabled ? "yes" : "no") : "missing"
       case "applabels":
         let app = XCUIApplication(bundleIdentifier: appBundle)
         answer = (app.buttons.allElementsBoundByIndex + app.cells.allElementsBoundByIndex).map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")

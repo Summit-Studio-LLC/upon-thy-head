@@ -58,11 +58,19 @@ class PillBtn extends StatefulWidget {
     this.height = 52,
     this.fontSize = 17,
     this.fadeLabel = false,
+    this.enabled,
+    this.semanticsLabel,
   });
 
   final String label;
   final Palette palette;
   final PillKind kind;
+
+  /// Set: told to VoiceOver as available or not (a dimmed Continue).
+  final bool? enabled;
+
+  /// What VoiceOver reads, when it is more than the label.
+  final String? semanticsLabel;
   final VoidCallback? onTap;
   final double height, fontSize;
 
@@ -87,7 +95,8 @@ class _PillBtnState extends State<PillBtn> {
     };
     return Semantics(
       button: true,
-      label: widget.label,
+      enabled: widget.enabled,
+      label: widget.semanticsLabel ?? widget.label,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

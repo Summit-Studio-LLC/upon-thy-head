@@ -271,7 +271,9 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     _edited(() => _b!.tags = [...next]);
   }
 
-  Future<void> _back() async {
+  /// The back chevron (and the edge swipe, and VoiceOver's go back): everything typed is kept, and
+  /// it stays a draft.
+  Future<void> back() async {
     FocusManager.instance.primaryFocus?.unfocus();
     await flush();
     widget.onBack();
@@ -364,7 +366,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                       color: p.ink,
                       palette: p,
                       semantics: Strings.backFromReview,
-                      onTap: _back,
+                      onTap: back,
                     ),
                     LightTextBtn(key: const Key('review-done'), label: Strings.done, palette: p, onTap: _done),
                   ],

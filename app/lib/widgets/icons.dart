@@ -9,6 +9,9 @@ enum Glyph {
   microphone, writing, location, faceId,
 }
 
+/// Vertical corrections, in grid units, so glyphs shown together sit on one line.
+const _optical = {Glyph.microphone: .5, Glyph.writing: -1.0};
+
 class _IconPainter extends CustomPainter {
   _IconPainter(this.icon, this.color);
   final Glyph icon;
@@ -17,6 +20,11 @@ class _IconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / 24);
+    // each glyph's own optical centre on the grid's middle line (the permission rows sit them side
+    // by side): the microphone's capsule is heavy at the top of a box it fills from 3 to 20.5, so it
+    // comes down; the writing's lines run 6 to 20 with the pencil low, so it goes up
+    final nudge = _optical[icon];
+    if (nudge != null) canvas.translate(0, nudge);
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke

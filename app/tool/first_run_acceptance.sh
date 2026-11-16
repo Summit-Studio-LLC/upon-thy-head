@@ -5,13 +5,22 @@
 #
 #   tool/first_run_acceptance.sh [simulator udid] [case…]
 #
+# The permissions screen has an Allow on each row (the owner's ruling, 2026-11-16, second round):
+# Continue is unavailable until the microphone and speech recognition are answered; location and
+# Face ID may be left. Every case checks that no system question is up at rest, before an Allow.
+#
 # Cases (default: all of the iPhone ones, in this order):
-#   allow     1: allow everything; the rehearsal with the prepared English speech file through the
-#                real engine; the sky; New blessing, Begin: no question; relaunch: no first run
-#   mic       2: microphone refused: its row, no rehearsal, the recording screen's refused line
+#   allow     1: only the microphone and speech allowed, Continue unavailable until both are; the
+#                rehearsal with the prepared English speech file through the real engine; the sky
+#                is the Salt Lake Temple's; New blessing, Begin: no question; relaunch: the lock
+#                asks for Face ID, then no first run
+#   all       all four allowed in the order Face ID, location, speech, microphone: each row's own
+#                question and no other; then through to the sky
+#   mic       2: microphone refused: Off and Settings on its row, Continue once speech is answered,
+#                no rehearsal, the recording screen's refused line
 #   location  3: location refused: the row names the Salt Lake Temple; no place kept
-#   kill      6 (and 4): killed mid-permissions and mid-rehearsal, resumed; then Not now at the
-#                rehearsal: straight to the sky, nothing kept
+#   kill      6 (and 4): killed with two rows answered, resumed with them shown answered; killed
+#                mid-rehearsal and resumed; then Not now at the rehearsal: the sky, nothing kept
 #   shared    7: first launch from a blessing file: read first, Keep asks Face ID; Not now keeps
 #                nothing; the next launch offers the rest
 #   seeded    8: the seeded build never sees any of it
@@ -19,6 +28,7 @@
 #   place     12: a file made by this build opens with its place; an old one still opens
 #   icons     the three home-screen icons (light, dark, tinted)
 #   ipad      10: case 1 on a stock iPad simulator, portrait and landscape (UDID in IPAD=…)
+#   transitions  the opening paused while away; the moves between steps, filmed (not in the default)
 #   spanish   9: case 1 on a temporary simulator set to Spanish (made here and deleted after)
 #
 # Screenshots (3x) and the film: ../design/sim/onboarding/. Results: RESULT lines, and
@@ -27,7 +37,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 UDID="${1:-512A6D6E-FE1E-43AF-AB3F-53C0DFE04208}"
 shift || true
-CASES="${*:-allow mic location kill shared big place seeded icons}"
+CASES="${*:-allow all mic location kill shared big place seeded icons}"
 BUNDLE=dev.summitstudio.uponThyHead
 OUT="$(cd .. && pwd)/design/sim/onboarding"
 PREFIX="${PREFIX:-}"
@@ -45,10 +55,17 @@ UI_LANG="${UI_LANG:-en}"
 if [[ "$UI_LANG" == es ]]; then
   CONT=Continuar; ALLOW=Permitir; ONCE="Permitir una vez"; DONT="No permitir"; OKW=Aceptar
   TRYIT=Probar; NOTNOW="Ahora no"; NEWB="Nueva bendición"; MIC=Micrófono
+  AL_mic="Permitir micrófono"; AL_speech="Permitir reconocimiento de voz"; AL_loc="Permitir ubicación"; AL_face="Permitir Face ID"
+  ALLOWED=Permitido; OFFW=Desactivado; LOCKED=Bloqueado; SETMIC="Abrir Configuración para permitir micrófono"
 else
   CONT=Continue; ALLOW=Allow; ONCE="Allow Once"; DONT="Don't Allow"; OKW=OK
   TRYIT="Try it"; NOTNOW="Not now"; NEWB="New blessing"; MIC=Microphone
+  AL_mic="Allow microphone"; AL_speech="Allow speech recognition"; AL_loc="Allow location"; AL_face="Allow Face ID"
+  ALLOWED=Allowed; OFFW=Off; LOCKED=Locked; SETMIC="Open Settings to allow microphone"
 fi
+# the words of each row's own iOS question, to tell which one came up
+Q_mic='icrophone|icrófono'; Q_speech='peech|voz'; Q_loc='location|ubicación'
+
 say() { echo "== $*"; }
 result() { echo "RESULT $*" | tee -a "$RESULTS"; }
 shot() { xcrun simctl io "$UDID" screenshot "$OUT/$PREFIX$1.png" >/dev/null 2>&1 && echo "   shot $PREFIX$1"; }
@@ -202,77 +219,89 @@ to_permissions() {
   end=$((SECONDS + 15))
   while ((SECONDS < end)); do l="$(tapper appall)"; [[ "$l" == *"$MIC"* ]] && break; sleep 0.4; done
   [[ "$l" == *"$MIC"* ]] || { result "${PREFIX}${s} permissions FAIL rows not shown: ${l:0:160}"; return 1; }
-  sleep 1.5
-  a="$(tapper alert)"
-  [[ "$a" == none ]] || { result "${PREFIX}${s:-c?-}no question before Continue FAIL ($a)"; return 1; }
+  # at rest: watched for three seconds, no question up, and Continue unavailable
+  NO_ALERT=0; ALERT_SEEN=""
+  for _ in 1 2 3 4 5 6; do guard; sleep 0.5; done
+  check "${PREFIX}${s:-c?-}at rest on the permissions screen: no system question" "$NO_ALERT" "${ALERT_SEEN:0:120}"
+  ((NO_ALERT == 0)) || return 1
+  check "${PREFIX}${s:-c?-}at rest: Continue unavailable" "$([[ "$(tapper "appenabled $CONT")" == no ]]; echo $?)" "($(tapper "appenabled $CONT"))"
   [[ -n "$s" ]] && shot "${s}04-permissions"
   return 0
 }
 
-# Continue on the permissions screen, then each question answered in turn: $1..$4 are the
-# answers for the microphone, speech, location and Face ID ("Allow", "Don't Allow", "Allow Once",
-# "OK"); $5 the shot prefix. Face ID's own scan is matched after its question.
-answer_all() {
-  local s="$5" n=5 a
-  app "$CONT" >/dev/null
-  for ans in "$1" "$2" "$3" "$4"; do
-    if [[ "$ans" == OK || "$ans" == Aceptar ]]; then
-      # Face ID. A phone asks "Do you want to allow … to use Face ID?" once; this simulator never
-      # does and goes straight to the scan (found 2026-11-16). Either way the scan is matched.
-      a="$(wait_alert 5)"
-      echo "   Face ID: ${a:-none}"
-      sleep 0.6
-      [[ -n "$s" ]] && shot "${s}$(printf %02d $n)-asking"
-      if [[ "$a" != none ]]; then sys "$ans" >/dev/null; sleep 1.2; fi
-      result "${s}face id step: $([[ "$a" == none ]] && echo 'scan only, no consent question (simulator)' || echo "question: $a")"
-      face match
-      sleep 0.6
-    else
-      a="$(wait_alert 15)" || { result "$s question $n FAIL none came up"; return 1; }
-      echo "   question: $a"
-      sleep 0.6
-      [[ -n "$s" ]] && shot "${s}$(printf %02d $n)-asking"
-      sys "$ans" >/dev/null
-    fi
-    sleep 0.45
-    [[ -n "$s" ]] && shot "${s}$(printf %02d $((n + 1)))-answered"
-    n=$((n + 2))
-  done
+# A row's own Allow, and its question answered. $1: mic|speech|loc|face; $2: the answer ("Allow",
+# "Don't Allow", "Allow Once"; Face ID's scan is matched); $3: a shot's name while the question is
+# up ("" for none). Checks the question was that row's, and that no other followed.
+allow_row() {
+  local which="$1" ans="$2" s="${3:-}" label a r q
+  label="AL_$which"; label="${!label}"
+  a="$(tapper alert)"
+  [[ "$a" == none ]] || { result "${PREFIX}allow $which FAIL a question was already up: ${a:0:100}"; return 1; }
+  if [[ "$which" == face && "$(tapper applabels)" != *"$label"* ]]; then
+    # The lock row asks nothing on this device: Touch ID has no question (a tick from the start),
+    # and with no Face ID enrolled the row is "App lock", the passcode (the simulator's enrolment
+    # does not always hold across installs, seen 2026-11-16). Nothing to press.
+    result "${PREFIX}allow face: nothing to ask here (Touch ID, or no Face ID enrolled): the lock row has no Allow"
+    return 0
+  fi
+  r="$(app "$label")"
+  [[ "$r" == ok* ]] || { result "${PREFIX}allow $which FAIL $r"; return 1; }
+  if [[ "$which" == face ]]; then
+    # A phone asks "Do you want to allow … to use Face ID?" once; this simulator never does and goes
+    # straight to the scan (found 2026-11-16). Either way the scan is matched.
+    a="$(wait_alert 4)"
+    sleep 0.5; [[ -n "$s" ]] && shot "$s"
+    if [[ "$a" != none ]]; then sys "$OKW" >/dev/null; sleep 1.2; fi
+    face match
+    result "${PREFIX}allow face: $([[ "$a" == none ]] && echo 'scan only, no consent question (simulator)' || echo "question: ${a:0:80}")"
+  else
+    a="$(wait_alert 15)" || { result "${PREFIX}allow $which FAIL no question came up"; return 1; }
+    q="Q_$which"
+    check "${PREFIX}allow $which: its own question" "$([[ "$a" =~ ${!q} ]]; echo $?)" "(${a:0:90})"
+    sleep 0.6; [[ -n "$s" ]] && shot "$s"
+    sys "$ans" >/dev/null
+  fi
+  sleep 1.5
+  a="$(tapper alert)"
+  check "${PREFIX}allow $which: no other question after it" "$([[ "$a" == none ]]; echo $?)" "(${a:0:90})"
   return 0
 }
+cont_state() { tapper "appenabled $CONT"; }
 
 case_allow() {
-  local s="" lang="$UI_LANG"
-  say "case 1: allow everything"
+  local lang="$UI_LANG" l
+  say "case 1: the microphone and speech allowed; location and Face ID left"
   fresh "$APP_FR"
-  if [[ -z "$PREFIX" ]]; then
-    # the film: the opening to the sky
-    xcrun simctl io "$UDID" recordVideo --codec h264 --force "$OUT/${PREFIX}case1.mov" >/dev/null 2>&1 &
-    FILM_PID=$!
-    sleep 1
-  fi
-  to_permissions "${s:-c1-}" || return
-  answer_all "$ALLOW" "$ALLOW" "$ONCE" "$OKW" "${s:-c1-}" || return
+  to_permissions "" || return
+  shot "01-rest"
+  allow_row mic "$ALLOW" "02-asking" || return
+  sleep 0.5; l="$(tapper appall)"
+  check "${PREFIX}case1 after the microphone: Continue still unavailable, speech named as needed" "$([[ "$(cont_state)" == no && "$l" == *"$([[ $lang == es ]] && echo 'reconocimiento de voz para seguir' || echo 'Allow speech recognition to go on')"* ]]; echo $?)" "($(cont_state))"
+  allow_row speech "$ALLOW" "" || return
+  sleep 0.5
+  check "${PREFIX}case1 both required answered: Continue available" "$([[ "$(cont_state)" == yes ]]; echo $?)" "($(cont_state))"
+  shot "03-required-answered"
+  app "$CONT" >/dev/null
   local tryit="$TRYIT"
-  wait_label "$tryit" 15 || { result "case1 rehearsal FAIL: $(labels)"; return; }
-  sleep 1; shot "${s:-c1-}13-rehearsal"
+  wait_label "$tryit" 15 || { result "${PREFIX}case1 rehearsal FAIL: $(labels)"; return; }
+  result "${PREFIX}case1 the rehearsal offered PASS"
+  sleep 1; shot "c1-13-rehearsal"
   app "$tryit" >/dev/null
-  sleep 2.2; shot "${s:-c1-}14-practice-begin"
+  sleep 2.2
   local begin="Begin. Nothing is recorded until you press"; [[ "$lang" == es ]] && begin="$(beginlabel_es)"
   app "$begin" >/dev/null
-  sleep 4; shot "${s:-c1-}15-practice-listening"
+  sleep 4
   local amen="Amen. Hold to finish"; [[ "$lang" == es ]] && amen="$(amenlabel_es)"
   tapper "apphold 1.6 $amen" >/dev/null
-  sleep 1; shot "${s:-c1-}16-practice-writing"
   local cont="$CONT"
   local end=$((SECONDS + 60))
   while ((SECONDS < end)); do [[ "$(labels)" == *"$cont"* ]] && break; sleep 1; done
-  sleep 2; shot "${s:-c1-}17-practice-written"
+  sleep 2; shot "c1-17-practice-written"
   check "${PREFIX}case1 practice nothing kept" "$([[ "$(stored)" == 0 && "$(audio_files)" == 0 && "$(practice_files)" == 0 ]]; echo $?)" "store=$(stored) audio=$(audio_files) practice=$(practice_files)"
   app "$cont" >/dev/null
-  sleep 3; shot "${s:-c1-}18-sky"
-  [[ -n "$FILM_PID" ]] && { kill -INT "$FILM_PID"; wait "$FILM_PID" 2>/dev/null; FILM_PID=""; }
-  check "${PREFIX}case1 done" "$([[ "$(setting firstRun)" == done ]]; echo $?)" "firstRun=$(setting firstRun) place=$(setting place) tcc: $(tcc)"
+  sleep 3; shot "c1-18-sky"
+  check "${PREFIX}case1 done; the Salt Lake Temple's sky (no place, location never asked)" "$([[ "$(setting firstRun)" == done && -z "$(setting place)" && -z "$(setting locationAsked)" && "$(tcc)" != *Location* ]]; echo $?)" "firstRun=$(setting firstRun) place='$(setting place)' locationAsked='$(setting locationAsked)' tcc: $(tcc)"
+  check "${PREFIX}case1 Face ID not asked in the first run" "$([[ -z "$(setting faceIdAsked)" ]]; echo $?)" "faceIdAsked='$(setting faceIdAsked)'"
   local newb="$NEWB"
   app "$newb" >/dev/null
   sleep 3
@@ -280,20 +309,44 @@ case_allow() {
   app "$begin" >/dev/null
   sleep 3
   local q2; q2="$(tapper alert)"
-  shot "${s:-c1-}19-new-blessing-no-question"
-  # discard that recording in the app (the ring held in its first ten seconds), so the relaunch
-  # does not find a recording kept
   local d; d="$(tapper "apphold 1.6 $(discardlabel)")"; sleep 2
   local after; after="$(labels)"
   check "${PREFIX}case1 New blessing, Begin: no system question" "$([[ "$q1" == none && "$q2" == none ]]; echo $?)" "($q1 / $q2)"
   check "${PREFIX}case1 the test recording discarded (back to Begin)" "$([[ "$after" == *"$begin"* ]]; echo $?)" "hold: ${d:0:60}; labels: ${after:0:120}"
   kill_app
+  # the next lock: the app locks at launch and asks the phone (Face ID's question on a phone; on
+  # this simulator straight to the scan)
   launch
-  sleep 2; face match; sleep 3
-  shot "${s:-c1-}20-relaunch"
-  local l; l="$(tapper appall)"
+  sleep 2.5
+  local lk; lk="$(tapper appall)"; local qa; qa="$(tapper alert)"
+  shot "c1-19-relaunch-locked"
+  face match; sleep 3
+  shot "c1-20-relaunch"
+  l="$(tapper appall)"
+  check "${PREFIX}case1 relaunch: locked, Face ID asked, unlocked by the face" "$([[ "$lk" == *"$LOCKED"* && "$l" != *"$LOCKED"* ]]; echo $?)" "before: ${lk:0:80}; question: ${qa:0:60}"
   check "${PREFIX}case1 relaunch: no first run" "$([[ "$l" != "no answer" && "$l" != *"$cont"* && "$l" != *"$MIC"* && "$l" != *"$(keptlabel)"* && "$(setting firstRun)" == done ]]; echo $?)" "labels: ${l:0:160}"
-  check "${PREFIX}case1 relaunch: nothing kept" "$([[ "$(practice_files)" == 0 && "$(stored)" == 0 && "$(audio_files)" == 0 ]]; echo $?)" "store=$(stored) audio=$(audio_files)"
+}
+
+case_all() {
+  local l
+  say "all four allowed: Face ID, location, speech, microphone"
+  fresh "$APP_FR"
+  to_permissions "" || return
+  allow_row face "$OKW" "" || return
+  check "${PREFIX}all Continue unavailable after Face ID alone" "$([[ "$(cont_state)" == no ]]; echo $?)"
+  allow_row loc "$ONCE" "02b-asking-location" || return
+  allow_row speech "$ALLOW" "" || return
+  check "${PREFIX}all Continue still unavailable before the microphone" "$([[ "$(cont_state)" == no ]]; echo $?)"
+  allow_row mic "$ALLOW" "" || return
+  sleep 0.5; shot "04-all-answered"
+  l="$(tapper appall)"
+  check "${PREFIX}all every row shown allowed, no Allow left" "$([[ "$(grep -o "$ALLOWED" <<<"$l" | wc -l | tr -d ' ')" -ge 4 && "$l" != *"$AL_mic"* && "$l" != *"$AL_face"* ]]; echo $?)" "${l:0:200}"
+  app "$CONT" >/dev/null
+  wait_label "$TRYIT" 15
+  app "$NOTNOW" >/dev/null
+  wait_label "$NEWB" 15; sleep 1.5
+  shot "all-sky"
+  check "${PREFIX}all through to the sky, the place kept" "$([[ "$(setting firstRun)" == done && -n "$(setting place)" && "$(setting faceIdAsked)" == True ]]; echo $?)" "place=$(setting place) faceIdAsked=$(setting faceIdAsked) tcc: $(tcc)"
 }
 keptlabel() { [[ "$UI_LANG" == es ]] && echo "Se guardó una grabación" || echo "A recording was kept"; }
 discardlabel() { python3 -c "import re,sys;s=open('lib/strings.dart').read();i=s.index('class _Spanish') if sys.argv[1]=='es' else 0;m=re.search(r\"discardLabel => '([^']*)'\",s[i:]);print(m.group(1))" "$UI_LANG"; }
@@ -301,30 +354,41 @@ beginlabel_es() { python3 -c "import re;s=open('lib/strings.dart').read();i=s.in
 amenlabel_es() { python3 -c "import re;s=open('lib/strings.dart').read();i=s.index('class _Spanish');m=re.search(r\"amenLabel => '([^']*)'\",s[i:]);print(m.group(1))"; }
 
 case_mic() {
+  local l
   say "case 2: microphone refused"
   fresh "$APP_FR"
   to_permissions "" || return
-  answer_all "Don't Allow" Allow "Allow Once" OK "c2-" || return
-  sleep 0.2; shot "c2-10-microphone-refused"
-  # no rehearsal: straight to the sky
-  wait_label "New blessing" 15
-  sleep 1.5; shot "c2-11-sky"
-  local l; l="$(labels)"
-  check "case2 no rehearsal offered" "$([[ "$l" != *"Try it"* && "$l" == *"New blessing"* ]]; echo $?)" "firstRun=$(setting firstRun)"
-  app "New blessing" >/dev/null
+  allow_row mic "$DONT" "" || return
+  sleep 0.5; l="$(tapper appall)"
+  check "${PREFIX}case2 the refused row: Off and Settings, Continue still unavailable" "$([[ "$l" == *"$OFFW"* && "$l" == *"$SETMIC"* && "$(cont_state)" == no ]]; echo $?)" "${l:0:200}"
+  allow_row speech "$ALLOW" "" || return
+  sleep 0.5
+  check "${PREFIX}case2 Continue available once speech is answered" "$([[ "$(cont_state)" == yes ]]; echo $?)"
+  shot "05-refused"
+  app "$CONT" >/dev/null
+  wait_label "$NEWB" 15
+  sleep 1.5
+  l="$(labels)"
+  check "${PREFIX}case2 no rehearsal offered" "$([[ "$l" != *"$TRYIT"* && "$l" == *"$NEWB"* ]]; echo $?)" "firstRun=$(setting firstRun)"
+  app "$NEWB" >/dev/null
   sleep 3
   local q; q="$(tapper alert)"
   shot "c2-12-recording-refused"
   l="$(labels)"
-  check "case2 recording screen: turned-off line, Open Settings, no question" "$([[ "$l" == *"Open Settings"* && "$q" == none ]]; echo $?)" "alert=$q"
+  local opens="Open Settings"; [[ "$UI_LANG" == es ]] && opens="Abrir Configuración"
+  check "${PREFIX}case2 recording screen: turned-off line, Open Settings, no question" "$([[ "$l" == *"$opens"* && "$q" == none ]]; echo $?)" "alert=$q"
 }
 
 case_location() {
   say "case 3: location refused"
   fresh "$APP_FR"
   to_permissions "" || return
-  answer_all Allow Allow "Don't Allow" OK "c3-" || return
-  sleep 0.2; shot "c3-10-location-refused"
+  allow_row loc "$DONT" "" || return
+  sleep 0.6; shot "c3-10-location-refused"
+  check "${PREFIX}case3 the row names the Salt Lake Temple" "$([[ "$(tapper appall)" == *"Salt Lake Temple will be used"* ]]; echo $?)"
+  allow_row mic Allow "" || return
+  allow_row speech Allow "" || return
+  app "$CONT" >/dev/null
   wait_label "Try it" 15
   app "Not now" >/dev/null
   wait_label "New blessing" 15; sleep 1.5
@@ -333,27 +397,22 @@ case_location() {
 }
 
 case_kill() {
-  say "case 6: killed mid-permissions, then mid-rehearsal; case 4: Not now at the rehearsal"
+  say "case 6: killed with two rows answered, then mid-rehearsal; case 4: Not now at the rehearsal"
   fresh "$APP_FR"
   to_permissions "" || return
-  app Continue >/dev/null
-  wait_alert 15 >/dev/null; sleep 0.4; sys Allow >/dev/null
-  wait_alert 15 >/dev/null; sleep 0.5
-  shot "c6-01-speech-question-then-killed"
+  allow_row mic Allow "" || return
+  allow_row loc "Allow Once" "" || return
+  shot "c6-01-two-answered-then-killed"
   kill_app
-  check "case6 killed mid-permissions: kept at the permissions step" "$([[ "$(setting firstRun)" == permissions ]]; echo $?)" "firstRun=$(setting firstRun)"
+  check "case6 killed on the permissions screen: kept at the permissions step" "$([[ "$(setting firstRun)" == permissions ]]; echo $?)" "firstRun=$(setting firstRun)"
   launch
-  wait_label Continue 20; sleep 1.5
+  wait_label "$AL_speech" 20; sleep 1.5
   shot "c6-02-resumed-permissions"
-  local l; l="$(labels)"
-  check "case6 resumed on the permissions screen, no opening" "$([[ "$l" == *Continue* ]]; echo $?)"
+  local l; l="$(tapper appall)"
+  check "case6 resumed on the permissions screen with the microphone and location answered" "$([[ "$l" == *"Microphone. Required. To hear the blessing as it is given. Allowed"* && "$l" == *"Location. Optional"*"Allowed"* && "$l" != *"$AL_mic"* && "$l" != *"$AL_loc"* && "$l" == *"$AL_speech"* ]]; echo $?)" "${l:0:400}"
+  check "case6 nothing asked on resuming" "$([[ "$(tapper alert)" == none ]]; echo $?)"
+  allow_row speech Allow "" || return
   app Continue >/dev/null
-  local a; a="$(wait_alert 15)"
-  echo "   question after resuming: $a"
-  check "case6 the microphone not asked twice" "$([[ "$a" != *icrophone* ]]; echo $?)" "($a)"
-  sys Allow >/dev/null
-  wait_alert 15 >/dev/null; sleep 0.4; sys "Allow Once" >/dev/null
-  sleep 2; [[ "$(tapper alert)" != none ]] && sys OK >/dev/null; sleep 1.2; face match
   wait_label "Try it" 15
   app "Try it" >/dev/null
   sleep 2; app "Begin. Nothing is recorded until you press" >/dev/null
@@ -426,12 +485,19 @@ case_big() {
   sleep 1.5; shot "big-01-opening"
   wait_label Continue 20; sleep 1.2; shot "big-02-welcome"
   app Continue >/dev/null; sleep 1.5; shot "big-03-permissions"
-  # the rows and Continue run past the screen at this size: the page scrolls to them
+  check "${PREFIX}case11 at rest: no question" "$([[ "$(tapper alert)" == none ]]; echo $?)"
+  # the rows and Continue run past the screen at this size: the page scrolls to them, as a person
+  # would, once the microphone's row (at the top) is answered
+  allow_row mic "Don't Allow" "" >/dev/null
   tapper appswipeup >/dev/null
   sleep 1; shot "big-04-permissions-scrolled"
-  answer_all "Don't Allow" Allow "Don't Allow" OK "big-" >/dev/null
-  check "case11 Continue reachable and the questions put, at accessibility-medium with Reduce Motion" "$([[ "$(setting firstRun)" != permissions && "$(setting firstRun)" != "" ]]; echo $?)" "firstRun=$(setting firstRun) tcc: $(tcc)"
-  sleep 0.3; shot "big-11-permissions-answered"
+  allow_row speech Allow "" >/dev/null
+  allow_row loc "Don't Allow" "" >/dev/null
+  sleep 0.5; shot "big-05-permissions-answered"
+  tapper appswipeup >/dev/null; sleep 1; shot "big-06-permissions-answered-scrolled"
+  app Continue >/dev/null
+  sleep 2
+  check "${PREFIX}case11 the Allows reachable and Continue after them, at accessibility-medium with Reduce Motion" "$([[ "$(setting firstRun)" == done ]]; echo $?)" "firstRun=$(setting firstRun) tcc: $(tcc)"
   wait_label "New blessing" 15; sleep 1.5; shot "big-12-sky"
   reduce_motion false
   xcrun simctl ui "$UDID" content_size large
@@ -508,18 +574,18 @@ case_spanish() {
   xcrun simctl spawn "$es" defaults write -g AppleLocale es_US
   xcrun simctl shutdown "$es"; xcrun simctl boot "$es"; timeout 300 xcrun simctl bootstatus "$es" -b >/dev/null
   echo "   the phone's languages: $(xcrun simctl spawn "$es" defaults read -g AppleLanguages | tr -d ' \n')"
-  UI_LANG=es PREFIX=es- FEED_LANG=es timeout 1500 "$0" "$es" allow permsclose
-  cat "$OUT/results-es-.txt" >>"$RESULTS" 2>/dev/null
+  UI_LANG=es PREFIX="${PREFIX}es-" FEED_LANG=es timeout 1500 "$0" "$es" allow mic
+  cat "$OUT/results-${PREFIX}es-.txt" >>"$RESULTS" 2>/dev/null
   xcrun simctl shutdown "$es" 2>/dev/null
   xcrun simctl delete "$es" && echo "   deleted the temporary simulator $es"
 }
 
 # 10: on a stock iPad, portrait then landscape. IPAD: its UDID (an existing simulator; nothing is made).
 case_ipad() {
-  local ipad="${IPAD:-5AEC9DFB-CDC2-4FAB-97AA-533B7750D1E2}"
+  local ipad="${IPAD:-6FF8A689-6647-4A0D-8226-4F1F4BC3496D}"
   say "case 10: iPad $ipad"
-  PREFIX=ipad- timeout 1500 "$0" "$ipad" ipadrun
-  cat "$OUT/results-ipad-.txt" >>"$RESULTS" 2>/dev/null
+  PREFIX="${PREFIX}ipad-" timeout 1500 "$0" "$ipad" ipadrun
+  cat "$OUT/results-${PREFIX}ipad-.txt" >>"$RESULTS" 2>/dev/null
   xcrun simctl shutdown "$ipad" 2>/dev/null
 }
 case_ipadrun() {
@@ -528,8 +594,15 @@ case_ipadrun() {
   to_permissions "p-" || return
   tapper "orient landscape" >/dev/null; sleep 2
   shot "l-04-permissions"
-  answer_all "$ALLOW" "$ALLOW" "$ONCE" "$OKW" "" || return
-  sleep 0.4; shot "l-12-permissions-answered"
+  allow_row mic "$ALLOW" "" || return
+  allow_row loc "$ONCE" "" || return
+  tapper "orient portrait" >/dev/null; sleep 2
+  shot "p-05-two-answered"
+  allow_row speech "$ALLOW" "" || return
+  allow_row face "$OKW" "" || return
+  tapper "orient landscape" >/dev/null; sleep 2
+  shot "l-12-permissions-answered"
+  app "$CONT" >/dev/null
   wait_label "$TRYIT" 15; sleep 1; shot "l-13-rehearsal"
   tapper "orient portrait" >/dev/null; sleep 2; shot "p-13-rehearsal"
   app "$TRYIT" >/dev/null; sleep 2.5; shot "p-14-practice"
@@ -540,11 +613,64 @@ case_ipadrun() {
   check "case10 iPad: through to the sky, nothing kept" "$([[ "$(setting firstRun)" == done && "$(stored)" == 0 ]]; echo $?)" "firstRun=$(setting firstRun)"
 }
 
-# close-up of the four icons: the permissions screen after every answer, cropped to the rows
+# The steps' moves (the owner's addition, 2026-11-16), filmed: the opening is interrupted by the app
+# switcher for six seconds (longer than the opening itself) and must still be there, the name not
+# yet arrived and no welcome, when the app comes back; then the name, the soft hand-over to the
+# welcome, Continue (the welcome leaves left, the permissions arrive from the right), both required
+# rows, Continue (on to the rehearsal's question). Film: p2-transitions.mov; frame strips of each
+# move: transitions-*.png, made from the film with tool/frame_strip.sh.
+now() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
+case_transitions() {
+  local raw="$TMP/transitions.mp4" t0 t_open t_back t_cont1 t_cont2 l
+  say "transitions: the opening paused while away, the welcome's hand-over, the two moves"
+  fresh "$APP_FR"
+  xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState discharging --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null
+  xcrun simctl io "$UDID" recordVideo --codec=h264 --force "$raw" >/dev/null 2>&1 &
+  FILM_PID=$!
+  sleep 1.5; t0="$(now)"
+  launch
+  sleep 1.0
+  tapper switcher >/dev/null; t_away="$(now)"
+  shot "t-01-away"
+  sleep 6
+  tapper "open $BUNDLE" >/dev/null; t_back="$(now)"
+  sleep 0.4
+  l="$(tapper appall)"
+  shot "t-02-back"
+  check "${PREFIX}transitions: back after six seconds away, still the opening (no welcome)" "$([[ "$l" != *"$CONT"* ]]; echo $?)" "(${l:0:120})"
+  sleep 2.6; shot "t-03-name"
+  l="$(tapper appall)"
+  check "${PREFIX}transitions: the opening still there 3 s after coming back" "$([[ "$l" != *"$CONT"* ]]; echo $?)" "(${l:0:120})"
+  wait_label "$CONT" 15 || { result "${PREFIX}transitions FAIL no welcome"; }
+  t_welcome="$(now)"
+  sleep 4.5; shot "t-04-welcome"
+  t_cont1="$(now)"; app "$CONT" >/dev/null
+  wait_label "$AL_mic" 10
+  sleep 1.5
+  allow_row mic "$ALLOW" ""
+  allow_row speech "$ALLOW" ""
+  sleep 1
+  t_cont2="$(now)"; app "$CONT" >/dev/null
+  wait_label "$TRYIT" 10; sleep 2
+  kill -INT "$FILM_PID" 2>/dev/null; wait "$FILM_PID" 2>/dev/null; FILM_PID=""
+  xcrun simctl status_bar "$UDID" clear 2>/dev/null
+  local mov="$OUT/${PREFIX}transitions.mov" vstart
+  ffmpeg -y -loglevel error -i "$raw" -vf "scale=804:-2" -c:v libx264 -pix_fmt yuv420p -crf 20 "$mov" && echo "   film ${PREFIX}transitions.mov"
+  # Frame strips: the times printed here are only near the moves (the film's start and the taps'
+  # own delay are not exact); read each move's start off the film and make its strip with
+  # tool/frame_strip.sh (p2-transitions-*.png were made that way, 40 to 100 ms a frame).
+  vstart="$(python3 -c "print($t0 - 1.5)")"
+  echo "   about: away $(python3 -c "print(f'{$t_away-$vstart:.1f}')") back $(python3 -c "print(f'{$t_back-$vstart:.1f}')") welcome $(python3 -c "print(f'{$t_welcome-$vstart:.1f}')") continue $(python3 -c "print(f'{$t_cont1-$vstart:.1f}')") continue $(python3 -c "print(f'{$t_cont2-$vstart:.1f}')") (s into the film)"
+  kill_app
+}
+
+# close-up of the four rows at rest (shot 01-rest of case 1); and beside it the first round's
+# (icons-closeup.png, made before this round)
 case_permsclose() {
-  local f="$OUT/${PREFIX}c1-12-answered.png"
+  local f="$OUT/${PREFIX}01-rest.png" before="$OUT/icons-closeup.png"
   [[ -f "$f" ]] || return
-  magick "$f" -crop 1206x860+0+1380 +repage "$OUT/${PREFIX}icons-closeup.png" 2>/dev/null && echo "   shot ${PREFIX}icons-closeup"
+  magick "$f" -crop "1206x${CLOSE_H:-1120}+0+${CLOSE_Y:-1090}" +repage "$OUT/${PREFIX}icons-after.png" 2>/dev/null && echo "   shot ${PREFIX}icons-after"
+  [[ -f "$before" ]] && magick "$before" -background black -gravity north -extent "1206x${CLOSE_H:-1120}" "$OUT/${PREFIX}icons-after.png" +append "$OUT/${PREFIX}icons-before-after.png" 2>/dev/null && echo "   shot ${PREFIX}icons-before-after"
 }
 
 for c in $CASES; do

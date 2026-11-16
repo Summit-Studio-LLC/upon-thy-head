@@ -52,6 +52,69 @@ class FirstRunFrame extends StatelessWidget {
   }
 }
 
+/// The app can be seen: false while it is inactive or away (a system question over it, Control
+/// Centre, the app switcher). The opening and the welcome wait while it is false. Set by the home
+/// screen from the app's lifecycle.
+final ValueNotifier<bool> firstRunVisible = ValueNotifier(true);
+
+/// A one-shot timer that stops counting while [firstRunVisible] is false, and goes on from where
+/// it was when it is true again. It counts in small steps of plain timers (no stopwatch), so a
+/// test's clock drives it as it drives everything else.
+class PausableTimer {
+  PausableTimer(Duration duration, this._callback) : _left = duration.inMilliseconds {
+    firstRunVisible.addListener(_changed);
+    _changed();
+  }
+
+  static const _step = 50;
+  final VoidCallback _callback;
+  int _left;
+  Timer? _timer;
+  bool _done = false;
+
+  bool get isActive => !_done;
+
+  void _changed() {
+    if (_done) return;
+    if (!firstRunVisible.value) {
+      _timer?.cancel();
+      _timer = null;
+    } else {
+      _timer ??= _next();
+    }
+  }
+
+  Timer _next() => Timer(Duration(milliseconds: _left.clamp(0, _step)), () {
+        _left -= _step;
+        if (_left > 0) {
+          _timer = _next();
+          return;
+        }
+        cancel();
+        _callback();
+      });
+
+  void cancel() {
+    _done = true;
+    _timer?.cancel();
+    _timer = null;
+    firstRunVisible.removeListener(_changed);
+  }
+}
+
+/// Animations under it stand still while the app cannot be seen ([firstRunVisible]).
+class WhileVisible extends StatelessWidget {
+  const WhileVisible({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: firstRunVisible,
+        builder: (context, on, child) => TickerMode(enabled: on, child: child!),
+        child: child,
+      );
+}
+
 /// Arrives after [delay]: fades in and rises a little (only fades in with Reduce Motion).
 class Arrive extends StatefulWidget {
   const Arrive({super.key, required this.delay, required this.child, this.rise = 10, this.duration = const Duration(milliseconds: 900)});
@@ -65,12 +128,12 @@ class Arrive extends StatefulWidget {
 
 class _ArriveState extends State<Arrive> {
   bool _on = false;
-  Timer? _t;
+  PausableTimer? _t;
 
   @override
   void initState() {
     super.initState();
-    _t = Timer(widget.delay, () {
+    _t = PausableTimer(widget.delay, () {
       if (mounted) setState(() => _on = true);
     });
   }
@@ -142,7 +205,8 @@ class WelcomeLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = palette;
     final still = MediaQuery.of(context).disableAnimations;
-    Duration at(int ms) => Duration(milliseconds: still ? 200 : ms);
+    // the opening's name is gone (its fade, [openingOut]) before the first line begins
+    Duration at(int ms) => Duration(milliseconds: still ? openingOut.inMilliseconds + 150 : ms);
     final line = serif(25, 31, p.ink, tracking: -.008);
     return FirstRunFrame(
       key: const Key('welcome'),
@@ -151,16 +215,16 @@ class WelcomeLayer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Arrive(delay: at(500), child: Text(Strings.welcome1, style: line)),
+          Arrive(delay: at(openingOut.inMilliseconds + 250), child: Text(Strings.welcome1, style: line)),
           const SizedBox(height: 18),
-          Arrive(delay: at(1500), child: Text(Strings.welcome2, style: line)),
+          Arrive(delay: at(1700), child: Text(Strings.welcome2, style: line)),
           const SizedBox(height: 18),
-          Arrive(delay: at(2500), child: Text(Strings.welcome3, style: line)),
+          Arrive(delay: at(2700), child: Text(Strings.welcome3, style: line)),
           const SizedBox(height: 28),
-          Arrive(delay: at(3300), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
+          Arrive(delay: at(3500), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
           const SizedBox(height: 36),
           Arrive(
-            delay: at(3700),
+            delay: at(3900),
             child: PillBtn(key: const Key('welcome-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
           ),
         ],
@@ -171,6 +235,8 @@ class WelcomeLayer extends StatelessWidget {
 
 // ---- 3 the permissions ----
 
+/// "A few things first": four rows, each with its own Allow; Continue once the two required rows
+/// are answered (the owner's ruling, 2026-11-16).
 class PermissionsLayer extends StatelessWidget {
   const PermissionsLayer({super.key, required this.palette, required this.state, required this.onContinue});
   final Palette palette;
@@ -184,6 +250,11 @@ class PermissionsLayer extends StatelessWidget {
       listenable: state,
       builder: (context, _) {
         final asking = state.asking;
+        final open = state.canContinue;
+        final needed = state.stillNeeded;
+        final hint = needed.isEmpty
+            ? ''
+            : Strings.stillNeeded(microphone: needed.contains(PermissionKind.microphone), speech: needed.contains(PermissionKind.speech));
         return FirstRunFrame(
           key: const Key('permissions'),
           palette: p,
@@ -194,22 +265,45 @@ class PermissionsLayer extends StatelessWidget {
               Semantics(header: true, child: Text(Strings.permsTitle, style: serif(30, 34.5, p.ink, tracking: -.012))),
               const SizedBox(height: 10),
               Text(Strings.permsLede, style: sans(17, 25, p.ink2)),
-              const SizedBox(height: 26),
+              const SizedBox(height: 22),
               for (final r in state.rows)
                 AnimatedOpacity(
                   // while a question is up, its row is the lit one
                   opacity: asking == null || asking == r.kind ? 1 : .32,
                   duration: const Duration(milliseconds: 350),
                   curve: easeOut,
-                  child: PermissionRowView(key: Key('row-${r.kind.name}'), palette: p, row: r),
+                  child: PermissionRowView(
+                    key: Key('row-${r.kind.name}'),
+                    palette: p,
+                    row: r,
+                    onAllow: () => state.ask(r.kind),
+                    onSettings: state.openSettings,
+                  ),
                 ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
+              // what is still needed before Continue; its room is kept so nothing jumps
+              ExcludeSemantics(
+                excluding: open || !state.loaded,
+                child: AnimatedOpacity(
+                  opacity: open || !state.loaded ? 0 : 1,
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(hint.isEmpty ? ' ' : hint, key: const Key('perms-needed'), style: sans(13, 18, p.ink2)),
+                ),
+              ),
+              const SizedBox(height: 12),
               AnimatedOpacity(
-                opacity: state.running ? .35 : 1,
+                opacity: open ? 1 : .35,
                 duration: const Duration(milliseconds: 300),
                 child: IgnorePointer(
-                  ignoring: state.running || !state.loaded,
-                  child: PillBtn(key: const Key('permissions-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
+                  ignoring: !open,
+                  child: PillBtn(
+                    key: const Key('permissions-continue'),
+                    label: Strings.continueLabel,
+                    palette: p,
+                    kind: PillKind.primary,
+                    enabled: open,
+                    onTap: open ? onContinue : null,
+                  ),
                 ),
               ),
             ],
@@ -220,12 +314,20 @@ class PermissionsLayer extends StatelessWidget {
   }
 }
 
+/// One row: the icon at the left, the title (with Required or Optional) and its reason in the
+/// middle, and at the right its own control: Allow; the quiet tick; or "Off" and Settings. At large
+/// text sizes the control drops beneath the words.
 class PermissionRowView extends StatelessWidget {
-  const PermissionRowView({super.key, required this.palette, required this.row});
+  const PermissionRowView({super.key, required this.palette, required this.row, this.onAllow, this.onSettings});
   final Palette palette;
   final PermissionRow row;
+  final VoidCallback? onAllow, onSettings;
 
   static const iconSize = 22.0;
+  static const _iconGap = 14.0, _controlGap = 12.0;
+
+  /// The least the words keep beside the control before it goes beneath them.
+  static const minWords = 170.0;
 
   /// Decorative: the row's label already names it, so VoiceOver never reads the icon.
   Glyph get glyph => switch (row.kind) {
@@ -238,61 +340,238 @@ class PermissionRowView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = palette;
+    final scaler = MediaQuery.textScalerOf(context);
     final lit = row.status == RowStatus.asking;
+    final titleStyle = sans(15, 20, lit ? p.light : p.ink, weight: FontWeight.w500);
+    final markStyle = sans(13, 20, row.required ? p.ink2 : p.ink3, tracking: .005);
+    final lineStyle = sans(15, 21, p.ink2);
+    final title = TextSpan(children: [
+      TextSpan(text: row.title, style: titleStyle),
+      TextSpan(text: '  ', style: markStyle),
+      TextSpan(text: row.required ? Strings.requiredMark : Strings.optionalMark, style: markStyle),
+    ]);
+    final control = _RowControl(palette: p, row: row, onAllow: onAllow, onSettings: onSettings);
+    final controlSize = control.size(scaler);
+
     return Semantics(
       container: true,
-      label: row.semantics,
-      excludeSemantics: true,
-      liveRegion: lit,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // the icon keeps its size at every text size, centred on the title's first line
-            Transform.translate(
-              // (may be a point above the row's top at the normal size, where the line is 20 and the icon 22)
-              offset: Offset(0, ((MediaQuery.textScalerOf(context).scale(15) * 20 / 15) - iconSize) / 2),
-              child: SizedBox.square(
-                dimension: iconSize,
-                child: TweenAnimationBuilder<Color?>(
-                  tween: ColorTween(end: lit ? p.light : p.ink2),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: LayoutBuilder(builder: (context, box) {
+          final words = box.maxWidth - iconSize - _iconGap;
+          final beside = controlSize.width == 0 || words - _controlGap - controlSize.width >= minWords;
+          final textWidth = beside && controlSize.width > 0 ? words - _controlGap - controlSize.width : words;
+          // The icon and the control are centred on the block of the title and the reason's first
+          // line, however either wraps, at every text size.
+          final t = TextPainter(text: title, textScaler: scaler, textDirection: TextDirection.ltr)..layout(maxWidth: textWidth);
+          final l = TextPainter(text: TextSpan(text: row.line, style: lineStyle), textScaler: scaler, textDirection: TextDirection.ltr)
+            ..layout(maxWidth: textWidth);
+          final metrics = l.computeLineMetrics();
+          final firstLine = metrics.isEmpty ? scaler.scale(21) : metrics.first.height;
+          final centre = (t.height + 2 + firstLine) / 2;
+          t.dispose();
+          l.dispose();
+          final text = Semantics(
+            container: true,
+            label: row.semantics,
+            excludeSemantics: true,
+            liveRegion: lit,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(title, key: const Key('row-title')),
+                const SizedBox(height: 2),
+                AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  builder: (_, c, _) => GlyphIcon(glyph, color: c ?? p.ink2),
+                  child: Text(row.line, key: ValueKey(row.line), style: lineStyle),
+                ),
+              ],
+            ),
+          );
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _At(
+                top: centre - iconSize / 2,
+                child: SizedBox.square(
+                  dimension: iconSize,
+                  child: TweenAnimationBuilder<Color?>(
+                    tween: ColorTween(end: lit ? p.light : p.ink2),
+                    duration: const Duration(milliseconds: 300),
+                    builder: (_, c, _) => GlyphIcon(glyph, color: c ?? p.ink2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(row.title, style: sans(15, 20, lit ? p.light : p.ink, weight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: Text(row.line, key: ValueKey(row.line), style: sans(15, 21, row.status == RowStatus.off ? p.ink : p.ink2)),
-                  ),
-                ],
+              const SizedBox(width: _iconGap),
+              Expanded(
+                child: beside
+                    ? text
+                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        text,
+                        if (controlSize.width > 0) ...[const SizedBox(height: 10), control],
+                      ]),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 18,
-              height: 20,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: switch (row.status) {
-                  RowStatus.allowed => CustomPaint(key: const Key('mark-allowed'), painter: _Check(p.light.withValues(alpha: .85))),
-                  RowStatus.asking => Center(
-                      key: const Key('mark-asking'),
-                      child: Container(width: 7, height: 7, decoration: BoxDecoration(color: p.light, shape: BoxShape.circle)),
-                    ),
-                  _ => const SizedBox.shrink(),
-                },
+              if (beside && controlSize.width > 0) ...[
+                const SizedBox(width: _controlGap),
+                _At(top: centre - controlSize.height / 2, child: control),
+              ],
+            ],
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// [child] moved down by [top], or up when [top] is negative (the Allow button's tap area is
+/// taller than a one-line row's words, and reaches into the row's padding).
+class _At extends StatelessWidget {
+  const _At({required this.top, required this.child});
+  final double top;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => top >= 0
+      ? Padding(padding: EdgeInsets.only(top: top), child: child)
+      : Transform.translate(offset: Offset(0, top), child: child);
+}
+
+/// A row's own control, by its status.
+class _RowControl extends StatelessWidget {
+  const _RowControl({required this.palette, required this.row, this.onAllow, this.onSettings});
+  final Palette palette;
+  final PermissionRow row;
+  final VoidCallback? onAllow, onSettings;
+
+  static const _mark = Size(18, 20);
+
+  /// Nothing to show: the row's line says it all (info).
+  bool get _none => row.status == RowStatus.info;
+  bool get _off => row.status == RowStatus.off;
+  String get _offWord => Strings.offWord(feminine: row.kind == PermissionKind.location);
+
+  /// Its size at this text size, so the row can centre it and decide where it goes.
+  Size size(TextScaler scaler) {
+    double w(String s, TextStyle st) {
+      final tp = TextPainter(text: TextSpan(text: s, style: st), textScaler: scaler, textDirection: TextDirection.ltr)..layout();
+      final x = tp.width;
+      tp.dispose();
+      return x;
+    }
+
+    return switch (row.status) {
+      RowStatus.info => Size.zero,
+      RowStatus.allowed || RowStatus.asking => _mark,
+      RowStatus.waiting => Size(w(Strings.allowLabel, _RowPill.style(palette, true)) + _RowPill.padX * 2, _RowPill.heightFor(scaler)),
+      RowStatus.off => Size(
+          w(_offWord, _offStyle) + 10 + w(Strings.settingsButton, _RowPill.style(palette, false)) + _RowPill.padX * 2,
+          _RowPill.heightFor(scaler),
+        ),
+    };
+  }
+
+  TextStyle get _offStyle => sans(15, 20, palette.ink);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    if (_none) return const SizedBox.shrink();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: switch (row.status) {
+        RowStatus.waiting => _RowPill(
+            key: Key('allow-${row.kind.name}'),
+            palette: p,
+            gold: true,
+            label: Strings.allowLabel,
+            semanticsLabel: Strings.allowFor(row.title),
+            onTap: onAllow,
+          ),
+        RowStatus.allowed => SizedBox.fromSize(
+            key: const Key('mark-allowed'),
+            size: _mark,
+            child: CustomPaint(painter: _Check(p.light.withValues(alpha: .85))),
+          ),
+        RowStatus.asking => SizedBox.fromSize(
+            key: const Key('mark-asking'),
+            size: _mark,
+            child: Center(child: Container(width: 7, height: 7, decoration: BoxDecoration(color: p.light, shape: BoxShape.circle))),
+          ),
+        // beneath the words at large sizes, the Settings button may wrap under "Off"
+        _ when _off => Wrap(
+            key: const Key('row-off'),
+            spacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ExcludeSemantics(child: Text(_offWord, style: _offStyle)),
+              _RowPill(
+                key: Key('settings-${row.kind.name}'),
+                palette: p,
+                gold: false,
+                label: Strings.settingsButton,
+                semanticsLabel: Strings.settingsFor(row.title),
+                onTap: onSettings,
               ),
-            ),
-          ],
+            ],
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    );
+  }
+}
+
+/// The rows' small pill: Allow in gold on a faint gold ground; Settings plain.
+class _RowPill extends StatefulWidget {
+  const _RowPill({super.key, required this.palette, required this.gold, required this.label, required this.semanticsLabel, this.onTap});
+  final Palette palette;
+  final bool gold;
+  final String label, semanticsLabel;
+  final VoidCallback? onTap;
+
+  static const padX = 14.0;
+
+  /// Clear space above and below the pill that still takes a tap, so the target is 44 points high.
+  static const hitPad = 6.0;
+  static double heightFor(TextScaler scaler) => scaler.scale(15) * 20 / 15 + 12 + hitPad * 2;
+  static TextStyle style(Palette p, bool gold) => sans(15, 20, gold ? p.light : p.ink, weight: FontWeight.w500);
+
+  @override
+  State<_RowPill> createState() => _RowPillState();
+}
+
+class _RowPillState extends State<_RowPill> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    final base = widget.gold ? p.light : p.ink;
+    final h = _RowPill.heightFor(MediaQuery.textScalerOf(context)) - _RowPill.hitPad * 2;
+    return Semantics(
+      container: true,
+      button: true,
+      label: widget.semanticsLabel,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: _RowPill.hitPad),
+          child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: h,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: _RowPill.padX),
+          decoration: BoxDecoration(
+            color: base.withValues(alpha: _down ? .26 : (widget.gold ? .16 : .1)),
+            borderRadius: BorderRadius.circular(h / 2),
+          ),
+          // never wider than the row: a label too long shrinks to fit on one line
+          child: FittedBox(fit: BoxFit.scaleDown, child: Text(widget.label, maxLines: 1, softWrap: false, style: _RowPill.style(p, widget.gold))),
+          ),
         ),
       ),
     );
@@ -541,13 +820,33 @@ class SharedPreviewLayer extends StatelessWidget {
   }
 }
 
+/// How long the opening's name takes to fade out as the welcome comes.
+const openingOut = Duration(milliseconds: 550);
+
+/// How a forward step moves (welcome to permissions, permissions to the rehearsal's question):
+/// the old screen fades out moving a short way left while the new one fades in arriving from a
+/// short way right, overlapping, over the still sky; [back] mirrors it. Reduce Motion: a plain
+/// crossfade.
+const slideTime = Duration(milliseconds: 400);
+const double slideDistance = 28;
+
 /// A first-run screen fading in when it is first built and out when [on] goes false (the home
-/// screen keeps it built for the fade out, then drops it).
+/// screen keeps it built for the fade out, then drops it); with [slide], moving as a step does.
+/// Nothing on it takes a touch once it is leaving.
 class FirstRunFade extends StatefulWidget {
-  const FirstRunFade({super.key, required this.on, required this.child, this.inDuration = const Duration(milliseconds: 700)});
+  const FirstRunFade({
+    super.key,
+    required this.on,
+    required this.child,
+    this.inDuration = const Duration(milliseconds: 700),
+    this.outDuration = const Duration(milliseconds: 450),
+    this.slide = false,
+    this.back = false,
+  });
   final bool on;
   final Widget child;
-  final Duration inDuration;
+  final Duration inDuration, outDuration;
+  final bool slide, back;
 
   @override
   State<FirstRunFade> createState() => _FirstRunFadeState();
@@ -555,6 +854,12 @@ class FirstRunFade extends StatefulWidget {
 
 class _FirstRunFadeState extends State<FirstRunFade> {
   bool _shown = false;
+
+  /// Still shown though [FirstRunFade.on] went false: the step it leaves for is built in that same
+  /// frame (the permissions screen measures every row), and a fade started in it would lose that
+  /// frame's time and jump (seen in the film, 2026-11-16). So leaving begins a frame later, with
+  /// the arriving step's own fade, which also waits a frame. Touches are refused at once.
+  bool _holding = false;
 
   @override
   void initState() {
@@ -565,19 +870,38 @@ class _FirstRunFadeState extends State<FirstRunFade> {
   }
 
   @override
+  void didUpdateWidget(FirstRunFade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.on && !widget.on && _shown) {
+      _holding = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _holding = false);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final on = widget.on && _shown;
+    final on = (widget.on || _holding) && _shown;
+    final still = MediaQuery.of(context).disableAnimations;
+    final Duration time = widget.slide ? slideTime : (on ? widget.inDuration : widget.outDuration);
+    final curve = widget.slide ? Curves.easeInOutCubic : easeOut;
+    final faded = AnimatedOpacity(opacity: on ? 1 : 0, duration: time, curve: curve, child: widget.child);
+    // arriving: from the right; leaving: to the left (mirrored going back). The same tree with or
+    // without the move, so turning [slide] on as a step begins never restarts the fade.
+    final sign = widget.back ? -1.0 : 1.0;
+    final dx = !widget.slide || still || on ? 0.0 : (_shown ? -slideDistance : slideDistance) * sign;
+    final child = LayoutBuilder(
+      builder: (context, box) => AnimatedSlide(
+        offset: Offset(dx / (box.maxWidth == 0 ? 1 : box.maxWidth), 0),
+        duration: time,
+        curve: curve,
+        child: faded,
+      ),
+    );
     return IgnorePointer(
       ignoring: !widget.on,
-      child: ExcludeSemantics(
-        excluding: !widget.on,
-        child: AnimatedOpacity(
-          opacity: on ? 1 : 0,
-          duration: on ? widget.inDuration : const Duration(milliseconds: 450),
-          curve: easeOut,
-          child: widget.child,
-        ),
-      ),
+      child: ExcludeSemantics(excluding: !widget.on, child: child),
     );
   }
 }

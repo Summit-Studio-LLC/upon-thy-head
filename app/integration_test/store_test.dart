@@ -249,7 +249,7 @@ void main() {
     expect(find.byKey(const Key('ruler')), findsNothing);
     expect(find.byKey(const Key('older')), findsNothing);
     expect(find.byKey(const Key('list')), findsNothing);
-    expect(find.text('When a blessing is recorded, its light appears here.'), findsOneWidget);
+    expect(find.text('When a blessing is recorded, a light appears here.'), findsOneWidget);
     await shot('11-empty');
     // and a recording can still be opened and closed
     await tester.tap(find.byKey(const Key('new')));

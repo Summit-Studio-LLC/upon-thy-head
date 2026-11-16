@@ -72,11 +72,15 @@ bool recordScreenMayAsk(String? saved) => saved != FirstRun.done;
 
 // ---- the permissions screen ----
 
-/// The four rows, in the order the phone asks.
+/// The four rows, top to bottom.
 enum PermissionKind { microphone, speech, location, lock }
 
+/// The microphone and speech recognition must be answered (allowed or refused) before Continue;
+/// location and the lock may be left (the owner's ruling, 2026-11-16).
+bool isRequired(PermissionKind k) => k == PermissionKind.microphone || k == PermissionKind.speech;
+
 enum RowStatus {
-  /// Not yet asked.
+  /// Not yet asked: the row's Allow button.
   waiting,
 
   /// The system's question is up for this row now.
@@ -85,7 +89,7 @@ enum RowStatus {
   /// Allowed: a small quiet mark.
   allowed,
 
-  /// Refused: "Off. You can turn it on in Settings."
+  /// Refused: "Off" and a Settings button (iOS never asks twice).
   off,
 
   /// Nothing to ask on this phone (no Face ID, or no passcode): the Settings page's plain line.
@@ -139,19 +143,29 @@ class PermissionRow {
         PermissionKind.lock => Strings.faceIdWhy,
       };
 
-  /// The line under the name now.
+  bool get required => isRequired(kind);
+
+  /// The line under the name now. Refused location says which sky is used instead.
   String get line => switch (status) {
-        RowStatus.off => kind == PermissionKind.location ? Strings.locationOff : Strings.permissionOff,
+        RowStatus.off when kind == PermissionKind.location => Strings.locationOff,
         RowStatus.info => note ?? reason,
         _ => reason,
       };
 
-  /// What VoiceOver reads for the row.
-  String get semantics => switch (status) {
-        RowStatus.asking => '${Strings.rowAsking(title)}. $reason',
-        RowStatus.allowed => '${Strings.rowOn(title)}. $reason',
-        _ => '$title. $line',
-      };
+  /// What VoiceOver reads for the row: its title, required or optional, its line, and its state.
+  /// (The Allow and Settings buttons are read on their own.)
+  String get semantics {
+    final mark = required ? Strings.requiredMark : Strings.optionalMark;
+    final String? state = switch (status) {
+      RowStatus.waiting => Strings.notAnswered,
+      RowStatus.asking => Strings.askingNow,
+      RowStatus.allowed => Strings.allowed,
+      RowStatus.off => Strings.offWord(feminine: kind == PermissionKind.location),
+      RowStatus.info => null,
+    };
+    String bare(String x) => x.endsWith('.') ? x.substring(0, x.length - 1) : x;
+    return <String>[title, mark, line, ?state].map(bare).join('. ');
+  }
 
   PermissionRow withStatus(RowStatus s) => PermissionRow(kind, s, name: name, note: note);
 }
@@ -200,6 +214,9 @@ abstract class FirstRunAsker {
   Future<LocationStatus> askLocation();
   Future<Biometry> biometry();
   Future<Biometry> askBiometrics(String reason);
+
+  /// This app's page in the Settings app.
+  Future<void> openSettings();
 }
 
 /// iOS: SpeechChannel.swift, Privacy.swift.
@@ -235,19 +252,18 @@ class NativeFirstRunAsker implements FirstRunAsker {
   @override
   Future<Biometry> askBiometrics(String reason) async =>
       Biometry.of(await _lock.invokeMethod<Map<Object?, Object?>>('askBiometrics', {'reason': reason}));
+  @override
+  Future<void> openSettings() => _lock.invokeMethod<void>('openSettings');
 }
 
-/// The permissions screen's state: the four rows, read as the screen opens; then, on Continue,
-/// iOS's own questions one after another, each row lit while its question is up, a short beat
-/// between them. A row already decided is shown and not asked again.
+/// The permissions screen's state: the four rows, read as the screen opens. Each row's own Allow
+/// puts that row's question, and only that one, in any order. Continue is open once both required
+/// rows are answered, allowed or refused. A row already decided is shown and not asked again.
 class FirstRunPermissions extends ChangeNotifier {
-  FirstRunPermissions({required this.asker, required this.settings, this.beat = const Duration(milliseconds: 700), this.announce});
+  FirstRunPermissions({required this.asker, required this.settings, this.announce});
 
   final FirstRunAsker asker;
   final Settings settings;
-
-  /// The pause after an answer, before the next question.
-  final Duration beat;
 
   /// Read aloud (VoiceOver), after each answer.
   final void Function(String)? announce;
@@ -255,17 +271,29 @@ class FirstRunPermissions extends ChangeNotifier {
   List<PermissionRow> rows = const [];
   bool get loaded => rows.isNotEmpty;
 
-  /// Continue was pressed and the questions are going.
-  bool get running => _running;
-  bool _running = false;
-
   /// The row whose question is up, or null.
   PermissionKind? get asking => _asking;
   PermissionKind? _asking;
 
-  bool get microphoneAllowed => rows.any((r) => r.kind == PermissionKind.microphone && r.status == RowStatus.allowed);
+  PermissionRow? row(PermissionKind k) {
+    for (final r in rows) {
+      if (r.kind == k) return r;
+    }
+    return null;
+  }
 
-  Future<void> load() async {
+  bool get microphoneAllowed => row(PermissionKind.microphone)?.status == RowStatus.allowed;
+
+  /// The required rows not answered yet, in order.
+  List<PermissionKind> get stillNeeded => [
+        for (final k in PermissionKind.values)
+          if (isRequired(k) && const {RowStatus.waiting, RowStatus.asking}.contains(row(k)?.status ?? RowStatus.waiting)) k,
+      ];
+
+  /// Continue works: both required rows answered, and no question up.
+  bool get canContinue => loaded && _asking == null && stillNeeded.isEmpty;
+
+  Future<List<PermissionRow>> _read() async {
     final out = <PermissionRow>[];
     Future<RowStatus> safe(Future<RowStatus> Function() f) async {
       try {
@@ -286,7 +314,25 @@ class FirstRunPermissions extends ChangeNotifier {
       debugPrint('first run: $e');
       out.add(const PermissionRow(PermissionKind.lock, RowStatus.info));
     }
-    rows = out;
+    return out;
+  }
+
+  Future<void> load() async {
+    rows = await _read();
+    notifyListeners();
+  }
+
+  /// Back from the Settings app: look again (a refused row may have been turned on there). A row
+  /// whose question is up is left alone.
+  Future<void> recheck() async {
+    if (!loaded || _asking != null) return;
+    final fresh = await _read();
+    if (_asking != null) return;
+    rows = [
+      for (final r in fresh)
+        // the first run's own "allowed" for Allow Once is kept; iOS reads it as unasked again
+        if (r.status == RowStatus.waiting && row(r.kind)?.status == RowStatus.allowed) row(r.kind)! else r,
+    ];
     notifyListeners();
   }
 
@@ -295,29 +341,30 @@ class FirstRunPermissions extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Continue: each row not yet decided is asked, in order. Returns when the last is answered.
-  Future<void> run() async {
-    if (_running) return;
-    if (!loaded) await load();
-    _running = true;
-    notifyListeners();
-    for (final r in [...rows]) {
-      if (r.status != RowStatus.waiting) continue;
-      _asking = r.kind;
-      _set(r.kind, RowStatus.asking);
-      var s = RowStatus.off;
-      try {
-        s = await _ask(r);
-      } catch (e) {
-        debugPrint('first run: ${r.kind.name}: $e');
-      }
-      _asking = null;
-      _set(r.kind, s);
-      announce?.call(rows.firstWhere((x) => x.kind == r.kind).semantics);
-      await Future<void>.delayed(beat);
+  /// A row's Allow: its question, and only its. Nothing while another is up.
+  Future<void> ask(PermissionKind k) async {
+    if (_asking != null || row(k)?.status != RowStatus.waiting) return;
+    _asking = k;
+    final r = row(k)!;
+    _set(k, RowStatus.asking);
+    var s = RowStatus.off;
+    try {
+      s = await _ask(r);
+    } catch (e) {
+      debugPrint('first run: ${k.name}: $e');
     }
-    _running = false;
-    notifyListeners();
+    _asking = null;
+    _set(k, s);
+    announce?.call(row(k)!.semantics);
+  }
+
+  /// A refused row's Settings button: this app's page in the Settings app.
+  Future<void> openSettings() async {
+    try {
+      await asker.openSettings();
+    } catch (e) {
+      debugPrint('first run: $e');
+    }
   }
 
   Future<RowStatus> _ask(PermissionRow r) async {
