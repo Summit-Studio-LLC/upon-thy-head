@@ -15,6 +15,9 @@ import XCTest
 ///    the app under test (the system share sheet it presents) and tap it; `ok <label>` or `missing …`
 ///  - `appdismiss`: swipe the app's presented sheet down
 ///  - `applabels`: the labels of the buttons and rows the app shows now (for writing scripts)
+///  - `files <name>`: open the Files app, go to On My iPhone, and tap the file whose name starts with
+///    <name>, as a person opens a file they were sent; `ok <label>` or `missing …`
+///  - `fileslabels`: what the Files app shows now (for writing scripts)
 ///  - `quit`: stop
 final class Tapper: XCTestCase {
   let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -64,6 +67,10 @@ final class Tapper: XCTestCase {
       case "applabels":
         let app = XCUIApplication(bundleIdentifier: appBundle)
         answer = (app.buttons.allElementsBoundByIndex + app.cells.allElementsBoundByIndex).map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "files": answer = openInFiles(arg)
+      case "fileslabels":
+        let f = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
+        answer = (f.buttons.allElementsBoundByIndex + f.cells.allElementsBoundByIndex + f.staticTexts.allElementsBoundByIndex).map(\.label).filter { !$0.isEmpty }.prefix(80).joined(separator: " | ")
       case "quit":
         try? "bye".write(to: out, atomically: true, encoding: .utf8)
         return
@@ -113,6 +120,52 @@ final class Tapper: XCTestCase {
     }
     let seen = (app.buttons.allElementsBoundByIndex + app.cells.allElementsBoundByIndex).prefix(40).map(\.label).filter { !$0.isEmpty }
     return "missing \(labels.joined(separator: "|")) among: " + seen.joined(separator: " | ")
+  }
+
+  /// Files: Browse, On My iPhone, then the file. The file's cell is found by the start of its name
+  /// (Files may hide the extension).
+  func openInFiles(_ name: String) -> String {
+    let f = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
+    f.activate()
+    let end = Date().addingTimeInterval(40)
+    var steps: [String] = []
+    while Date() < end {
+      let match = NSPredicate(format: "label BEGINSWITH %@", name)
+      for q in [f.cells] { // the file itself, never a bare label that opens nothing
+        let e = q.matching(match).firstMatch
+        if e.exists && e.isHittable {
+          // read before the tap: the app it opens takes Files off the screen, and a query then fails
+          let label = e.label
+          e.tap()
+          return "ok \(label) after \(steps.joined(separator: ", "))"
+        }
+      }
+      // get to On My iPhone: the Browse tab, then the location (back out of any folder first)
+      let onPhone = f.descendants(matching: .any).matching(NSPredicate(format: "label == 'On My iPhone' AND (elementType == %d OR elementType == %d OR elementType == %d)", XCUIElement.ElementType.cell.rawValue, XCUIElement.ElementType.button.rawValue, XCUIElement.ElementType.staticText.rawValue)).firstMatch
+      if onPhone.exists && onPhone.isHittable {
+        onPhone.tap()
+        steps.append("On My iPhone")
+        Thread.sleep(forTimeInterval: 1.5)
+        continue
+      }
+      let browse = f.buttons.matching(NSPredicate(format: "label == 'Browse'")).firstMatch
+      if browse.exists && browse.isHittable {
+        browse.tap()
+        steps.append("Browse")
+        Thread.sleep(forTimeInterval: 1.0)
+        // a second tap on Browse goes to its top level
+        if !onPhone.exists { browse.tap() }
+        continue
+      }
+      // "Continue" on a first-run sheet, and the like
+      for l in ["Continue", "Not Now", "Done"] {
+        let b = f.buttons[l]
+        if b.exists && b.isHittable { b.tap(); steps.append(l) }
+      }
+      Thread.sleep(forTimeInterval: 0.5)
+    }
+    let seen = (f.buttons.allElementsBoundByIndex + f.cells.allElementsBoundByIndex).prefix(40).map(\.label).filter { !$0.isEmpty }
+    return "missing \(name) after \(steps.joined(separator: ", ")) among: " + seen.joined(separator: " | ")
   }
 
   func tap(_ label: String) -> String {

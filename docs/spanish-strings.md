@@ -253,6 +253,26 @@ exact but more technical; the English avoids "transcribe" on purpose.
 The shared text and the PDF use the reading page's own lines: the long date, "Una bendición de …"
 and "Para …".
 
+## A blessing file (sending, and the sheet when one arrives)
+
+| English | Spanish | Note |
+|---|---|---|
+| As a blessing file | Como archivo de bendición | |
+| Opens in Upon Thy Head on another iPhone. | Se abre en Upon Thy Head en otro iPhone. | |
+| A blessing from Dad | Una bendición de Papá | the reading page's line |
+| A blessing (no giver) | Una bendición | |
+| Keep it with your blessings? | ¿Guardarla con tus bendiciones? | |
+| Keep | Guardar | |
+| Not now | Ahora no | |
+| You already have this blessing. | Ya tienes esta bendición. | |
+| You already have this blessing, and this copy is different. | Ya tienes esta bendición, y esta copia es diferente. | |
+| Replace mine | Reemplazar la mía | |
+| Keep mine | Conservar la mía | ★ "Guardar la mía" would echo Keep = Guardar, but reads as "save mine"; "Conservar" says keep it as it is. |
+| This blessing was made with a newer version of Upon Thy Head. Update the app to open it. | Esta bendición se hizo con una versión más reciente de Upon Thy Head. Actualiza la app para abrirla. | |
+| This file could not be read. | No se pudo leer este archivo. | |
+| OK | OK | as iOS's own alerts in Latin American Spanish |
+| Blessing (the file type, in Files and the share sheet) | Bendición | app/ios/Runner/es.lproj/InfoPlist.strings |
+
 ## The system's questions (app/ios/Runner/es.lproj/InfoPlist.strings)
 
 iOS shows these under its own question. Apple writes the question's title and buttons, in the

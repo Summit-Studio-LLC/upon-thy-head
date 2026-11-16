@@ -29,11 +29,13 @@ class Sheet extends StatelessWidget {
     final p = palette;
     // the keyboard pushes the sheet up
     final inset = MediaQuery.viewInsetsOf(context).bottom;
+    // Reduce Motion: it is simply there, and simply gone
+    final still = MediaQuery.of(context).disableAnimations;
     final panel = IgnorePointer(
       ignoring: !on,
       child: AnimatedSlide(
         offset: on ? Offset.zero : const Offset(0, 1.04),
-        duration: const Duration(milliseconds: 500),
+        duration: still ? Duration.zero : const Duration(milliseconds: 500),
         curve: easeOut,
         child: Container(
           key: panelKey,
@@ -57,7 +59,7 @@ class Sheet extends StatelessWidget {
             onTap: onDismiss,
             child: AnimatedOpacity(
               opacity: on ? 1 : 0,
-              duration: const Duration(milliseconds: 400),
+              duration: still ? Duration.zero : const Duration(milliseconds: 400),
               curve: easeOut,
               child: ColoredBox(color: p.ground.withValues(alpha: .45)),
             ),

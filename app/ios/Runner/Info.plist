@@ -11,6 +11,48 @@
 		<string>en</string>
 		<string>es</string>
 	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Blessing</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>dev.summitstudio.uponThyHead.blessing</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>dev.summitstudio.uponThyHead.blessing</string>
+			<key>UTTypeDescription</key>
+			<string>Blessing</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>blessing</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.uponthyhead.blessing</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>Upon Thy Head</string>
 	<key>CFBundleExecutable</key>

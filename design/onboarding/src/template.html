@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First run draft</title>
+<style>
+@font-face{font-family:"Newsreader";font-style:normal;font-weight:300 600;font-display:block;src:url(data:font/woff2;base64,@@FONT_ROMAN@@) format("woff2")}
+@font-face{font-family:"Newsreader";font-style:italic;font-weight:300 600;font-display:block;src:url(data:font/woff2;base64,@@FONT_ITALIC@@) format("woff2")}
+
+/* Lamplight, as in design/prototype */
+:root{
+  --ground-rgb:11,9,7;--ink-rgb:239,230,212;--light-rgb:240,201,135;
+  --ground:#0B0907;--surface:#13100C;--raised:#1D1913;
+  --ink:#EFE6D4;--ink-2:#B5AB98;--ink-3:#8A806E;--light:#F0C987;
+  --line:rgba(var(--ink-rgb),.10);
+  --serif:"Newsreader","Iowan Old Style",Georgia,serif;
+  --sans:-apple-system,"SF Pro Text",system-ui,"Helvetica Neue",Arial,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --t:1; /* text size: 1 is the default; 1.35 is roughly iOS's largest standard size */
+}
+.big{--t:1.35}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#111217;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible{outline:2px solid var(--light);outline-offset:3px;border-radius:6px}
+
+/* ---------- the shell around the phone (not part of the app) ---------- */
+.stage{height:100%;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:56px;padding:0 40px}
+.rail{justify-self:end;width:220px;max-height:100%;overflow:auto;scrollbar-width:none;padding:24px 0}
+.rail h1{font:400 22px/28px var(--serif);margin-bottom:4px}
+.rail p{font-size:13px;line-height:20px;color:#8A8D99}
+.rail .lbl{margin-top:22px;font-size:12px;line-height:18px;color:#6E717C}
+.rail ol{list-style:none;margin:4px 0 0 -12px}
+.rail li button{display:block;width:100%;text-align:left;padding:6px 12px;border-radius:8px;font-size:14px;line-height:20px;color:#8A8D99;transition:color .2s,background-color .2s}
+.rail li button:hover{color:#D9D6CE}
+.rail li button[aria-current="true"]{color:#EEE7D8;background:rgba(255,255,255,.06)}
+.rail li button .n{display:inline-block;width:22px;color:#5E616C}
+.seg{display:flex;gap:4px;margin-top:6px}
+.seg button{flex:1;height:30px;border-radius:8px;font-size:13px;color:#8A8D99;background:rgba(255,255,255,.04)}
+.seg button[aria-pressed="true"]{color:#EEE7D8;background:rgba(255,255,255,.12)}
+.notes{justify-self:start;width:270px;font-size:13px;line-height:20px;color:#8A8D99}
+.notes h2{font:400 17px/24px var(--serif);color:#D9D6CE;margin-bottom:6px}
+.notes p+h2{margin-top:24px}
+.notes p+p{margin-top:8px}
+.device{position:relative;width:414px;height:868px;transform-origin:50% 50%;border-radius:68px;background:#000;box-shadow:0 0 0 1px #2A2C33,0 0 0 3px #08080A}
+.phone{position:absolute;left:12px;top:12px;width:390px;height:844px;border-radius:56px;overflow:hidden;background:#000;isolation:isolate}
+.bare body{background:#000}
+.bare .stage{display:block;padding:0}
+.bare .rail,.bare .notes{display:none}
+.bare .device{width:390px;height:844px;border-radius:0;box-shadow:none;transform:none!important}
+.bare .phone{left:0;top:0;border-radius:0}
+@media (max-width:1180px){.notes{display:none}.stage{grid-template-columns:auto auto;justify-content:center}}
+@media (max-width:720px){.rail{display:none}.stage{grid-template-columns:auto}}
+
+/* ---------- the app ---------- */
+#sky,#fx{position:absolute;inset:0;width:390px;height:844px;display:block}
+.screen{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity .55s var(--ease),visibility 0s .55s}
+.screen:not(.on){pointer-events:none}
+.screen.on{opacity:1;visibility:visible;z-index:1;transition:opacity .8s var(--ease) .15s,visibility 0s}
+.notrans *,.notrans{transition:none!important;animation:none!important}
+
+.status{position:absolute;left:0;right:0;top:0;height:54px;z-index:50;pointer-events:none;display:flex;justify-content:space-between;align-items:center;padding:6px 34px 0 52px;font:600 17px/22px var(--sans);letter-spacing:-.01em;color:var(--ink);transition:opacity .8s}
+.status svg{display:block;fill:var(--ink)}
+.status .r{display:flex;gap:7px;align-items:center}
+.island{position:absolute;left:50%;top:11px;width:124px;height:36px;margin-left:-62px;border-radius:20px;background:#000;z-index:51}
+.homebar{position:absolute;left:50%;bottom:8px;width:136px;height:5px;margin-left:-68px;border-radius:3px;background:rgba(var(--ink-rgb),.55);z-index:51;pointer-events:none}
+.at-opening .status{opacity:0}
+
+.scrim-b{position:absolute;left:0;right:0;bottom:0;pointer-events:none;background:linear-gradient(to top,rgba(var(--ground-rgb),.94) 0,rgba(var(--ground-rgb),.86) 38%,rgba(var(--ground-rgb),.5) 72%,rgba(var(--ground-rgb),0) 100%)}
+.scrim-t{position:absolute;left:0;right:0;top:0;height:190px;pointer-events:none;background:linear-gradient(to bottom,rgba(var(--ground-rgb),.82) 0,rgba(var(--ground-rgb),.5) 50%,rgba(var(--ground-rgb),0) 100%)}
+
+.meta{font:400 calc(13px*var(--t))/1.4 var(--sans);color:var(--ink-2);letter-spacing:.005em}
+.title{font:400 calc(30px*var(--t))/1.15 var(--serif);letter-spacing:-.012em;color:var(--ink);text-wrap:balance}
+.lede{font:400 calc(17px*var(--t))/1.47 var(--sans);color:var(--ink-2);text-wrap:pretty}
+.from{font:italic 400 calc(18px*var(--t))/1.45 var(--serif);color:var(--light)}
+.ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;display:block}
+.iconbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:22px;color:var(--ink);transition:background-color .2s}
+.iconbtn:hover{background:rgba(var(--ink-rgb),.08)}
+.btn{display:block;width:100%;min-height:52px;border-radius:26px;padding:13px 20px;font:500 calc(17px*var(--t))/1.5 var(--sans);letter-spacing:-.005em;text-align:center;transition:background-color .2s,transform .2s var(--ease),opacity .6s var(--ease)}
+.btn:active{transform:scale(.985)}
+.btn.primary{background:var(--light);color:var(--ground)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.quiet{color:var(--ink)}
+.btn.quiet:hover{background:rgba(var(--ink-rgb),.07)}
+.btn.tonal{background:rgba(var(--ink-rgb),.09);color:var(--ink)}
+.btn.tonal:hover{background:rgba(var(--ink-rgb),.14)}
+
+/* a screen whose words sit low, over the sky, like "The words are kept" */
+.content{position:absolute;left:28px;right:28px;bottom:42px;display:flex;flex-direction:column}
+.content .actions{margin-top:36px;display:grid;gap:8px}
+
+/* 1 opening */
+#s-opening,#s-s-opening{cursor:pointer}
+.name{position:absolute;left:0;right:0;top:478px;text-shadow:0 0 24px rgba(var(--ground-rgb),.9),0 0 8px rgba(var(--ground-rgb),.7);text-align:center;font:400 calc(40px*var(--t))/1.1 var(--serif);letter-spacing:-.01em;color:var(--ink);opacity:0}
+
+/* 2 welcome: three lines that arrive one after another */
+.wl{font:400 calc(25px*var(--t))/1.24 var(--serif);letter-spacing:-.008em;color:var(--ink);text-wrap:balance}
+.wl+.wl{margin-top:calc(18px*var(--t))}
+.wq{margin-top:calc(28px*var(--t));font:400 calc(15px*var(--t))/1.4 var(--sans);color:var(--ink-3)}
+#s-welcome .content>*{opacity:0;transform:translateY(10px);transition:opacity .9s var(--ease),transform 1.2s var(--ease)}
+#s-welcome.on .content>*{opacity:1;transform:none}
+#s-welcome.on .content>:nth-child(1){transition-delay:.5s}
+#s-welcome.on .content>:nth-child(2){transition-delay:1.5s}
+#s-welcome.on .content>:nth-child(3){transition-delay:2.5s}
+#s-welcome.on .content>:nth-child(4){transition-delay:3.3s}
+#s-welcome.on .content>:nth-child(5){transition-delay:3.7s}
+.reduce #s-welcome .content>*{transform:none!important;transition:opacity .4s!important;transition-delay:0s!important}
+
+/* 3 permissions */
+.perm .title{margin-top:calc(6px*var(--t))}
+.perm .lede{margin-top:calc(12px*var(--t))}
+.perm .refused{display:none;color:var(--ink)}
+.perm.was-refused .sub{display:none}
+.perm.was-refused .refused{display:block}
+
+/* the system's own question, drawn as a plain look-alike (iOS 26 style) */
+.veil{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.38);opacity:0;visibility:hidden;transition:opacity .25s,visibility 0s .25s}
+.veil.on{opacity:1;visibility:visible;transition:opacity .25s,visibility 0s}
+.alert{position:absolute;left:50%;top:50%;width:300px;transform:translate(-50%,-50%) scale(1.06);padding:22px 18px 18px;border-radius:34px;background:rgba(44,42,40,.86);-webkit-backdrop-filter:blur(30px) saturate(1.4);backdrop-filter:blur(30px) saturate(1.4);box-shadow:0 0 0 .5px rgba(255,255,255,.12) inset,0 20px 60px rgba(0,0,0,.5);color:#fff;font-family:var(--sans);transition:transform .3s cubic-bezier(.2,1.2,.4,1)}
+.veil.on .alert{transform:translate(-50%,-50%) scale(1)}
+.alert h3{padding:0 6px;font:600 calc(17px*var(--t))/1.3 var(--sans);letter-spacing:-.01em}
+.alert p{padding:0 6px;margin-top:8px;font:400 calc(15px*var(--t))/1.35 var(--sans);color:rgba(255,255,255,.86)}
+.alert .ab{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.alert .ab.stack{grid-template-columns:1fr}
+.alert .ab button{min-height:48px;padding:12px 10px;border-radius:24px;background:rgba(255,255,255,.13);color:#fff;font:500 calc(17px*var(--t))/1.4 var(--sans);letter-spacing:-.01em}
+.alert .ab button.pref{background:#0A84FF}
+.alert .ab button:hover{background:rgba(255,255,255,.2)}
+.alert .ab button.pref:hover{background:#2B95FF}
+.alert .map{position:relative;height:150px;margin-top:16px;border-radius:16px;overflow:hidden;background:
+  linear-gradient(115deg,transparent 46%,rgba(255,255,255,.07) 46.5%,rgba(255,255,255,.07) 48%,transparent 48.5%),
+  linear-gradient(20deg,transparent 60%,rgba(255,255,255,.06) 60.5%,rgba(255,255,255,.06) 61.5%,transparent 62%),
+  linear-gradient(160deg,#2E3330,#262A2B 60%,#2B2E2A)}
+.alert .map::before{content:"";position:absolute;left:50%;top:50%;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;background:rgba(10,132,255,.22);box-shadow:0 0 0 1.5px rgba(10,132,255,.55) inset}
+.alert .map span{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:12px;color:rgba(255,255,255,.7)}
+
+/* 4a the sky, their own */
+.head{position:absolute;left:24px;right:12px;top:62px;display:flex;justify-content:space-between;align-items:flex-start}
+.head .title{font-size:calc(34px*var(--t))}
+.head .iconbtn{color:var(--ink-2)}
+.empty{position:absolute;left:44px;right:44px;bottom:130px;text-align:center;font:italic 400 calc(18px*var(--t))/1.45 var(--serif);color:var(--ink-2);text-wrap:balance}
+.newrow{position:absolute;left:0;right:0;bottom:44px;display:flex;justify-content:center}
+.new{display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 20px 10px 14px;border-radius:22px;font:500 calc(15px*var(--t))/1.35 var(--sans);color:var(--ink);background:rgba(var(--ink-rgb),.09);transition:background-color .2s}
+.new:hover{background:rgba(var(--ink-rgb),.15)}
+.new span{width:18px;height:18px;flex:none;border-radius:50%;border:1.5px solid rgba(var(--ink-rgb),.55);display:grid;place-items:center}
+.new span::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--light)}
+
+/* 4b rehearsal: the real recording screen, marked as practice */
+.toplabel{position:absolute;left:0;right:0;top:68px;text-align:center;font:italic 400 calc(17px*var(--t))/1.4 var(--serif);color:var(--ink-3);pointer-events:none}
+.cancel{position:absolute;right:12px;top:58px;min-height:44px;padding:0 12px;font-size:calc(17px*var(--t));color:var(--ink-2);border-radius:22px}
+.cancel:hover{color:var(--ink)}
+.begin{position:absolute;left:50%;top:363px;width:132px;height:132px;margin:-66px 0 0 -66px;border-radius:50%;display:grid;place-items:center;font:400 calc(24px*var(--t))/1 var(--serif);color:var(--ink);box-shadow:inset 0 0 0 1.5px rgba(var(--light-rgb),.6);background:radial-gradient(closest-side,rgba(var(--light-rgb),.16),rgba(var(--light-rgb),.04) 72%,rgba(var(--light-rgb),0));transition:box-shadow .2s,transform .3s var(--ease)}
+.begin:hover{box-shadow:inset 0 0 0 1.5px rgba(var(--light-rgb),.9)}
+.begin:active{transform:scale(.96)}
+.ready-hint{position:absolute;left:40px;right:40px;top:452px;text-align:center;font-size:calc(13px*var(--t));line-height:1.4;color:var(--ink-3)}
+.hold{position:absolute;left:50%;bottom:92px;width:88px;height:88px;margin-left:-44px;border-radius:44px;display:grid;place-items:center;font:400 calc(21px*var(--t))/1 var(--serif);color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none;isolation:isolate}
+.hold::before{content:"";position:absolute;inset:-16px;z-index:-1;border-radius:50%;background:radial-gradient(closest-side,var(--ground) 0,var(--ground) 72%,rgba(var(--ground-rgb),0) 100%)}
+.hold svg{position:absolute;inset:0;width:88px;height:88px;transform:rotate(-90deg)}
+.hold circle{fill:none;stroke-width:1.5}
+.hold .track{stroke:rgba(var(--ink-rgb),.28)}
+.hold .prog{stroke:var(--light);stroke-dasharray:267.04;stroke-dashoffset:267.04;transition:stroke-dashoffset .25s var(--ease)}
+.hold.holding .prog{stroke-dashoffset:0;transition:stroke-dashoffset .9s linear}
+.hold.holding{color:var(--light)}
+.hint{position:absolute;left:0;right:0;bottom:58px;text-align:center;font-size:calc(13px*var(--t));line-height:1.4;color:var(--ink-3)}
+.said{font:400 calc(22px*var(--t))/1.45 var(--serif);color:var(--ink);margin-top:calc(14px*var(--t));padding-left:16px;border-left:2px solid rgba(var(--light-rgb),.5)}
+#s-written .lede{margin-top:calc(20px*var(--t))}
+
+/* shared: the sheet that asks */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--raised);border-radius:28px 28px 0 0;padding:26px 24px 40px;box-shadow:0 -1px 0 rgba(var(--ink-rgb),.07);transform:translateY(104%);transition:transform .6s var(--ease) .5s}
+.screen.on .sheet{transform:none}
+.sheet .title{font-size:calc(26px*var(--t));margin-top:4px}
+.sheet .from{margin-top:2px}
+.sheet .ask{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);font:400 calc(17px*var(--t))/1.4 var(--sans);color:var(--ink)}
+.sheet .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}
+.big .sheet .actions{grid-template-columns:1fr}
+.big .sheet .actions .primary{order:-1}
+.cap{position:absolute;left:24px;right:16px;bottom:118px;display:grid;grid-template-columns:1fr 44px;align-items:end;column-gap:8px;text-align:left}
+.cap .title{margin-top:6px}
+.cap .from{margin-top:4px}
+.cap .go{width:44px;height:44px;border-radius:22px;display:grid;place-items:center;background:rgba(var(--ink-rgb),.09);color:var(--ink);margin-bottom:-4px}
+
+.fallback{position:absolute;inset:0;display:none;place-items:center;padding:40px;text-align:center;color:var(--ink-2);font-size:15px;line-height:22px;z-index:60;background:var(--ground)}
+.reduce .screen,.reduce .screen.on{transition-duration:.35s;transition-delay:0s}
+.reduce .sheet{transition:none}
+</style>
+</head>
+<body>
+<div class="stage">
+  <nav class="rail" aria-label="First run steps">
+    <h1>First run</h1>
+    <p>Draft for Noah to react to. Click through inside the phone, or jump to a step here.</p>
+    <p class="lbl">Main flow</p>
+    <ol id="nav-main"></ol>
+    <p class="lbl">Step 4</p>
+    <div class="seg" id="seg-v"><button data-v="a">4a Straight in</button><button data-v="b">4b Rehearsal</button></div>
+    <p class="lbl">Opened from a shared blessing</p>
+    <ol id="nav-shared"></ol>
+    <p class="lbl">Language</p>
+    <div class="seg" id="seg-l"><button data-l="en">English</button><button data-l="es">Español</button></div>
+    <p class="lbl">Settings on the phone</p>
+    <div class="seg"><button id="t-big" aria-pressed="false">Larger text</button><button id="t-reduce" aria-pressed="false">Reduce Motion</button></div>
+    <p class="lbl">Tip: in a system question, “Don’t Allow” shows what a refusal looks like.</p>
+  </nav>
+
+  <div class="device" id="device"><div class="phone" id="phone">
+    <canvas id="sky"></canvas>
+    <div id="screens"></div>
+    <div class="veil" id="veil"><div class="alert" id="alert" role="alertdialog"></div></div>
+    <div class="status" aria-hidden="true">
+      <span>9:41</span>
+      <span class="r">
+        <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx=".8"/><rect x="5" y="5.5" width="3" height="6.5" rx=".8"/><rect x="10" y="3" width="3" height="9" rx=".8"/><rect x="15" y="0" width="3" height="12" rx=".8"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 2.4c2.3 0 4.4.9 6 2.4l1.1-1.2A10.3 10.3 0 008.5.7C5.8.7 3.3 1.8 1.4 3.6l1.1 1.2a8.6 8.6 0 016-2.4z"/><path d="M8.5 6.1c1.3 0 2.5.5 3.4 1.3l1.1-1.2a6.6 6.6 0 00-9 0l1.1 1.2c.9-.8 2.1-1.3 3.4-1.3z"/><path d="M8.5 9.3c-.7 0-1.3.3-1.8.7l1.8 1.9 1.8-1.9c-.5-.4-1.1-.7-1.8-.7z"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.6" fill="none" stroke="#EEE7D8" stroke-opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2.2"/><path d="M25 4.5v4c.8-.3 1.5-1.1 1.5-2s-.7-1.7-1.5-2z" fill-opacity=".45"/></svg>
+      </span>
+    </div>
+    <div class="island" aria-hidden="true"></div>
+    <div class="homebar" aria-hidden="true"></div>
+    <div class="fallback" id="fallback">This draft needs WebGL to draw the sky.</div>
+  </div></div>
+
+  <aside class="notes">
+    <h2>What to judge</h2>
+    <p>Whether four permission questions in a row feel like a gate or like setting up. Each is one screen, then iOS’s own question.</p>
+    <p>There is no Skip on the permission screens: Apple’s review asks that a screen before a system question only say Continue. “Don’t Allow” in iOS’s question is the way to decline.</p>
+    <h2>Drawn as look-alikes</h2>
+    <p>The grey questions are drawings of iOS’s, with the app’s real lines from Info.plist. On iOS 26 the speech question may show Apple’s own wording instead (open question 32).</p>
+    <h2>Full notes</h2>
+    <p>notes.md beside this file: every word in English and Spanish, what changed from the first draft, and the questions.</p>
+  </aside>
+</div>
+<script>window.SKY_STARS="@@STARS@@";window.SKY_MW="data:image/jpeg;base64,@@MW@@";</script>
+<script>
+@@APP@@
+</script>
+</body>
+</html>

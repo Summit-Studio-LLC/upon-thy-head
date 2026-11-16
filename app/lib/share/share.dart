@@ -91,6 +91,14 @@ abstract class ShareApi {
   /// has closed and the file is gone.
   Future<void> pdf(Map<String, Object> pdf);
 
+  /// Write the `.blessing` file [bytes] as [fileName] in a temporary folder and open the share sheet
+  /// with it. Completes when the sheet has closed and the file is gone.
+  Future<void> file(String fileName, Uint8List bytes, String title);
+
+  /// Ready for blessing files that arrive: answers those that came before (the app was launched by
+  /// one) and calls [onIncoming] with each later one.
+  Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming);
+
   /// Close the share sheet now if it is up (the app locked), and remove what was made for it.
   Future<void> dismiss();
 
@@ -107,6 +115,20 @@ class NativeShareApi implements ShareApi {
 
   @override
   Future<void> pdf(Map<String, Object> pdf) => _channel.invokeMethod<void>('pdf', pdf);
+
+  @override
+  Future<void> file(String fileName, Uint8List bytes, String title) =>
+      _channel.invokeMethod<void>('file', {'fileName': fileName, 'bytes': bytes, 'title': title});
+
+  @override
+  Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming) async {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'incoming') onIncoming(IncomingFile.from(call.arguments));
+      return null;
+    });
+    final waiting = await _channel.invokeMethod<List<Object?>>('receiving') ?? const [];
+    return [for (final w in waiting) IncomingFile.from(w)];
+  }
 
   @override
   Future<void> dismiss() async {
@@ -129,6 +151,25 @@ class NativeShareApi implements ShareApi {
   /// Tests: whether the system share sheet is up, and the paper this phone's region uses.
   static Future<bool> debugShowing() async => await _channel.invokeMethod<bool>('debugShowing') ?? false;
   static Future<String> debugPaper() async => await _channel.invokeMethod<String>('debugPaper') ?? '';
+
+  /// Tests: what the last share sheet was handed (kind, name, type, …), and any `.blessing` file
+  /// left anywhere in the app's folders.
+  static Future<List<Map<String, Object?>>> debugItems() async =>
+      [for (final m in await _channel.invokeMethod<List<Object?>>('debugItems') ?? const []) (m as Map).cast<String, Object?>()];
+  static Future<List<String>> debugReceivedLeft() async => [...?await _channel.invokeListMethod<String>('debugReceivedLeft')];
+}
+
+/// A blessing file as iOS handed it over: its bytes, or why there are none.
+class IncomingFile {
+  const IncomingFile({this.bytes, this.tooLarge = false});
+  final Uint8List? bytes;
+  final bool tooLarge;
+
+  factory IncomingFile.from(Object? m) {
+    final map = m is Map ? m : const {};
+    final b = map['bytes'];
+    return IncomingFile(bytes: b is Uint8List ? b : null, tooLarge: map['tooLarge'] == true);
+  }
 }
 
 /// No share sheet (tests on the host).
@@ -138,6 +179,16 @@ class NoShareApi implements ShareApi {
   Future<void> text(String text, String subject) async => calls.add('text');
   @override
   Future<void> pdf(Map<String, Object> pdf) async => calls.add('pdf');
+  @override
+  Future<void> file(String fileName, Uint8List bytes, String title) async => calls.add('file');
+  @override
+  Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming) async {
+    deliver = onIncoming;
+    return const [];
+  }
+
+  /// Tests on the host: hand the app a file as iOS would.
+  void Function(IncomingFile)? deliver;
   @override
   Future<void> dismiss() async => calls.add('dismiss');
   @override

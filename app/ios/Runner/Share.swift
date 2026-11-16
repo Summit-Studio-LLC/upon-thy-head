@@ -2,6 +2,7 @@ import CoreText
 import Flutter
 import LinkPresentation
 import UIKit
+import UniformTypeIdentifiers
 
 /// Sharing a blessing, for lib/share/share.dart, on `upon_thy_head/share`.
 ///
@@ -9,9 +10,14 @@ import UIKit
 ///  - `text` {text, subject}: the system share sheet with the text; answers when it has closed
 ///  - `pdf` {fileName, title, date, from, recipient, paragraphs, pageOf}: the PDF is made in
 ///    tmp/share/, the share sheet opened with it; answers when the sheet has closed and the file is gone
+///  - `file` {fileName, bytes}: a `.blessing` file (lib/share/blessing_file.dart) written to
+///    tmp/share/ and shared as the app's own document type; answers as `pdf` does
 ///  - `dismiss`: close the sheet now (the app locked) and remove the file
 ///  - `clean`: remove tmp/share/ (at launch: a file left by an app killed while sharing)
-///  - `debugShowing` → whether the sheet is up; `debugPaper` → "letter" or "a4"
+///  - `debugShowing` → whether the sheet is up; `debugPaper` → "letter" or "a4"; `debugItems` → what
+///    the sheet was handed (for each item: its kind, file name, type and what the type conforms to)
+///  - `receiving`: Dart is ready for files that arrive (BlessingInbox, below); answers with any that
+///    came before it was, and sends later ones with `incoming`
 ///
 /// The app adds nothing of its own to what is shared: no message, no link, no app name.
 enum ShareChannel {
@@ -22,7 +28,9 @@ enum ShareChannel {
   /// Everything made for sharing lives here, and only while the sheet is up.
   static var folder: URL { FileManager.default.temporaryDirectory.appendingPathComponent("share", isDirectory: true) }
 
-  static func register(messenger: FlutterBinaryMessenger) {
+  static func register(messenger: FlutterBinaryMessenger, registrar: FlutterPluginRegistrar? = nil) {
+    // blessing files that arrive come through the scene (Flutter's scene delegate passes them on)
+    registrar?.addSceneDelegate(BlessingInbox.scenes)
     let c = FlutterMethodChannel(name: "upon_thy_head/share", binaryMessenger: messenger)
     c.setMethodCallHandler(handle)
     channel = c
@@ -48,6 +56,27 @@ enum ShareChannel {
         clean()
         result(FlutterError(code: "pdf", message: error.localizedDescription, details: nil))
       }
+    case "file":
+      close()
+      clean()
+      do {
+        let name = (args["fileName"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Blessing.blessing"
+        guard let bytes = args["bytes"] as? FlutterStandardTypedData else { throw NSError(domain: "share", code: 2) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent((name as NSString).lastPathComponent)
+        try bytes.data.write(to: url, options: [.atomic, .completeFileProtection])
+        present(ShareItem(item: url, subject: args["title"] as? String ?? ""), result)
+      } catch {
+        NSLog("share: %@", error.localizedDescription)
+        clean()
+        result(FlutterError(code: "file", message: error.localizedDescription, details: nil))
+      }
+    case "receiving":
+      BlessingInbox.ready(result)
+    case "debugItems":
+      result(lastItems)
+    case "debugReceivedLeft":
+      result(BlessingInbox.leftovers())
     case "dismiss":
       if let s = sheet, s.presentingViewController != nil {
         s.dismiss(animated: false) { finish() }
@@ -74,6 +103,7 @@ enum ShareChannel {
       clean()
       return result(FlutterError(code: "share", message: "no window", details: nil))
     }
+    lastItems = [describe(item.item)]
     let vc = UIActivityViewController(activityItems: [item], applicationActivities: nil)
     // nothing that would keep or file it on the app's behalf
     vc.excludedActivityTypes = [.addToReadingList, .assignToContact, .openInIBooks]
@@ -113,6 +143,24 @@ enum ShareChannel {
     let a = answer
     answer = nil
     a?(nil)
+  }
+
+  /// What the last sheet was handed, for the tests.
+  static var lastItems: [[String: Any]] = []
+
+  static func describe(_ item: Any) -> [String: Any] {
+    guard let url = item as? URL else { return ["kind": "text"] }
+    let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType ?? UTType(filenameExtension: url.pathExtension)
+    return [
+      "kind": "file",
+      "name": url.lastPathComponent.precomposedStringWithCanonicalMapping, // file URLs often come back decomposed
+      "type": type?.identifier ?? "",
+      "json": type?.conforms(to: .json) ?? false,
+      "text": type?.conforms(to: .text) ?? false,
+      "data": type?.conforms(to: .data) ?? false,
+      "bytes": (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? -1,
+      "path": url.path,
+    ]
   }
 
   static func clean() {
@@ -339,5 +387,111 @@ struct SharedPdf {
       ctx.endPDFPage()
     }
     ctx.closePDF()
+  }
+}
+
+/// Blessing files that arrive: tapped in Files, Mail or Messages, or received by AirDrop. iOS hands
+/// the app the file's URL (SceneDelegate); its bytes are read here, up to the limit, and the copy iOS
+/// made inside the app's folders (Documents/Inbox) is removed at once. A file opened in place from
+/// Files stays where it is, untouched. Dart reads the bytes strictly (lib/share/blessing_file.dart).
+///
+/// Before Dart is ready (the app was launched by the file) they wait here; Dart asks with
+/// `receiving` once the sky is up and is sent each later one with `incoming` {bytes} or {tooLarge}.
+enum BlessingInbox {
+  static let scenes = SceneListener()
+
+  final class SceneListener: NSObject, FlutterSceneLifeCycleDelegate {
+    /// Launched by a file (the app was closed).
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions?) -> Bool {
+      let urls = (connectionOptions?.urlContexts ?? []).map(\.url).filter(\.isFileURL)
+      NSLog("receive: launched with %d file(s)", urls.count)
+      urls.forEach(receive)
+      return !urls.isEmpty
+    }
+
+    /// While running or in the background.
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) -> Bool {
+      let urls = URLContexts.map(\.url).filter(\.isFileURL)
+      NSLog("receive: opened with %d file(s)", urls.count)
+      urls.forEach(receive)
+      return !urls.isEmpty
+    }
+  }
+
+  /// The same limit as lib/share/blessing_file.dart's blessingFileMaxBytes.
+  static let maxBytes = 512 * 1024
+  static var waiting: [[String: Any]] = []
+  static var listening = false
+
+  static func ready(_ result: FlutterResult) {
+    listening = true
+    let w = waiting
+    waiting = []
+    result(w)
+    cleanInbox()
+  }
+
+  /// A file from iOS (any thread-safe point on the main thread).
+  static func receive(_ url: URL) {
+    let item = read(url)
+    if listening, let c = ShareChannel.channel {
+      c.invokeMethod("incoming", arguments: item)
+    } else {
+      waiting.append(item)
+    }
+  }
+
+  static func read(_ url: URL) -> [String: Any] {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer {
+      if scoped { url.stopAccessingSecurityScopedResource() }
+      removeIfOurs(url)
+    }
+    var coordinated: [String: Any] = ["unreadable": true]
+    var err: NSError?
+    // Files may hold it in a provider; coordinate so it is all there before reading
+    NSFileCoordinator().coordinate(readingItemAt: url, options: [.withoutChanges], error: &err) { u in
+      guard let h = try? FileHandle(forReadingFrom: u) else { return }
+      defer { try? h.close() }
+      let data = (try? h.read(upToCount: maxBytes + 1)) ?? Data()
+      if data.count > maxBytes {
+        coordinated = ["tooLarge": true]
+      } else {
+        coordinated = ["bytes": FlutterStandardTypedData(bytes: data), "name": u.lastPathComponent]
+      }
+    }
+    if let err { NSLog("receive: %@", err.localizedDescription) }
+    return coordinated
+  }
+
+  /// The app's own folders, resolved (/private/var and /var are the same place).
+  static var home: String { URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath().path }
+
+  static func removeIfOurs(_ url: URL) {
+    let path = url.resolvingSymlinksInPath().path
+    guard path.hasPrefix(home + "/") else { return }
+    try? FileManager.default.removeItem(atPath: path)
+    cleanInbox()
+  }
+
+  /// Documents/Inbox, where iOS puts the copies it hands an app; nothing of ours lives there.
+  static var inbox: URL {
+    FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Inbox", isDirectory: true)
+  }
+
+  static func cleanInbox() {
+    try? FileManager.default.removeItem(at: inbox)
+  }
+
+  /// Tests: any `.blessing` file anywhere in the app's folders.
+  static func leftovers() -> [String] {
+    var out: [String] = []
+    let root = URL(fileURLWithPath: home)
+    if let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) {
+      for case let u as URL in e where u.pathExtension.lowercased() == "blessing" {
+        out.append(String(u.resolvingSymlinksInPath().path.dropFirst(home.count)))
+      }
+    }
+    return out
   }
 }

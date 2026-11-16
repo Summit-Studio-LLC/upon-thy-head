@@ -20,7 +20,7 @@ import UIKit
       Playback.register(messenger: registrar.messenger())
       LockChannel.register(messenger: registrar.messenger())
       LocationChannel.register(messenger: registrar.messenger())
-      ShareChannel.register(messenger: registrar.messenger())
+      ShareChannel.register(messenger: registrar.messenger(), registrar: registrar)
       // only in builds made with --dart-define=PHONE_CHECK=true (it needs the bundled recordings)
       PhoneCheck.register(messenger: registrar.messenger())
       registrar.register(LanguageMenuFactory(messenger: registrar.messenger()), withId: "upon_thy_head/language_menu")

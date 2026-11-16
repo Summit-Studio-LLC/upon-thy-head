@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 
 import '../data/blessing.dart';
+import '../share/blessing_file.dart';
 import '../share/share.dart';
 import '../widgets/icons.dart';
 import '../sky/placement.dart';
@@ -203,9 +204,12 @@ class _ReadLayerState extends State<ReadLayer> {
               Text(Strings.shareTitle, style: serif(22, 28, p.ink)),
               const SizedBox(height: 14),
               Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              _ShareRow(key: const Key('share-text'), label: Strings.asText, hint: Strings.asTextHint, palette: p, onTap: () => _share(b, pdf: false)),
+              // first: the one that keeps everything, for another iPhone with the app
+              _ShareRow(key: const Key('share-file'), label: Strings.asFile, hint: Strings.asFileHint, palette: p, onTap: () => _share(b, as: _As.file)),
               Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              _ShareRow(key: const Key('share-pdf'), label: Strings.asPdf, hint: Strings.asPdfHint, palette: p, onTap: () => _share(b, pdf: true)),
+              _ShareRow(key: const Key('share-text'), label: Strings.asText, hint: Strings.asTextHint, palette: p, onTap: () => _share(b, as: _As.text)),
+              Container(height: 1, color: p.ink.withValues(alpha: .10)),
+              _ShareRow(key: const Key('share-pdf'), label: Strings.asPdf, hint: Strings.asPdfHint, palette: p, onTap: () => _share(b, as: _As.pdf)),
               Container(height: 1, color: p.ink.withValues(alpha: .10)),
               const SizedBox(height: 16),
               Text(Strings.shareNote, key: const Key('share-note'), style: sans(13, 18, p.ink3)),
@@ -236,12 +240,15 @@ class _ReadLayerState extends State<ReadLayer> {
   }
 
   /// The app's sheet goes, and the system's share sheet opens with the one item.
-  Future<void> _share(Blessing? b, {required bool pdf}) async {
+  Future<void> _share(Blessing? b, {required _As as}) async {
     final api = widget.share;
     if (b == null || b.draft || api == null) return;
     setState(() => _sharing = false);
     try {
-      if (pdf) {
+      if (as == _As.file) {
+        final w = Strings.wordsFor(Strings.language);
+        await api.file(blessingFileName(shareFileName(b, w)), BlessingRecord.of(b).toFileBytes(), shareTitle(b, w));
+      } else if (as == _As.pdf) {
         await api.pdf(sharePdf(b));
       } else {
         await api.text(shareText(b), shareTitle(b, Strings.wordsFor(Strings.language)));
@@ -352,6 +359,8 @@ class _ReadLayerState extends State<ReadLayer> {
     ]);
   }
 }
+
+enum _As { file, text, pdf }
 
 /// A quiet word as a button, in [color].
 class _QuietBtn extends StatefulWidget {

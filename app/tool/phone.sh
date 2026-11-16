@@ -56,6 +56,10 @@ done
 # One plain line for each first-run failure we know, from whatever a tool printed.
 explain() {
   local text="$1" found=0
+  if grep -qiE "database is locked|concurrent builds" <<<"$text"; then
+    say "→ Another build of the app is running on this Mac. Wait a minute and run this again."
+    return 0
+  fi
   if grep -qiE "locked|kAMDMobileImageMounterDeviceLocked|passcode protected" <<<"$text"; then
     say "→ The iPhone is locked. Unlock it, keep it on the Home Screen, and run this again."; found=1
   fi
@@ -71,7 +75,8 @@ explain() {
   if grep -qiE "not paired|pairing|trust this computer|PairingDialogResponsePending|unpaired" <<<"$text"; then
     say "→ The iPhone has not trusted this Mac. Unlock it; when it asks \"Trust This Computer?\" tap Trust and enter the passcode. Then run this again."; found=1
   fi
-  if grep -qiE "disk image|DDI|not supported by this version of Xcode|newer than|unsupported os" <<<"$text"; then
+  # ("Enabling developer disk image services" is an ordinary progress line, not a failure.)
+  if grep -qiE "disk image.*(fail|could not|unavailable|not found)|(fail|could not|unable).*disk image|not supported by this version of Xcode|newer than|unsupported os" <<<"$text"; then
     say "→ This Mac's Xcode is too old for the iPhone's iOS. Update Xcode from the App Store, or use another iPhone."; found=1
   fi
   if grep -qiE "Unable to locate a device|unable to locate|not found|disconnected|lost connection" <<<"$text" && [[ $found -eq 0 ]]; then
@@ -203,6 +208,11 @@ if [[ $report -eq 1 ]]; then
       --source Documents/phone-check.txt --destination "$dest" >"$OUT/copy.log" 2>&1; then
     say "Report saved: $PWD/$dest"
     exit 0
+  fi
+  if grep -q "Failed to retrieve the file node" "$OUT/copy.log"; then
+    say "No report on the phone yet. The phone check saves it when every check has finished."
+    say "→ On the iPhone: open the app, go to Settings > Phone check (the last row), let every check finish, then run this again."
+    exit 1
   fi
   say "Could not fetch the report:"; tail -5 "$OUT/copy.log"
   explain "$(cat "$OUT/copy.log")" || say "→ Has the phone check page finished on the phone? It saves the report when every check is done."

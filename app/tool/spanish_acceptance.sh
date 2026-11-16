@@ -54,7 +54,12 @@ tapper() {
   for _ in $(seq 1 120); do [[ -f "$TAP_DIR/out" ]] && break; sleep 0.25; done
   cat "$TAP_DIR/out" 2>/dev/null || echo "no answer"
 }
-cleanup() { tapper quit >/dev/null; sleep 1; kill "$TAPPER_PID" 2>/dev/null; xcrun simctl ui "$UDID" content_size large || true; }
+cleanup() {
+  tapper quit >/dev/null; sleep 1; kill "$TAPPER_PID" 2>/dev/null; xcrun simctl ui "$UDID" content_size large || true
+  # leave the app in the phone's own language for whatever runs next
+  xcrun simctl spawn "$UDID" defaults delete "$BUNDLE" AppleLanguages 2>/dev/null || true
+  xcrun simctl spawn "$UDID" defaults delete "$BUNDLE" AppleLocale 2>/dev/null || true
+}
 trap cleanup EXIT
 # a question left on screen by an earlier run that stopped part-way: answer it (the permissions are
 # reset below anyway)

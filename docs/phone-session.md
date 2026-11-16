@@ -4,8 +4,9 @@ Steps with the iPhone in hand. Each one says what you should see. Note anything 
 
 ## Before you plug in
 
-1. On the Mac, open Xcode > Settings > Accounts and sign in to your Apple ID again. Its saved sign-in is broken ("missing Xcode-Token"). Until you fix it, Xcode cannot add a new phone to the signing profile.
-   You should see: the team "7R77MUH4FF" listed under the account.
+1. On the Mac, open Xcode > Settings > Apple Accounts and check that your account is there with the Summit Studio LLC team under it (it was on 2026-11-16). The "missing Xcode-Token" message in build logs is about an older Apple ID still saved in the Mac's keychain, not this one. Whether this account can add a new phone to the signing profile is proven only by the first run on that phone.
+   You should see: "Summit Studio LLC" listed under the account.
+   On the iPhone, turn on Developer Mode before the first run: Settings > Privacy & Security > Developer Mode > On. The phone restarts; unlock it and tap Turn On. (It was off on the iPhone Air on 2026-11-16.)
 2. Only the iPhone 12 is in the signing profile today. Any other phone is added on its first run, which needs step 1. The phone on iOS 27.3 is newer than this Xcode (26.2), so it may need an Xcode update first. `phone.sh` says so if it does.
 
 ## Install

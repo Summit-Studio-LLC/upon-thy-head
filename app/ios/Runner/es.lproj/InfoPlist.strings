@@ -3,3 +3,4 @@
 "NSFaceIDUsageDescription" = "Desbloquea tus bendiciones.";
 "NSLocationWhenInUseUsageDescription" = "Se usa una vez para poner la luz de tu primera bendición en el cielo donde se dio. Con «Permitir una vez» basta.";
 "NSSpeechRecognitionUsageDescription" = "La voz se convierte en texto en este teléfono. No se envía nada a ningún lado.";
+"Blessing" = "Bendición";

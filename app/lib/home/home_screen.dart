@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as path;
@@ -25,6 +26,7 @@ import '../record/transcriber.dart';
 import '../review/player.dart';
 import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
+import '../share/receive.dart';
 import '../share/share.dart';
 import '../check/check_page.dart';
 import '../check/checks.dart';
@@ -158,6 +160,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Blessing> _recovered = const [];
   bool _recoveredSheet = false;
 
+  /// Blessing files that arrived and wait to be shown (one at a time, only when unlocked and never
+  /// during a recording), the one shown now, and whether its sheet is up.
+  final List<IncomingFile> _inbox = [];
+  IncomingFile? _arrivalFile;
+  Arrival? _arrival;
+  bool _receiving = false, _arrivalsOpen = false, _arrivalBusy = false, _arrivalScheduled = false;
+
+  /// "You already have this blessing.", for a few seconds.
+  bool _noticeOn = false;
+  Timer? _noticeTimer;
+
   /// Words being written at this launch for blessings saved before their words were.
   final Map<String, WordsState> _writing = {};
 
@@ -216,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
       unawaited(_writeMissingWords());
+      unawaited(_startReceiving());
       // locked at launch: the phone asks once, as the locked sky appears
       if (_locked) WidgetsBinding.instance.addPostFrameCallback((_) => _askToUnlock());
       return a;
@@ -253,6 +267,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _hideBlessings() {
     // the system share sheet goes too, with anything made for it
     unawaited(_share.dismiss());
+    // a blessing file being asked about waits, unseen, until the next unlock
+    if (_arrivalFile != null) {
+      _inbox.insert(0, _arrivalFile!);
+      _arrivalFile = null;
+    }
+    _receiving = false;
+    _arrival = null;
+    _noticeOn = false;
     _lockedFocus = _blessings.isEmpty ? 0 : _engine.focus.clamp(0, _blessings.length - 1);
     _swapTimer?.cancel();
     _swapping = false;
@@ -506,6 +528,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lock.api.onActive = null;
     _swapTimer?.cancel();
     _demoTimer?.cancel();
+    _noticeTimer?.cancel();
     _session.dispose();
     if (widget.player == null) _player.dispose();
     _engine
@@ -848,6 +871,134 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  // ---- blessing files that arrive (share/receive.dart) ----
+
+  Future<void> _startReceiving() async {
+    try {
+      final waiting = await _share.receiving((f) {
+        _inbox.add(f);
+        if (mounted) setState(() {});
+      });
+      _inbox.addAll(waiting);
+    } catch (e) {
+      debugPrint('receive: $e');
+    }
+    _arrivalsOpen = true;
+    if (mounted) setState(() {});
+  }
+
+  /// A file may be shown now: unlocked, nothing else asking, not recording or just past Amen, and on
+  /// the sky, a reading page or Settings (never over a page being edited).
+  bool get _arrivalMayShow =>
+      _arrivalsOpen &&
+      _lock.ready &&
+      !_locked &&
+      !_lock.asking &&
+      !_receiving &&
+      !_arrivalBusy &&
+      !_recoveredSheet &&
+      !_session.live &&
+      (_stage == Stage.home || _stage == Stage.read || _stage == Stage.settings);
+
+  /// Called after each frame while files wait: the next one, when it may be shown.
+  void _scheduleArrival() {
+    if (_arrivalScheduled || _inbox.isEmpty || !_arrivalMayShow) return;
+    _arrivalScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _arrivalScheduled = false;
+      unawaited(_nextArrival());
+    });
+  }
+
+  Future<void> _nextArrival() async {
+    if (!mounted || _inbox.isEmpty || !_arrivalMayShow) return;
+    _arrivalBusy = true;
+    final f = _inbox.removeAt(0);
+    Arrival a;
+    try {
+      a = await arrivalOf(f, _store.get);
+    } catch (e) {
+      a = ArrivalUnreadable('$e');
+    }
+    _arrivalBusy = false;
+    if (!mounted) return;
+    if (a is ArrivalUnreadable) debugPrint('receive: ${a.why}');
+    // locked meanwhile: it waits for the next unlock
+    if (_locked) {
+      _inbox.insert(0, f);
+      return setState(() {});
+    }
+    if (a is ArrivalSame) {
+      // no question: it opens, saying so
+      await _openReceived(a.mine.id);
+      _notice();
+      return setState(() {});
+    }
+    setState(() {
+      _arrivalFile = f;
+      _arrival = a;
+      _receiving = true;
+    });
+  }
+
+  /// Keep, or Replace mine: saved as a finished blessing of the person's own, and its reading page.
+  Future<void> _keepArrival() async {
+    final a = _arrival;
+    setState(() {
+      _receiving = false;
+      _arrivalFile = null;
+    });
+    String? id;
+    try {
+      if (a is ArrivalNew) {
+        final b = a.record.toBlessing(place: _where?.place ?? saltLakeTemple);
+        await _store.create(b);
+        id = b.id;
+      } else if (a is ArrivalDifferent) {
+        final mine = a.mine;
+        a.record.writeOver(mine);
+        await _store.update(mine);
+        // it is finished now; a recording kept for its review is no longer needed
+        if (mine.audio.isNotEmpty) await _store.eraseAudio(mine);
+        id = mine.id;
+      }
+    } catch (e) {
+      debugPrint('receive: $e');
+    }
+    if (id != null && mounted) await _openReceived(id);
+  }
+
+  /// Not now, Keep mine, or OK: nothing is saved.
+  void _dismissArrival() => setState(() {
+        _receiving = false;
+        _arrivalFile = null;
+      });
+
+  /// The sky turns to blessing [id], with its reading page.
+  Future<void> _openReceived(String id) async {
+    final list = await _store.list(ownership: Ownership.forMe);
+    if (!mounted || _locked) return;
+    final i = list.indexWhere((b) => b.id == id);
+    if (i < 0) return;
+    _setBlessings(list, focus: i);
+    _engine.setView(SkyView.read);
+    _engine.lookAt(i);
+    setState(() {
+      _showNow();
+      _stage = Stage.read;
+      _list = false;
+    });
+  }
+
+  void _notice() {
+    _noticeTimer?.cancel();
+    _noticeOn = true;
+    SemanticsService.sendAnnouncement(View.of(context), Strings.alreadyHave, TextDirection.ltr);
+    _noticeTimer = Timer(const Duration(milliseconds: 3500), () {
+      if (mounted) setState(() => _noticeOn = false);
+    });
+  }
+
   // ---- reading ----
 
   /// Read the blessing in focus: the page rises and the sky frames its light alone.
@@ -916,6 +1067,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     const listTime = Duration(milliseconds: 350);
     // locked: no blessing is handed to any page, even one faded out
     final reading = _blessings.isEmpty || _locked ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)];
+    if (_inbox.isNotEmpty) _scheduleArrival();
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: ColoredBox(
@@ -1139,6 +1291,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onReview: _reviewRecovered,
                 onLater: _laterRecovered,
               ),
+            ),
+            // a blessing file that arrived: built only once unlocked
+            Positioned.fill(
+              child: ReceiveSheet(
+                palette: p,
+                on: _receiving && !_locked && _lock.ready,
+                arrival: _locked ? null : _arrival,
+                onKeep: _keepArrival,
+                onNotNow: _dismissArrival,
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 120,
+              child: ReceiveNotice(palette: p, on: _noticeOn && !_locked, text: Strings.alreadyHave),
             ),
             if (widget.showStats)
               Positioned(

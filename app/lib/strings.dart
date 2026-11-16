@@ -203,6 +203,19 @@ class Strings {
   static String get asPdfHint => _w.asPdfHint;
   static String get shareNote => _w.shareNote;
   static String pageOf(int n, int total) => _w.pageOf(n, total);
+  static String get asFile => _w.asFile;
+  static String get asFileHint => _w.asFileHint;
+  static String get aBlessing => _w.aBlessing;
+  static String get receiveAsk => _w.receiveAsk;
+  static String get receiveKeep => _w.receiveKeep;
+  static String get notNow => _w.notNow;
+  static String get alreadyHave => _w.alreadyHave;
+  static String get alreadyDifferent => _w.alreadyDifferent;
+  static String get replaceMine => _w.replaceMine;
+  static String get keepMine => _w.keepMine;
+  static String get fileNewer => _w.fileNewer;
+  static String get fileUnreadable => _w.fileUnreadable;
+  static String get ok => _w.ok;
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -336,6 +349,18 @@ extension WordsCatalogue on Words {
         'asPdf': asPdf,
         'asPdfHint': asPdfHint,
         'shareNote': shareNote,
+        'asFile': asFile,
+        'asFileHint': asFileHint,
+        'aBlessing': aBlessing,
+        'receiveAsk': receiveAsk,
+        'receiveKeep': receiveKeep,
+        'notNow': notNow,
+        'alreadyHave': alreadyHave,
+        'alreadyDifferent': alreadyDifferent,
+        'replaceMine': replaceMine,
+        'keepMine': keepMine,
+        'fileNewer': fileNewer,
+        'fileUnreadable': fileUnreadable,
       };
 }
 
@@ -615,6 +640,21 @@ class Words {
 
   /// The PDF's footer from its second page: "2 of 3".
   String pageOf(int n, int total) => '$n of $total';
+
+  // ---- the blessing file (share/blessing_file.dart, share/receive.dart) ----
+  String get asFile => 'As a blessing file';
+  String get asFileHint => 'Opens in Upon Thy Head on another iPhone.';
+  String get aBlessing => 'A blessing';
+  String get receiveAsk => 'Keep it with your blessings?';
+  String get receiveKeep => 'Keep';
+  String get notNow => 'Not now';
+  String get alreadyHave => 'You already have this blessing.';
+  String get alreadyDifferent => 'You already have this blessing, and this copy is different.';
+  String get replaceMine => 'Replace mine';
+  String get keepMine => 'Keep mine';
+  String get fileNewer => 'This blessing was made with a newer version of Upon Thy Head. Update the app to open it.';
+  String get fileUnreadable => 'This file could not be read.';
+  String get ok => 'OK';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -1052,4 +1092,32 @@ class _Spanish implements Words {
   String get shareNote => 'Una vez que sale de este teléfono, ya no es privada.';
   @override
   String pageOf(int n, int total) => '$n de $total';
+
+  // ---- el archivo de bendición ----
+  @override
+  String get asFile => 'Como archivo de bendición';
+  @override
+  String get asFileHint => 'Se abre en Upon Thy Head en otro iPhone.';
+  @override
+  String get aBlessing => 'Una bendición';
+  @override
+  String get receiveAsk => '¿Guardarla con tus bendiciones?';
+  @override
+  String get receiveKeep => 'Guardar';
+  @override
+  String get notNow => 'Ahora no';
+  @override
+  String get alreadyHave => 'Ya tienes esta bendición.';
+  @override
+  String get alreadyDifferent => 'Ya tienes esta bendición, y esta copia es diferente.';
+  @override
+  String get replaceMine => 'Reemplazar la mía';
+  @override
+  String get keepMine => 'Conservar la mía';
+  @override
+  String get fileNewer => 'Esta bendición se hizo con una versión más reciente de Upon Thy Head. Actualiza la app para abrirla.';
+  @override
+  String get fileUnreadable => 'No se pudo leer este archivo.';
+  @override
+  String get ok => 'OK';
 }
