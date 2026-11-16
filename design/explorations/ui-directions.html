@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blessing app UI directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500&family=Alegreya:ital,wght@0,400;0,500;1,400&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=Spectral:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+.wrap{font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#1c1c1c);line-height:1.5}
+.lead{font-size:15px;max-width:64ch;margin:0 0 8px}
+.dir{margin-top:44px}
+.dir h2{font-size:30px;font-weight:400;line-height:1.1;margin:0 0 8px}
+.dir .idea{font-size:14.5px;max-width:66ch;margin:0 0 4px}
+.dir .risk{font-size:13px;max-width:66ch;margin:0 0 16px;opacity:.68}
+.row{display:flex;gap:8px;align-items:flex-start;overflow-x:auto;padding:4px 0 14px}
+.pair{flex:0 0 155px;display:flex;flex-direction:column;gap:14px}
+.phone.sm{flex:none;width:155px}
+.sm .scr{zoom:.578}
+.phone{flex:0 0 268px;margin:0}
+.phone figcaption{font-size:13px;margin-top:10px;opacity:.75}
+.scr{position:relative;width:268px;height:580px;border-radius:36px;overflow:hidden;box-sizing:border-box;border:1px solid var(--border,rgba(0,0,0,.14));font-size:12px;line-height:1.45}
+.scr *{box-sizing:border-box}
+.scr h3,.scr h4,.scr p{margin:0;font-weight:400}
+.scr::after{content:"";position:absolute;left:50%;bottom:7px;width:92px;height:4px;margin-left:-46px;border-radius:2px;background:currentColor;opacity:.3}
+@keyframes breathe{from{opacity:.6;transform:scale(.9)}to{opacity:1;transform:scale(1.1)}}
+@keyframes settle{from{opacity:.55;transform:translateY(-10%)}to{opacity:1;transform:translateY(4%)}}
+@keyframes page{from{opacity:.55}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scr *{animation:none!important}}
+
+/* shared pieces */
+.amen{position:absolute;left:50%;bottom:46px;width:66px;height:66px;margin-left:-33px;border-radius:50%;border:1px solid;display:grid;place-items:center;font-size:13px}
+.done{position:absolute;left:26px;right:26px;bottom:44px}
+.done h3{font-size:25px;line-height:1.15;margin-bottom:8px}
+.done p{font-size:12.5px;opacity:.78;margin-bottom:22px}
+.btn{display:block;text-align:center;padding:12px 10px;border-radius:999px;font-size:13px;border:1px solid transparent;margin-top:9px}
+.tl-head{padding:52px 24px 0}
+.tl-head h3{font-size:30px;line-height:1.1}
+.tl-head p{font-size:12px;margin-top:3px}
+.it h4{font-size:15px;line-height:1.22}
+.it p,.it time{font-size:11.5px;display:block}
+.nav{position:absolute;left:0;right:0;bottom:0;height:84px;padding:0 34px 18px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.nav span{opacity:.6}.nav .on{opacity:1}
+.nav .rec{width:52px;height:52px;border-radius:50%;opacity:1}
+.top{position:absolute;left:0;right:0;top:0;height:50px;padding:16px 18px 0;display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.seg{display:flex;border:1px solid;border-radius:999px;overflow:hidden;font-size:11px}
+.seg span{padding:4px 11px}
+.read{position:absolute;left:0;right:0;top:54px;padding:0 20px}
+.read h3{font-size:21px;line-height:1.15}
+.read .meta{font-size:11.5px;margin:5px 0 12px;opacity:.75}
+.read .body p{font-size:12.6px;line-height:1.56;margin-bottom:9px}
+.e{text-decoration-line:underline;text-underline-offset:3px;text-decoration-thickness:1.5px}
+.e.l{text-decoration-style:dotted;text-decoration-color:var(--l)}
+.e.m{text-decoration-style:dashed;text-decoration-color:var(--m)}
+.e.h{text-decoration-style:wavy;text-decoration-color:var(--h);background:color-mix(in srgb,var(--h) 16%,transparent);border-radius:2px}
+.x{display:inline-block;position:relative;width:0;height:.95em;margin:0 3px;border-left:1.5px dotted var(--l);vertical-align:-2px}
+.x::before{content:"";position:absolute;left:-3.5px;top:-4px;width:5.5px;height:5.5px;border-radius:50%;background:var(--l)}
+.pop{margin-top:2px;padding:10px 12px 11px;border-radius:12px;font-size:11px;line-height:1.4;border:1px solid}
+.pop b{font-weight:500;display:block;margin-bottom:2px}
+.pop q{display:block;font-size:12px;margin-bottom:5px}
+.pop .acts{display:flex;gap:14px;align-items:center;margin-top:8px}
+.pop .acts span:first-child{padding:5px 11px;border-radius:999px;border:1px solid}
+.sum{position:absolute;left:20px;right:20px;bottom:26px;display:flex;justify-content:space-between;font-size:11.5px}
+
+/* A: Dew */
+.dir-a h2,.a{font-family:Newsreader,Georgia,serif}
+.a{background:#F6F8F7;color:#222B33;--l:#4E8C6A;--m:#B98A2B;--h:#C2543F}
+.a.dark{background:#0F161D;color:#DCE4E8}
+.a .glow{position:absolute;left:-35%;right:-35%;top:-36%;height:80%;border-radius:50%;background:radial-gradient(closest-side,rgba(242,219,164,.8),rgba(150,186,210,.3) 55%,transparent);animation:settle 6s ease-in-out infinite alternate}
+.a .glow.still{animation:none;opacity:.85;transform:translateY(8%)}
+.a .amen{border-color:rgba(220,228,232,.45)}
+.a .done h3{font-weight:300}
+.a .btn{border-color:rgba(220,228,232,.5)}
+.a .tl-head h3{font-weight:300}
+.a .tl-head p{font-style:italic;color:#6F8798}
+.a .list{position:relative;margin-top:22px;padding-bottom:90px}
+.a .list::before{content:"";position:absolute;left:70px;top:4px;bottom:0;width:1px;background:linear-gradient(#E0C078,#C9D4DA 30%,#DCE4E8)}
+.a .yr{margin:0 0 9px 24px;width:36px;text-align:right;font-size:11px;font-weight:500}
+.a .it{position:relative;padding:0 22px 17px 90px}
+.a .it time{position:absolute;left:14px;top:3px;width:46px;text-align:right;color:#6F8798;font-size:11px}
+.a .it::before{content:"";position:absolute;left:66px;top:5px;width:9px;height:9px;border-radius:0 50% 50% 50%;transform:rotate(45deg);background:#F6F8F7;border:1px solid #6F8798}
+.a .it.new::before{background:#E6CD92;border-color:#CDAE62}
+.a .it p{color:#6F8798}
+.a .nav{background:linear-gradient(rgba(246,248,247,0),#F6F8F7 36%)}
+.a .nav .rec{background:radial-gradient(circle at 50% 30%,#FFF6DC,#E6CD92);border:1px solid #D2B777}
+.a .seg{border-color:#C9D4DA}.a .seg .on{background:#222B33;color:#F6F8F7}
+.a .pop{background:#fff;border-color:#DCE4E8;box-shadow:0 8px 22px -10px rgba(34,43,51,.35)}
+.a .pop .acts span:first-child{border-color:#222B33}
+.a .sum{color:#6F8798}
+
+/* B: Firmament */
+.dir-b h2,.b{font-family:Spectral,Georgia,serif}
+.b{background:radial-gradient(120% 80% at 50% 38%,#171D4C,#080B21);color:#F2EAD6;--l:#8FCDA4;--m:#E5C16A;--h:#F08C7A}
+.b .halo{position:absolute;left:50%;top:43%;width:210px;height:210px;margin:-105px;border-radius:50%;background:radial-gradient(closest-side,rgba(215,182,112,.42),rgba(108,123,192,.18) 55%,transparent);animation:breathe 6s ease-in-out infinite alternate}
+.b .star{position:absolute;left:50%;top:43%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#FFF8E6;box-shadow:0 0 14px 4px rgba(255,244,214,.85)}
+.b .star::before,.b .star::after{content:"";position:absolute;left:50%;top:50%;width:1px;height:78px;margin:-39px 0 0 -.5px;background:linear-gradient(transparent,rgba(255,244,214,.6),transparent)}
+.b .star::after{transform:rotate(90deg)}
+.b .amen{border-color:rgba(205,170,99,.6);color:#E8D5A6}
+.b .set{top:25%}.b .set.halo{animation:none;opacity:.7;width:150px;height:150px;margin:-75px}
+.b .placed{position:absolute;left:0;right:0;top:31%;text-align:center;font-style:italic;font-size:11.5px;color:#8A93C4}
+.b .done h3{font-weight:300}
+.b .btn{border-color:rgba(242,234,214,.35)}
+.b .btn.pri{border-color:#CDAA63;color:#F0DDAE}
+.b .tl-head p{font-style:italic;color:#8A93C4}
+.b .chart{position:absolute;left:0;top:118px;width:268px;height:400px}
+.b .it{position:absolute;left:124px;right:16px}
+.b .it time{font-style:italic;color:#8A93C4;font-size:11px}
+.b .it p{color:#8A93C4}
+.b .nav{background:linear-gradient(rgba(8,11,33,0),#080B21 38%)}
+.b .nav .rec{border:1px solid #CDAA63;display:grid;place-items:center}
+.b .nav .rec i{width:5px;height:5px;border-radius:50%;background:#FFF8E6;box-shadow:0 0 9px 3px rgba(255,244,214,.75)}
+.b .seg{border-color:rgba(242,234,214,.3)}.b .seg .on{background:#F2EAD6;color:#0B0F2A}
+.b .pop{background:#1B2258;border-color:rgba(205,170,99,.5)}
+.b .pop .acts span:first-child{border-color:#CDAA63;color:#F0DDAE}
+.b .sum{color:#8A93C4}
+
+/* C: Olive branch */
+.dir-c h2{font-family:Alegreya,Georgia,serif}
+.c{font-family:"Alegreya Sans",system-ui,sans-serif;background:#F1F3EC;color:#20261A;--l:#56663A;--m:#B98312;--h:#B5482F}
+.c.dark{background:#0D100A;color:#E4E8D8}
+.c h3,.c h4,.c .body,.c q{font-family:Alegreya,Georgia,serif}
+.c .pool{position:absolute;left:50%;top:41%;width:236px;height:236px;margin:-118px;border-radius:50%;background:radial-gradient(closest-side at 50% 58%,rgba(246,200,90,.9),rgba(216,166,58,.36) 46%,rgba(86,102,58,.16) 72%,transparent);filter:blur(5px);animation:breathe 6s ease-in-out infinite alternate}
+.c .amen{border-color:rgba(216,166,58,.55);color:#E9CF8C}
+.c .sprig{position:absolute;left:26px;top:150px}
+.c .btn.pri{background:#D8A63A;color:#20261A}
+.c .btn{border-color:rgba(183,192,163,.5)}
+.c .tl-head p{color:#56663A}
+.c .branch{position:absolute;left:0;top:112px;width:268px;height:420px}
+.c .it{position:absolute;left:88px;right:18px}
+.c .it time{color:#56663A;font-size:11px}
+.c .it p{color:#6C745C}
+.c .nav{background:linear-gradient(rgba(241,243,236,0),#F1F3EC 36%)}
+.c .nav .rec{background:#D8A63A;box-shadow:inset 0 -6px 10px rgba(120,80,0,.25),inset 0 5px 8px rgba(255,240,190,.6)}
+.c .seg{border-color:#B7C0A3}.c .seg .on{background:#56663A;color:#F1F3EC}
+.c .body p{font-size:13.2px!important}
+.c .pop{background:#fff;border-color:#B7C0A3}
+.c .pop .acts span:first-child{background:#56663A;border-color:#56663A;color:#F1F3EC}
+.c .sum{color:#56663A}
+
+/* D: The typed page */
+.dir-d h2,.d{font-family:"Courier Prime","Courier New",monospace}
+.d{background:#101113;color:#ECE9DF;--l:#3F7A4A;--m:#A8741A;--h:#B4452F}
+.d .sheet0{position:absolute;left:50%;top:40%;width:150px;height:200px;margin:-100px 0 0 -75px;border-radius:3px;background:rgba(252,251,247,.17);box-shadow:0 0 70px 8px rgba(252,251,247,.3);animation:page 6s ease-in-out infinite alternate}
+.d .amen{border-radius:4px;width:86px;margin-left:-43px;height:44px;border-color:rgba(236,233,223,.45)}
+.d .written{position:absolute;left:50%;top:58px;width:150px;height:200px;margin-left:-75px;border-radius:3px;background:#FCFBF7;padding:18px 16px;box-shadow:0 0 60px rgba(252,251,247,.16)}
+.d .written i{display:block;height:3px;border-radius:2px;background:#26241F;opacity:.22;margin-bottom:9px}
+.d .done h3{font-size:22px;font-weight:700}
+.d .btn{border-radius:4px;border-color:rgba(236,233,223,.45)}
+.d .btn.pri{background:#FCFBF7;color:#26241F}
+.d.folder{background:#D8BC86;color:#26241F}
+.d .tab{position:absolute;left:14px;top:46px;padding:7px 16px 8px;background:#C9AB72;border-radius:7px 7px 0 0;font-weight:700;font-size:14px}
+.d .tabnote{position:absolute;right:16px;top:55px;font-size:11px;opacity:.7}
+.d .drawer{position:absolute;left:0;right:0;top:80px;bottom:0;background:#C9AB72;padding:26px 0 0}
+.d .sheet{position:relative;margin:-13px 12px 0;padding:10px 13px 20px;background:#FCFBF7;border-radius:2px 2px 0 0;box-shadow:0 -7px 12px -8px rgba(70,45,0,.45)}
+.d .sheet h4{font-size:13.5px;font-weight:700}
+.d .sheet time{display:block;font-size:10.5px;opacity:.75;margin-bottom:2px}
+.d .sheet p{font-size:11px;opacity:.7}
+.d .divider{position:relative;height:30px;margin:-13px 5px 0;background:#B4955C;border-radius:3px 3px 0 0;box-shadow:0 -6px 10px -8px rgba(70,45,0,.5);font-size:11px;font-weight:700;padding:5px 12px;text-align:right}
+.d .nav{background:#101113;color:#ECE9DF;height:74px;padding-bottom:12px}
+.d .nav .rec{width:46px;height:46px;border:1px solid #ECE9DF;display:grid;place-items:center}
+.d .nav .rec i{width:14px;height:18px;border-radius:1.5px;background:#FCFBF7}
+.d .seg{border-radius:4px;border-color:rgba(236,233,223,.4)}.d .seg .on{background:#ECE9DF;color:#101113}
+.d .paper{position:absolute;left:10px;right:10px;top:52px;bottom:56px;background:#FCFBF7;color:#26241F;border-radius:2px;padding:20px 16px}
+.d .paper h3{font-size:14.5px;font-weight:700;line-height:1.3}
+.d .paper .meta{font-size:10.5px;margin:6px 0 12px;opacity:.8;padding-bottom:10px;border-bottom:1px solid #26241F}
+.d .paper .body p{font-size:11.2px;line-height:1.6;margin-bottom:9px}
+.d .pop{background:#F3E7B8;border-color:#D8C27A;border-radius:2px;color:#26241F;transform:rotate(-.6deg);box-shadow:0 5px 10px -6px rgba(0,0,0,.5)}
+.d .pop .acts span:first-child{border-radius:3px;border-color:#26241F}
+.d .sum{opacity:.75}
+</style>
+</head>
+<body>
+<main class="wrap">
+<p class="lead">Four directions, each shown at the same four moments: recording, just after amen, the timeline, and reading a blessing with polish edits visible. The sample blessing and names are placeholders.</p>
+
+<section class="dir dir-a">
+<h2>Dew</h2>
+<p class="idea">Light comes from above and rests on the person receiving it, after the promise that truth will distil “as the dews from heaven.” Pale morning colors, one typeface, almost nothing on screen.</p>
+<p class="risk">Risk: it is so quiet that the timeline could pass for a well-made notes app.</p>
+<div class="row">
+<div class="pair"><figure class="phone sm"><div class="scr a dark" role="img" aria-label="Recording screen with light resting at the top"><div class="glow"></div><span class="amen">Amen</span></div><figcaption>Recording. The light lowers and lifts with a slow breath.</figcaption></figure>
+<figure class="phone sm"><div class="scr a dark"><div class="glow still"></div><div class="done"><h3>Recorded</h3><p>The words are saved on this phone. No audio was kept.</p><span class="btn">Save for later</span><span class="btn">Review now</span></div></div><figcaption>After amen. Both choices carry equal weight.</figcaption></figure></div>
+<figure class="phone"><div class="scr a"><div class="tl-head"><h3>For me</h3><p>14 blessings since 2019</p></div><div class="list"><div class="yr">2026</div><div class="it new"><time>Nov 9</time><h4>Before the new job</h4><p>From Dad</p></div><div class="it"><time>Mar 3</time><h4>Comfort before surgery</h4><p>From Dad</p></div><div class="yr">2025</div><div class="it"><time>Aug 24</time><h4>Set apart to teach Primary</h4><p>From Bishop Alvarez</p></div><div class="it"><time>Jan 12</time><h4>When the baby came early</h4><p>From Mateo</p></div><div class="yr">2024</div><div class="it"><time>Jun 2</time><h4>Healing, the night of the fever</h4><p>From Grandpa Ruiz</p></div></div><div class="nav"><span class="on">For me</span><span class="rec"></span><span>History</span></div></div><figcaption>Timeline. Each blessing is a drop on one thread.</figcaption></figure>
+<figure class="phone"><div class="scr a"><div class="top"><span>Back</span><div class="seg"><span class="on">Polished</span><span>Original</span></div></div><div class="read"><h3>Comfort before surgery</h3><p class="meta">March 3, 2026<br>From Dad, for me</p><div class="body"><p>Emma, I lay my hands upon your head<i class="x"></i>to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He <span class="e m">knows</span> the worry you have carried these weeks.</p><p>I bless you <span class="e l">with peace</span> as you go into this surgery. Be patient with your body as it heals. <span class="e h">Strength will return to you</span> in its time.</p></div><div class="pop"><b>Original words</b><q>your strength, it’s going to come back to you</q>This changed more than a grammar fix should.<div class="acts"><span>Restore original</span><span>Keep</span></div></div></div><div class="sum"><span>7 edits, 1 heavy</span><span>Undo all</span></div></div><figcaption>Reading with edits shown. Dotted is light, dashed is moderate, wavy is heavy.</figcaption></figure>
+</div>
+</section>
+
+<section class="dir dir-b">
+<h2>Firmament</h2>
+<p class="idea">Each blessing becomes a light in a sky that belongs to one person. The timeline is a star chart drawn to scale, with a month ruler down the edge, so the long gaps and the close clusters of a life are visible.</p>
+<p class="risk">Risk: night skies drift toward horoscope apps. The engraved-atlas restraint is what holds it back, and it has to stay restrained.</p>
+<div class="row">
+<div class="pair"><figure class="phone sm"><div class="scr b"><div class="halo"></div><div class="star"></div><span class="amen">Amen</span></div><figcaption>Recording. One point of light, breathing.</figcaption></figure>
+<figure class="phone sm"><div class="scr b"><div class="halo set"></div><div class="star set"></div><p class="placed">November 14, 2026</p><div class="done"><h3>It is kept</h3><p>Recorded on this phone only. No audio was saved.</p><span class="btn pri">Save for later</span><span class="btn">Review now</span></div></div><figcaption>After amen. The light rises and takes its place.</figcaption></figure></div>
+<figure class="phone"><div class="scr b"><div class="tl-head"><h3>For me</h3><p>14 blessings since 2019</p></div>
+<svg class="chart" viewBox="0 0 268 400" fill="none" aria-hidden="true"><g stroke="#8A93C4" stroke-width="1" opacity=".55"><path d="M22 0V400"/><path d="M22 8h5M22 20h5M22 32h5M22 44h5M22 56h5M22 68h5M22 80h5M22 92h5M22 104h5M22 116h5M22 128h5M22 140h5M22 152h10M22 164h5M22 176h5M22 188h5M22 200h5M22 212h5M22 224h5M22 236h5M22 248h5M22 260h5M22 272h5M22 284h5M22 296h10M22 308h5M22 320h5M22 332h5M22 344h5M22 356h5M22 368h5M22 380h5M22 392h5"/></g><g fill="#8A93C4" font-family="Spectral,serif" font-size="10" font-style="italic"><text x="36" y="14">2026</text><text x="36" y="166">2025</text><text x="36" y="310">2024</text></g><path d="M92 0C92 12 96 20 92 28C82 62 66 96 70 127C76 156 104 176 100 202C96 232 72 262 76 291C80 322 100 350 96 379C94 390 96 396 96 400" stroke="#CDAA63" stroke-width="1" opacity=".7"/><g fill="#F2EAD6" opacity=".35"><circle cx="210" cy="60" r=".8"/><circle cx="178" cy="150" r=".7"/><circle cx="240" cy="236" r=".8"/><circle cx="60" cy="250" r=".7"/><circle cx="200" cy="344" r=".8"/><circle cx="54" cy="70" r=".6"/></g><g fill="#FFF8E6"><circle cx="92" cy="28" r="3.2"/><circle cx="70" cy="127" r="2.4"/><circle cx="100" cy="202" r="2.4"/><circle cx="76" cy="291" r="2.4"/><circle cx="96" cy="379" r="2.4"/></g><circle cx="92" cy="28" r="9" fill="#CDAA63" opacity=".28"/></svg>
+<div class="it" style="top:134px"><time>November 9</time><h4>Before the new job</h4></div><div class="it" style="top:233px"><time>March 3</time><h4>Comfort before surgery</h4></div><div class="it" style="top:308px"><time>August 24</time><h4>Set apart to teach Primary</h4></div><div class="it" style="top:397px"><time>January 12</time><h4>When the baby came early</h4></div>
+<div class="nav"><span class="on">For me</span><span class="rec"><i></i></span><span>History</span></div></div><figcaption>Timeline. Distance on the chart is real time between blessings.</figcaption></figure>
+<figure class="phone"><div class="scr b"><div class="top"><span>Back</span><div class="seg"><span class="on">Polished</span><span>Original</span></div></div><div class="read"><h3>Comfort before surgery</h3><p class="meta">March 3, 2026<br>From Dad, for me</p><div class="body"><p>Emma, I lay my hands upon your head<i class="x"></i>to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He <span class="e m">knows</span> the worry you have carried these weeks.</p><p>I bless you <span class="e l">with peace</span> as you go into this surgery. Be patient with your body as it heals. <span class="e h">Strength will return to you</span> in its time.</p></div><div class="pop"><b>Original words</b><q>your strength, it’s going to come back to you</q>This changed more than a grammar fix should.<div class="acts"><span>Restore original</span><span>Keep</span></div></div></div><div class="sum"><span>7 edits, 1 heavy</span><span>Undo all</span></div></div><figcaption>Reading by night. A day version would use ivory paper.</figcaption></figure>
+</div>
+</section>
+
+<section class="dir dir-c">
+<h2>Olive branch</h2>
+<p class="idea">Built from the materials of the ordinance: consecrated olive oil, olive wood, white cloth. The recording light is warm like oil catching a lamp, and every blessing adds a leaf to a branch that grows through the years.</p>
+<p class="risk">Risk: the branch needs real illustration care. Drawn carelessly it turns into decoration.</p>
+<div class="row">
+<div class="pair"><figure class="phone sm"><div class="scr c dark"><div class="pool"></div><span class="amen">Amen</span></div><figcaption>Recording. A warm pool of light, like oil in lamplight.</figcaption></figure>
+<figure class="phone sm"><div class="scr c dark"><svg class="sprig" width="92" height="120" viewBox="0 0 92 120" fill="none" aria-hidden="true"><path d="M30 120C32 84 40 44 62 6" stroke="#B7C0A3" stroke-width="1.5"/><path d="M38 78C22 76 10 64 8 48C24 50 36 62 38 78Z" fill="#56663A"/><path d="M47 50C52 34 66 26 82 28C78 44 64 52 47 50Z" fill="#B7C0A3"/><path d="M56 24C50 14 52 4 60 0C66 8 64 18 56 24Z" fill="#D8A63A"/></svg><div class="done"><h3>Recorded</h3><p>Saved to this phone. The audio is gone and only the words remain.</p><span class="btn pri">Review now</span><span class="btn">Save for later</span></div></div><figcaption>After amen. A new leaf, still gold.</figcaption></figure></div>
+<figure class="phone"><div class="scr c"><div class="tl-head"><h3>For me</h3><p>14 blessings since 2019</p></div>
+<svg class="branch" viewBox="0 0 268 420" fill="none" aria-hidden="true"><path d="M46 0C40 84 54 168 44 252C40 310 50 370 46 420" stroke="#56663A" stroke-width="1.6"/><g fill="#56663A"><path transform="translate(46 100) rotate(-24)" d="M0 0C7-9 21-10 30-1C21 7 8 8 0 0Z"/><path transform="translate(45 256) rotate(-24)" d="M0 0C7-9 21-10 30-1C21 7 8 8 0 0Z"/></g><g fill="#9BAA7E"><path transform="translate(47 178) scale(-1 1) rotate(-24)" d="M0 0C7-9 21-10 30-1C21 7 8 8 0 0Z"/><path transform="translate(44 334) scale(-1 1) rotate(-24)" d="M0 0C7-9 21-10 30-1C21 7 8 8 0 0Z"/></g><path transform="translate(45 22) scale(-1 1) rotate(-24)" d="M0 0C7-9 21-10 30-1C21 7 8 8 0 0Z" fill="#D8A63A"/><g fill="#3C4728"><ellipse cx="53" cy="140" rx="3.6" ry="5"/><ellipse cx="39" cy="296" rx="3.6" ry="5"/></g></svg>
+<div class="it" style="top:120px"><time>November 9, 2026</time><h4>Before the new job</h4><p>From Dad</p></div><div class="it" style="top:198px"><time>March 3, 2026</time><h4>Comfort before surgery</h4><p>From Dad</p></div><div class="it" style="top:276px"><time>August 24, 2025</time><h4>Set apart to teach Primary</h4><p>From Bishop Alvarez</p></div><div class="it" style="top:354px"><time>January 12, 2025</time><h4>When the baby came early</h4><p>From Mateo</p></div><div class="it" style="top:432px"><time>June 2, 2024</time><h4>Healing, the night of the fever</h4><p>From Grandpa Ruiz</p></div>
+<div class="nav"><span class="on">For me</span><span class="rec"></span><span>History</span></div></div><figcaption>Timeline. One leaf per blessing, an olive at each new year.</figcaption></figure>
+<figure class="phone"><div class="scr c"><div class="top"><span>Back</span><div class="seg"><span class="on">Polished</span><span>Original</span></div></div><div class="read"><h3>Comfort before surgery</h3><p class="meta">March 3, 2026<br>From Dad, for me</p><div class="body"><p>Emma, I lay my hands upon your head<i class="x"></i>to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He <span class="e m">knows</span> the worry you have carried these weeks.</p><p>I bless you <span class="e l">with peace</span> as you go into this surgery. Be patient with your body as it heals. <span class="e h">Strength will return to you</span> in its time.</p></div><div class="pop"><b>Original words</b><q>your strength, it’s going to come back to you</q>This changed more than a grammar fix should.<div class="acts"><span>Restore original</span><span>Keep</span></div></div></div><div class="sum"><span>7 edits, 1 heavy</span><span>Undo all</span></div></div><figcaption>Reading. Edit colors come from the leaf, the oil and the clay.</figcaption></figure>
+</div>
+</section>
+
+<section class="dir dir-d">
+<h2>The typed page</h2>
+<p class="idea">A patriarchal blessing is a typed sheet kept in a folder and read for a lifetime. This direction makes every blessing that same object: a page in a folder, with polish edits as pencil marks and a slip of paper showing the original.</p>
+<p class="risk">Risk: typewriter type reads slower than a book face. Blessings are short, so it likely holds, but it is the least celestial of the four.</p>
+<div class="row">
+<div class="pair"><figure class="phone sm"><div class="scr d"><div class="sheet0"></div><span class="amen">Amen</span></div><figcaption>Recording. A blank page, faintly lit, waiting.</figcaption></figure>
+<figure class="phone sm"><div class="scr d"><div class="written"><i style="width:55%"></i><i></i><i></i><i style="width:80%"></i><i></i><i style="width:92%"></i><i></i><i style="width:40%"></i></div><div class="done"><h3>Recorded</h3><p>412 words, kept on this phone. No audio was saved.</p><span class="btn pri">Review now</span><span class="btn">Save for later</span></div></div><figcaption>After amen. The page is written.</figcaption></figure></div>
+<figure class="phone"><div class="scr d folder"><span class="tab">For me</span><span class="tabnote">14 blessings</span><div class="drawer"><div class="sheet"><time>9 Nov 2026</time><h4>Before the new job</h4><p>From Dad</p></div><div class="sheet"><time>3 Mar 2026</time><h4>Comfort before surgery</h4><p>From Dad</p></div><div class="divider">2025</div><div class="sheet"><time>24 Aug</time><h4>Set apart to teach Primary</h4><p>From Bishop Alvarez</p></div><div class="sheet"><time>12 Jan</time><h4>When the baby came early</h4><p>From Mateo</p></div><div class="divider">2024</div><div class="sheet"><time>2 Jun</time><h4>Healing, the night of the fever</h4><p>From Grandpa Ruiz</p></div><div class="sheet" style="height:120px"></div></div><div class="nav"><span class="on">For me</span><span class="rec"><i></i></span><span>History</span></div></div><figcaption>Timeline. A folder of pages with a divider for each year.</figcaption></figure>
+<figure class="phone"><div class="scr d"><div class="top"><span>Back</span><div class="seg"><span class="on">Polished</span><span>Original</span></div></div><div class="paper"><h3>Comfort before surgery</h3><p class="meta">March 3, 2026<br>From Dad, for me</p><div class="body"><p>Emma, I lay my hands upon your head<i class="x"></i>to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He <span class="e m">knows</span> the worry you have carried these weeks.</p><p>I bless you <span class="e l">with peace</span> as you go into this surgery. Be patient with your body as it heals. <span class="e h">Strength will return to you</span> in its time.</p></div><div class="pop"><b>Original words</b><q>your strength, it’s going to come back to you</q><div class="acts"><span>Restore original</span><span>Keep</span></div></div></div><div class="sum"><span>7 edits, 1 heavy</span><span>Undo all</span></div></div><figcaption>Reading. The page on screen is the page the PDF prints.</figcaption></figure>
+</div>
+</section>
+</main>
+</body>
+</html>

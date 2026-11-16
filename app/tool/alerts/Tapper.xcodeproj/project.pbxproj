@@ -1,0 +1,251 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000101 /* TapperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* TapperApp.swift */; };
+		AA0000000000000000000102 /* Tapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Tapper.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000501;
+			remoteInfo = Tapper;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000001 /* TapperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapperApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* Tapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tapper.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* Tapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000004 /* TapperUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TapperUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000301 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000302 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000400 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000401 /* Tapper */,
+				AA0000000000000000000402 /* TapperUITests */,
+				AA0000000000000000000403 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000401 /* Tapper */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000001 /* TapperApp.swift */,
+			);
+			path = Tapper;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000402 /* TapperUITests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000002 /* Tapper.swift */,
+			);
+			path = TapperUITests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000403 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000003 /* Tapper.app */,
+				AA0000000000000000000004 /* TapperUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000501 /* Tapper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000801 /* Build configuration list for PBXNativeTarget "Tapper" */;
+			buildPhases = (
+				AA0000000000000000000601 /* Sources */,
+				AA0000000000000000000301 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Tapper;
+			productName = Tapper;
+			productReference = AA0000000000000000000003 /* Tapper.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000502 /* TapperUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000802 /* Build configuration list for PBXNativeTarget "TapperUITests" */;
+			buildPhases = (
+				AA0000000000000000000602 /* Sources */,
+				AA0000000000000000000302 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000701 /* PBXTargetDependency */,
+			);
+			name = TapperUITests;
+			productName = TapperUITests;
+			productReference = AA0000000000000000000004 /* TapperUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000900 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					AA0000000000000000000502 = {
+						TestTargetID = AA0000000000000000000501;
+					};
+				};
+			};
+			buildConfigurationList = AA0000000000000000000800 /* Build configuration list for PBXProject "Tapper" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000400;
+			productRefGroup = AA0000000000000000000403 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000501 /* Tapper */,
+				AA0000000000000000000502 /* TapperUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000601 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000101 /* TapperApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000602 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000102 /* Tapper.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000701 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000501 /* Tapper */;
+			targetProxy = AA0000000000000000000201 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000000A01 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				ONLY_ACTIVE_ARCH = YES;
+				ENABLE_TESTABILITY = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000A02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.summitstudio.uth.tapper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				MARKETING_VERSION = 1.0;
+				CURRENT_PROJECT_VERSION = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000A03 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.summitstudio.uth.tapper.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Tapper;
+				MARKETING_VERSION = 1.0;
+				CURRENT_PROJECT_VERSION = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000000800 /* Build configuration list for PBXProject "Tapper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000A01 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA0000000000000000000801 /* Build configuration list for PBXNativeTarget "Tapper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000A02 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA0000000000000000000802 /* Build configuration list for PBXNativeTarget "TapperUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000A03 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000000900 /* Project object */;
+}

@@ -1,0 +1,52 @@
+name: upon_thy_head
+description: "Upon Thy Head. A written record of priesthood blessings, kept on the device."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  sqlite3: ^3.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: false
+
+  assets:
+    - assets/sky/stars.bin
+    - assets/sky/named.json
+    - assets/sky/constellations.json
+    - assets/sky/milkyway_4k.jpg
+    - assets/sky/milkyway_soft.png
+    # the app switcher's cover (tool/cover_shot.sh)
+    - assets/sky/cover.jpg
+
+  shaders:
+    - shaders/sky.frag
+    - shaders/light.frag
+
+  fonts:
+    - family: Newsreader
+      fonts:
+        - asset: assets/fonts/Newsreader.ttf
+        - asset: assets/fonts/Newsreader-Italic.ttf
+          style: italic
+
+# Use the SQLite that ships with iOS and macOS rather than downloading a build.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system

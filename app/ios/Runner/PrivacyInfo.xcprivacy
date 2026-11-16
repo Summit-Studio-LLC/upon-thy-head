@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The app's privacy manifest. Nothing is collected: no blessing, recording, place or setting ever
+  leaves the phone, and nothing tracks anyone.
+
+  Required-reason APIs used by the app's own code (ios/Runner/*.swift, lib/):
+  - File timestamps: FileManager.attributesOfItem (PhoneCheck.swift reads only the size, but the
+    call is the timestamp API), Dart's File.stat through the engine. C617.1: files inside the
+    app's own container only.
+  - Disk space: volumeAvailableCapacityForImportantUsage, shown to the person on the phone check
+    page. 85F4.1: displayed to the person using the device.
+  Flutter.framework carries its own manifest (file timestamps, system boot time). path_provider and
+  sqlite3 (iOS's own SQLite) add no APIs of their own beyond these.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>85F4.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

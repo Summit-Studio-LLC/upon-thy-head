@@ -1,0 +1,5 @@
+/* The system's permission questions in English: the same words as Info.plist. */
+"NSMicrophoneUsageDescription" = "Upon Thy Head listens only while you record a blessing. The audio stays on this phone.";
+"NSFaceIDUsageDescription" = "Unlocks your blessings.";
+"NSLocationWhenInUseUsageDescription" = "Used once to place your first blessing's light in the sky where it was given. Allow Once is enough.";
+"NSSpeechRecognitionUsageDescription" = "Speech is turned into text on this phone. Nothing is sent anywhere.";

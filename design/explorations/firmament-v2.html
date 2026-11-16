@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firmament, full size</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+.wrap{font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#1c1c1c);line-height:1.5}
+.lead{font-size:15px;max-width:64ch;margin:0 0 18px}
+.row{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:26px}
+.dev{margin:0;width:347px}
+.dev figcaption{font-size:13px;margin-top:12px;opacity:.78;max-width:44ch}
+.ph{zoom:.86;box-sizing:border-box;width:404px;height:858px;padding:7px;border-radius:62px;background:#000;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.scr{position:relative;width:390px;height:844px;border-radius:55px;overflow:hidden;color:#F1E9D6;font:400 18px/1.5 "EB Garamond",Georgia,serif;font-feature-settings:"onum","pnum","kern","liga";background:radial-gradient(130% 62% at 50% 26%,#171D4E 0%,#0D1133 52%,#060819 100%)}
+.scr *{box-sizing:border-box;margin:0;padding:0}
+.scr i,.scr .it{font-style:italic}
+.mist{color:#8E97C8}
+.dsp{font-family:"Cormorant Garamond","EB Garamond",Georgia,serif;font-weight:300}
+.field,.grain{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.grain{opacity:.16;mix-blend-mode:soft-light}
+.isl{position:absolute;top:11px;left:50%;width:124px;height:36px;margin-left:-62px;border-radius:20px;background:#000;z-index:6}
+.sb{position:absolute;top:0;left:0;right:0;height:56px;padding:15px 32px 0 48px;display:flex;justify-content:space-between;align-items:center;font:600 16px -apple-system,"SF Pro Text",system-ui,sans-serif;letter-spacing:-.01em;z-index:5}
+.sb svg{display:block}
+.home{position:absolute;bottom:8px;left:50%;width:138px;height:5px;margin-left:-69px;border-radius:3px;background:#F1E9D6;opacity:.36;z-index:9}
+.ico{width:24px;height:24px;fill:none;stroke:#F1E9D6;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}
+
+/* recording */
+.rec{background:radial-gradient(86% 52% at 50% 43%,rgba(34,44,120,.44),rgba(20,26,82,.24) 38%,rgba(8,10,34,.1) 66%,transparent 100%),#010208}
+.rec .sb{opacity:.3}
+.lum{position:absolute;left:50%;top:43%;width:360px;height:360px;margin:-180px 0 0 -180px;overflow:visible}
+.breath,.spk{transform-origin:0 0;animation:breath 10s cubic-bezier(.45,0,.55,1) infinite}
+.spk{animation-name:spk}
+@keyframes breath{0%,100%{transform:scale(.76);opacity:.55}40%{transform:scale(1.12);opacity:1}}
+@keyframes spk{0%,100%{transform:scale(.84);opacity:.62}40%{transform:scale(1.06);opacity:1}}
+@media (prefers-reduced-motion:reduce){.breath,.spk{animation:none}}
+.hold{position:absolute;left:50%;bottom:96px;width:88px;height:88px;margin-left:-44px;display:grid;place-items:center}
+.hold svg{position:absolute;inset:0}
+.hold span{font-size:25px;font-style:italic;letter-spacing:.01em;color:#F1E9D6;opacity:.9}
+.hint{position:absolute;left:0;right:0;bottom:62px;text-align:center;font-size:14px;color:#8E97C8;opacity:.75}
+
+/* sky */
+.hd{position:absolute;left:28px;right:22px;top:70px;display:flex;justify-content:space-between;align-items:flex-start}
+.hd h3{font-size:46px;line-height:1;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.hd h3 svg{width:15px;height:15px;margin-top:10px;opacity:.7}
+.hd p{font-size:15.5px;margin-top:7px}
+.hd .acts{display:flex;gap:16px;padding-top:12px}
+.chart{position:absolute;left:0;top:172px;width:390px;height:600px}
+.chart svg{position:absolute;inset:0;overflow:visible}
+.lb{position:absolute;left:190px;right:22px}
+.lb i{display:block;font-size:13.5px;line-height:16px;color:#8E97C8}
+.lb b{display:block;font-weight:400;font-size:18.5px;line-height:22px;letter-spacing:.002em}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:128px;padding:0 50px 30px;display:flex;justify-content:space-between;align-items:flex-end;background:linear-gradient(rgba(6,8,25,0),rgba(6,8,25,.94) 44%,#060819);z-index:4}
+.tabs span{width:74px;text-align:center;padding-bottom:22px;font-size:15px;font-variant-caps:all-small-caps;letter-spacing:.14em;color:#8E97C8}
+.tabs .on{color:#F1E9D6}
+.tabs .rb{width:66px;height:66px;padding:0;border-radius:50%;border:1px solid rgba(201,165,92,.75);display:grid;place-items:center;background:radial-gradient(circle,rgba(233,210,154,.16),rgba(233,210,154,0) 70%)}
+.tabs .rb svg{width:22px;height:22px;fill:#FFF8E6;filter:drop-shadow(0 0 5px rgba(255,240,200,.8))}
+
+/* reading */
+.bar{position:absolute;left:22px;right:22px;top:60px;height:36px;display:flex;justify-content:space-between;align-items:center}
+.bar div{display:flex;gap:18px}
+.rd{position:absolute;left:28px;right:28px;top:112px}
+.rd .date{font-size:14.5px;line-height:20px}
+.rd h3{font-size:35px;line-height:38px;margin-top:4px;letter-spacing:-.005em}
+.rd .by{font-size:15.5px;line-height:22px;margin-top:5px;color:#C9A55C}
+.rd .rule{width:34px;height:1px;background:#C9A55C;opacity:.8;margin:18px 0 17px}
+.txt p{font-size:18.5px;line-height:29px;text-indent:1.25em;hanging-punctuation:first}
+.txt p:first-child{text-indent:0}
+.sc{font-variant-caps:all-small-caps;letter-spacing:.06em}
+.kind{margin-top:18px;padding-top:12px;border-top:1px solid rgba(142,151,200,.24);font-size:14px;line-height:20px;display:flex;justify-content:space-between}
+.kind u{color:#E9D29A;text-decoration-color:rgba(201,165,92,.55);text-underline-offset:3px;text-decoration-thickness:.8px}
+.tool{position:absolute;left:0;right:0;bottom:38px;display:flex;justify-content:center;z-index:4}
+.seg{display:flex;padding:3px;border-radius:999px;background:rgba(142,151,200,.14);box-shadow:inset 0 0 0 1px rgba(142,151,200,.22);font-size:15px}
+.seg span{padding:6px 18px 7px;border-radius:999px;color:#8E97C8}
+.seg .on{background:#F1E9D6;color:#0D1133}
+
+/* polish */
+.pt{position:absolute;left:28px;right:28px;top:106px}
+.pt h3{font-size:25px;line-height:30px}
+.leg{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:14px;color:#8E97C8}
+.leg span span{margin-left:12px}
+.pt .txt{margin-top:16px}
+.pt .txt p{font-size:17.5px;line-height:28px}
+.e{text-decoration-line:underline;text-underline-offset:4px;text-decoration-thickness:1.4px}
+.e.l{text-decoration-style:dotted;text-decoration-color:#93C9A6}
+.e.m{text-decoration-style:dashed;text-decoration-color:#E3BE6A}
+.e.h{text-decoration-style:wavy;text-decoration-color:#EE8E7E}
+.e.sel{background:rgba(238,142,126,.2);box-shadow:0 0 0 3px rgba(238,142,126,.2);border-radius:2px}
+.cut{display:inline-block;width:10px;height:7px;margin:0 -2px -8px 0;vertical-align:baseline;fill:none;stroke:#93C9A6;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:274px;padding:12px 28px 0;border-radius:30px 30px 0 0;background:linear-gradient(#1C2358,#141A45);box-shadow:0 -1px 0 rgba(201,165,92,.5),0 -24px 50px rgba(3,4,16,.55);z-index:4}
+.grab{width:38px;height:4px;border-radius:2px;background:#8E97C8;opacity:.5;margin:0 auto 14px}
+.sheet .hdr{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}
+.sheet .hdr b{font-weight:400;color:#EE8E7E;font-variant-caps:all-small-caps;letter-spacing:.1em}
+.sheet dt{font-size:13.5px;font-style:italic;color:#8E97C8;margin-top:11px}
+.sheet dd{font-size:18px;line-height:24px}
+.sheet dd.was{color:rgba(241,233,214,.66)}
+.sheet .acts{display:flex;align-items:center;gap:20px;margin-top:17px;font-size:16px}
+.sheet .pri{padding:9px 20px 10px;border-radius:999px;background:#F1E9D6;color:#0D1133}
+.sheet .step{margin-left:auto;display:flex;align-items:center;gap:8px;color:#8E97C8;font-size:14.5px}
+.sheet .step svg{width:16px;height:16px;stroke:#8E97C8}
+
+/* system strip */
+.sys{display:flex;flex-wrap:wrap;gap:22px 40px;align-items:flex-start;padding-top:6px}
+.sw{display:flex;gap:14px}
+.sw div{font-size:12px;line-height:1.35;text-align:center;opacity:.85}
+.sw b{display:block;width:44px;height:44px;border-radius:50%;margin:0 auto 6px;box-shadow:inset 0 0 0 1px rgba(128,128,128,.35)}
+.sw span{display:block;opacity:.65;font-family:var(--font-mono,ui-monospace,monospace);font-size:11px}
+.ty p{margin:0}
+.ty .a{font:300 30px/1.1 "Cormorant Garamond",Georgia,serif}
+.ty .b{font:400 18px/1.45 "EB Garamond",Georgia,serif;font-feature-settings:"onum";margin-top:4px}
+.ty small{display:block;font-size:12px;opacity:.65;margin-top:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="gr" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter>
+<radialGradient id="bloom"><stop offset="0" stop-color="#F8E6B4" stop-opacity=".8"/><stop offset=".3" stop-color="#C9A55C" stop-opacity=".26"/><stop offset="1" stop-color="#3A47A8" stop-opacity="0"/></radialGradient>
+<radialGradient id="halo"><stop offset="0" stop-color="#E9D29A" stop-opacity=".55"/><stop offset="1" stop-color="#E9D29A" stop-opacity="0"/></radialGradient>
+<linearGradient id="sp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF6DC" stop-opacity="0"/><stop offset=".5" stop-color="#FFF6DC" stop-opacity=".95"/><stop offset="1" stop-color="#FFF6DC" stop-opacity="0"/></linearGradient>
+<symbol id="st" viewBox="-10 -10 20 20" overflow="visible"><path d="M0-9.5C.8-2.3 2.3-.8 9.5 0C2.3.8.8 2.3 0 9.5C-.8 2.3-2.3.8-9.5 0C-2.3-.8-.8-2.3 0-9.5Z"/></symbol>
+<symbol id="sig" viewBox="0 0 74 14"><g fill="#F1E9D6"><rect x="0" y="9" width="3" height="4" rx=".8"/><rect x="5" y="6.5" width="3" height="6.5" rx=".8"/><rect x="10" y="3.5" width="3" height="9.5" rx=".8"/><rect x="15" y="1" width="3" height="12" rx=".8"/><path d="M32.5 3.2c2.2 0 4.2.9 5.7 2.3l1-1.1A9.7 9.7 0 0 0 32.500 1.6c-2.600 0-5 1-6.700 2.800l1 1.100a8.200 8.200 0 0 1 5.700-2.300Zm0 3.400c1.300 0 2.500.5 3.400 1.300l1-1.100a6.500 6.500 0 0 0-8.800 0l1 1.100c.9-.8 2.100-1.300 3.400-1.300Zm0 3.300c-.700 0-1.300.3-1.800.7l1.800 2 1.800-2c-.5-.4-1.100-.7-1.800-.7Z"/><rect x="47.500" y="1.500" width="22" height="11" rx="3.200" fill="none" stroke="#F1E9D6" opacity=".45"/><rect x="49.200" y="3.200" width="18.600" height="7.600" rx="1.800"/><rect x="71" y="5" width="1.600" height="4" rx=".8" opacity=".5"/></g></symbol>
+</defs></svg>
+
+<main class="wrap">
+<p class="lead">Firmament, redrawn at full phone size: recording, the sky, reading, and reviewing polish edits. The blessing and names are placeholders.</p>
+
+<div class="row">
+<figure class="dev"><div class="ph"><div class="scr rec">
+<div class="isl"></div><div class="sb"><span>9:41</span><svg width="74" height="14"><use href="#sig"/></svg></div>
+<svg class="lum" viewBox="-180 -180 360 360" aria-hidden="true"><g class="breath"><circle r="170" fill="url(#bloom)"/></g><g class="spk"><rect x="-.9" y="-158" width="1.8" height="316" fill="url(#sp)"/><rect x="-.9" y="-158" width="1.8" height="316" fill="url(#sp)" transform="rotate(90)"/><rect x="-.6" y="-54" width="1.2" height="108" fill="url(#sp)" opacity=".5" transform="rotate(45)"/><rect x="-.6" y="-54" width="1.2" height="108" fill="url(#sp)" opacity=".5" transform="rotate(-45)"/></g><circle r="10" fill="#FFF3D0" opacity=".3"/><circle r="3.6" fill="#FFF9E8"/></svg>
+<div class="hold"><svg viewBox="0 0 88 88" fill="none"><circle cx="44" cy="44" r="43" stroke="#E9D29A" stroke-opacity=".34"/></svg><span class="dsp">Amen</span></div>
+<p class="hint it">Hold to finish</p>
+<svg class="grain"><rect width="100%" height="100%" filter="url(#gr)"/></svg><div class="home"></div>
+</div></div><figcaption>Recording. One light on a black screen, breathing in for four seconds and out for six. Amen is held, not tapped, so a sleeve or a pocket cannot end the recording.</figcaption></figure>
+
+<figure class="dev"><div class="ph"><div class="scr">
+<svg class="field" viewBox="0 0 390 844"></svg>
+<div class="isl"></div><div class="sb"><span>9:41</span><svg width="74" height="14"><use href="#sig"/></svg></div>
+<div class="hd"><div><h3 class="dsp">For me<svg class="ico" viewBox="0 0 16 16"><path d="M3 6l5 5 5-5"/></svg></h3><p class="it mist">Fourteen blessings since 2019</p></div><div class="acts"><svg class="ico" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.500 15.500 20 20"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></svg></div></div>
+<div class="chart" id="chart"></div>
+<div class="tabs"><span class="on">Sky</span><span class="rb"><svg viewBox="-10 -10 20 20"><use href="#st" x="-10" y="-10" width="20" height="20"/></svg></span><span>History</span></div>
+<svg class="grain"><rect width="100%" height="100%" filter="url(#gr)"/></svg><div class="home"></div>
+</div></div><figcaption>The sky. Time runs down the ruler, one band to a month. The gold line makes one wave a year, winter on the left and summer on the right, so each light sits exactly where its date puts it.</figcaption></figure>
+</div>
+
+<div class="row">
+<figure class="dev"><div class="ph"><div class="scr">
+<div class="isl"></div><div class="sb"><span>9:41</span><svg width="74" height="14"><use href="#sig"/></svg></div>
+<div class="bar"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><div><svg class="ico" viewBox="0 0 24 24"><path d="M12 15V4M8 7.500 12 3.500l4 4M6 11H5v9h14v-9h-1"/></svg><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="12" r=".9"/><circle cx="12" cy="12" r=".9"/><circle cx="18" cy="12" r=".9"/></svg></div></div>
+<article class="rd"><p class="date it mist">Tuesday, March 3, 2026</p><h3 class="dsp">Comfort before surgery</h3><p class="by it">A blessing from Dad</p><div class="rule"></div>
+<div class="txt"><p><span class="sc">Emma, I lay my hands</span> upon your head to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He knows the worry you have carried these weeks, and He wants you to know that you have not carried it alone.</p><p>I bless you with peace as you go into this surgery, and I bless the hands of those who will care for you. Be patient with your body as it heals. Strength will return to you in its time.</p><p>I say these things in the name of Jesus Christ, amen.</p></div>
+<p class="kind it"><span class="mist">Comfort and counsel</span><u>Handbook 18.14</u></p></article>
+<div class="tool"><div class="seg"><span class="on">Polished</span><span>Original</span></div></div>
+<svg class="grain"><rect width="100%" height="100%" filter="url(#gr)"/></svg><div class="home"></div>
+</div></div><figcaption>Reading. Set like a page in a book: a measure near 44 characters, indented paragraphs, and the handbook section as a quiet footnote.</figcaption></figure>
+
+<figure class="dev"><div class="ph"><div class="scr">
+<div class="isl"></div><div class="sb"><span>9:41</span><svg width="74" height="14"><use href="#sig"/></svg></div>
+<div class="bar"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span class="it" style="font-size:15.5px;color:#E9D29A">Undo all</span></div>
+<div class="pt"><h3 class="dsp">Comfort before surgery</h3><p class="leg"><span>5 changes</span><span><span class="e l">light</span><span class="e m">moderate</span><span class="e h">heavy</span></span></p>
+<div class="txt"><p>Emma, I lay my hands upon your head<svg class="cut" viewBox="0 0 10 7"><path d="M1 6l4-5 4 5"/></svg> to give you a blessing of comfort.</p><p>Your Heavenly Father knows you. He <span class="e m">knows</span> the worry you have carried these weeks, and He wants you to know that you have not carried it alone.</p><p>I bless you <span class="e l">with peace</span> as you go into this surgery, and I bless the hands of those who <span class="e m">will care</span> for you. Be patient with your body as it heals. <span class="e h sel">Strength will return to you</span> in its time.</p></div></div>
+<div class="sheet"><div class="grab"></div><div class="hdr"><span>Reworded</span><b>Heavy change</b></div><dl><dt>Original words</dt><dd class="was">your strength, it’s going to come back to you</dd><dt>Polished</dt><dd>Strength will return to you</dd></dl><div class="acts"><span class="pri">Restore original</span><span>Keep</span><span class="step"><svg class="ico" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>5 of 5<svg class="ico" viewBox="0 0 16 16" style="opacity:.35"><path d="M6 3l5 5-5 5"/></svg></span></div></div>
+<svg class="grain"><rect width="100%" height="100%" filter="url(#gr)"/></svg><div class="home"></div>
+</div></div><figcaption>Reviewing changes. Dotted is light, dashed is moderate, wavy is heavy, and a small caret marks removed words. The sheet shows the original and restores it in one tap.</figcaption></figure>
+</div>
+
+<div class="sys">
+<div class="sw"><div><b style="background:#171D4E"></b>Zenith<span>#171D4E</span></div><div><b style="background:#0D1133"></b>Night<span>#0D1133</span></div><div><b style="background:#060819"></b>Horizon<span>#060819</span></div><div><b style="background:#F1E9D6"></b>Ivory<span>#F1E9D6</span></div><div><b style="background:#8E97C8"></b>Mist<span>#8E97C8</span></div><div><b style="background:#C9A55C"></b>Gold leaf<span>#C9A55C</span></div></div>
+<div class="ty"><p class="a">Cormorant Garamond Light</p><small>Titles, 25 pt and larger</small><p class="b">EB Garamond for the words. <i>Italic for dates and givers.</i> 1234567890</p><small>Reading text, 18.5 on 29</small></div>
+</div>
+</main>
+
+<script>
+(function(){
+var NOW=new Date(2026,10,14),PX=16,Y0=30,CX=122,A=44,D=864e5,MO=30.4375,H=600;
+var MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function back(y){return new Date(NOW-((y-Y0)/PX)*MO*D)}
+function X(d){var t=((d-new Date(d.getFullYear(),0,1))/D+10)/365.25;return CX-A*Math.cos(6.283185*t)}
+function Y(d){return Y0+(NOW-d)/D/MO*PX}
+var B=[[2026,9,4,"Before the new job","Dad"],[2026,2,3,"Comfort before surgery","Dad"],[2025,7,24,"Set apart to teach Primary","Bishop Alvarez"],[2025,0,12,"When the baby came early","Mateo"],[2024,5,2,"Healing, the night of the fever","Grandpa Ruiz"]];
+var el=document.getElementById("chart");if(!el)return;
+var p="",y,s="",lb="";
+for(y=Y0;y<=H;y+=2){p+=(p?"L":"M")+X(back(y)).toFixed(1)+" "+y}
+s+='<g stroke="#8E97C8" stroke-opacity=".16" stroke-dasharray="1 7" stroke-linecap="round"><path d="M'+(CX-A)+' 22V'+H+'M'+(CX+A)+' 22V'+H+'"/></g>';
+s+='<g fill="#8E97C8" fill-opacity=".7" font-family="EB Garamond,serif" font-style="italic" font-size="12" text-anchor="middle"><text x="'+(CX-A)+'" y="12">winter</text><text x="'+(CX+A)+'" y="12">summer</text></g>';
+var d=new Date(2026,10,1),top=Y0,sc="",yr='<text x="36" y="'+(Y0+4)+'">2026</text>';
+while(top<H){var yb=Math.min(Y(d),H);if(d.getMonth()%2===0)sc+='<rect x="20" y="'+top.toFixed(1)+'" width="4" height="'+(yb-top).toFixed(1)+'" fill="#8E97C8" fill-opacity=".6"/>';
+if(d.getMonth()===0&&yb<H){sc+='<path d="M20 '+yb.toFixed(1)+'h14" stroke="#8E97C8" stroke-opacity=".8" stroke-width=".8"/>';yr+='<text x="36" y="'+(yb+15).toFixed(1)+'">'+(d.getFullYear()-1)+'</text>'}
+top=yb;d=new Date(d.getFullYear(),d.getMonth()-1,1)}
+s+=sc+'<rect x="20" y="'+Y0+'" width="4" height="'+(H-Y0)+'" fill="none" stroke="#8E97C8" stroke-opacity=".7" stroke-width=".6"/>';
+s+='<g fill="#8E97C8" font-family="EB Garamond,serif" font-size="13" style="font-feature-settings:\'onum\'">'+yr+'</g>';
+s+='<path d="'+p+'" fill="none" stroke="#E9D29A" stroke-opacity=".14" stroke-width="5"/><path d="'+p+'" fill="none" stroke="#C9A55C" stroke-opacity=".9" stroke-width=".9"/>';
+s+='<circle cx="'+X(NOW).toFixed(1)+'" cy="'+Y0+'" r="3.2" fill="#0D1133" stroke="#C9A55C" stroke-width=".9"/><text x="'+(X(NOW)+9).toFixed(1)+'" y="'+(Y0+4)+'" fill="#8E97C8" fill-opacity=".8" font-family="EB Garamond,serif" font-style="italic" font-size="12">today</text>';
+B.forEach(function(b,i){var dt=new Date(b[0],b[1],b[2]),x=X(dt),yy=Y(dt);
+s+='<circle cx="'+x.toFixed(1)+'" cy="'+yy.toFixed(1)+'" r="'+(i?15:24)+'" fill="url(#halo)"/><path d="M'+(x+14).toFixed(1)+' '+yy.toFixed(1)+'H180" stroke="#8E97C8" stroke-opacity=".55" stroke-width=".8" stroke-dasharray=".1 4.5" stroke-linecap="round"/><use href="#st" x="'+(x-9).toFixed(1)+'" y="'+(yy-9).toFixed(1)+'" width="18" height="18" fill="#FFF8E6"/>';
+lb+='<div class="lb" style="top:'+(yy-27).toFixed(1)+'px"><i>'+MN[b[1]]+' '+b[2]+'</i><b>'+b[3]+'</b><i>from '+b[4]+'</i></div>'});
+el.innerHTML='<svg viewBox="0 0 390 '+H+'" width="390" height="'+H+'">'+s+'</svg>'+lb;
+var seed=41;function r(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}
+[].forEach.call(document.querySelectorAll(".field"),function(f){var o="";for(var i=0;i<150;i++){var m=r(),cx=r()*390,cy=r()*844;if((cy>56&&cy<300&&cx<300)||(cx>176&&cy>330&&cy<770)||(cx<72&&cy>180))continue;o+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+(.3+m*m*m*1.1).toFixed(2)+'" fill="'+(r()<.2?"#B4C2FF":"#F1E9D6")+'" fill-opacity="'+(.18+m*.5).toFixed(2)+'"/>'}f.innerHTML=o});
+})();
+</script>
+</body>
+</html>

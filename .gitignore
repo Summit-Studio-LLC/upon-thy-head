@@ -1,0 +1,5 @@
+.DS_Store
+
+# Simulator screenshots and films from test runs (about 850 MB). Every one is
+# written again by the scripts in app/tool/, so they stay on disk and out of git.
+design/sim/

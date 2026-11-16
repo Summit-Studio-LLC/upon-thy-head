@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firmament: handbook links and keeping for a child</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+.wrap{font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#1c1c1c);line-height:1.5}
+.lead{font-size:15px;max-width:64ch;margin:0 0 14px}
+.row{display:flex;gap:9px;align-items:flex-start;overflow-x:auto;padding:4px 0 24px}
+.phone{flex:0 0 231px;margin:0}
+.phone figcaption{font-size:13px;margin-top:10px;opacity:.75}
+.scr{zoom:.86;position:relative;width:268px;height:580px;border-radius:36px;overflow:hidden;box-sizing:border-box;border:1px solid var(--border,rgba(0,0,0,.14));font:12px/1.45 Spectral,Georgia,serif;background:radial-gradient(120% 80% at 50% 38%,#171D4C,#080B21);color:#F2EAD6}
+.scr *{box-sizing:border-box}
+.scr h3,.scr h4,.scr p,.scr ul{margin:0;padding:0;font-weight:400;list-style:none}
+.scr::after{content:"";position:absolute;left:50%;bottom:7px;width:92px;height:4px;margin-left:-46px;border-radius:2px;background:currentColor;opacity:.3}
+.scr .top{position:absolute;left:0;right:0;top:0;height:50px;padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.scr .gold{color:#E8D5A6}
+.scr .pg{position:absolute;left:22px;right:22px;top:58px}
+.scr .pg h3{font-size:25px;line-height:1.12;font-weight:300}
+.scr .sub{font-size:12px;color:#8A93C4;font-style:italic;margin-top:5px}
+.scr .fine{font-size:10.5px;color:#8A93C4;margin-top:12px}
+.scr .kinds{margin-top:16px;border-top:1px solid rgba(138,147,196,.3)}
+.kinds li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid rgba(138,147,196,.3);font-size:13.5px}
+.kinds em{font-style:normal;font-size:11.5px;color:#E8D5A6;white-space:nowrap}
+.f{margin-top:12px}
+.f label{display:block;font-size:10.5px;font-style:italic;color:#8A93C4}
+.f div{font-size:14px;padding-bottom:5px;border-bottom:1px solid rgba(138,147,196,.3);display:flex;justify-content:space-between;align-items:baseline}
+.two{display:flex;gap:14px}.two .f{flex:1}
+.lnk{font-size:11px;color:#E8D5A6;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(205,170,99,.6)}
+.opt{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13.5px}
+.opt i{width:13px;height:13px;border-radius:50%;border:1px solid #8A93C4;flex:none}
+.opt.on i{border-color:#CDAA63;background:radial-gradient(#FFF8E6 0 2.5px,transparent 3px)}
+.chips{display:flex;gap:6px;margin:2px 0 5px 22px}
+.chips span{font-size:11.5px;padding:3px 10px;border-radius:999px;border:1px solid rgba(138,147,196,.5)}
+.chips .on{border-color:#CDAA63;color:#F0DDAE}
+.scr .cta{position:absolute;left:22px;right:22px;bottom:30px;text-align:center;padding:12px;border-radius:999px;border:1px solid #CDAA63;color:#F0DDAE;font-size:13px}
+.sky{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(138,147,196,.3)}
+.sky svg{flex:none}
+.sky h4{font-size:17px;line-height:1.2}
+.sky p{font-size:11.5px;color:#8A93C4}
+.sky.on h4{color:#F0DDAE}
+.tl-head{padding:54px 24px 0}
+.tl-head h3{font-size:30px;line-height:1.1}
+.scr .chart{position:absolute;left:0;top:118px;width:268px;height:400px}
+.it{position:absolute;left:124px;right:14px}
+.it time{display:block;font-style:italic;color:#8A93C4;font-size:11px}
+.it h4{font-size:14.5px;line-height:1.2}
+.nav{position:absolute;left:0;right:0;bottom:0;height:84px;padding:0 34px 18px;display:flex;align-items:center;justify-content:space-between;font-size:12px;background:linear-gradient(rgba(8,11,33,0),#080B21 38%)}
+.nav span{opacity:.6}.nav .on{opacity:1}
+.nav .rec{width:52px;height:52px;border-radius:50%;opacity:1;border:1px solid #CDAA63;display:grid;place-items:center}
+.nav .rec i{width:5px;height:5px;border-radius:50%;background:#FFF8E6;box-shadow:0 0 9px 3px rgba(255,244,214,.75)}
+.tog{flex:none;width:30px;height:18px;border-radius:9px;background:#CDAA63;position:relative}
+.tog::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#0B0F2A}
+.keep{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(138,147,196,.3);font-size:13.5px}
+.keep small{display:block;font-size:11px;color:#8A93C4}
+.scr .arrive{position:absolute;left:26px;right:26px;bottom:92px}
+.arrive h3{font-size:24px;line-height:1.15;font-weight:300;margin-bottom:8px}
+.arrive p{font-size:12.5px;opacity:.8}
+</style>
+</head>
+<body>
+<main class="wrap">
+<p class="lead">Both ideas drawn in Firmament. Top row: kinds of blessings that point at the handbook, and choosing whose a blessing is. Bottom row: a child’s own sky, handing it over, and what the child sees. Names and blessings are placeholders.</p>
+
+<div class="row">
+<figure class="phone"><div class="scr"><div class="top"><span>Back</span></div><div class="pg"><h3>Kinds of blessings</h3><p class="sub">Each opens its section of the General Handbook.</p><ul class="kinds"><li><span>Naming and blessing a child</span><em>18.6</em></li><li><span>Setting apart</span><em>18.11</em></li><li><span>Administering to the sick</span><em>18.13</em></li><li><span>Comfort and counsel</span><em>18.14</em></li><li><span>Father’s blessing</span><em>18.14</em></li><li><span>Dedicating a home</span><em>18.15</em></li><li><span>Dedicating a grave</span><em>18.16</em></li></ul><p class="fine">This app is independent. It is not made or endorsed by the Church, and it keeps no copy of the handbook.</p></div></div><figcaption>For the giver, before a blessing. The app stores only a section number and a link.</figcaption></figure>
+
+<figure class="phone"><div class="scr"><div class="top"><span>Back</span><span class="gold">Show edits</span></div><div class="pg"><h3>Details</h3><div class="f"><label>Title</label><div>First day of school</div></div><div class="f"><label>Date</label><div>August 19, 2026</div></div><div class="two"><div class="f"><label>From</label><div>Mateo</div></div><div class="f"><label>For</label><div>Lucía</div></div></div><div class="f"><label>Kind</label><div><span>Father’s blessing</span><span class="lnk">Handbook 18.14</span></div></div><div class="f"><label>Whose is it?</label></div><div class="opt"><i></i>For me</div><div class="opt on"><i></i>Keeping for a child</div><div class="chips"><span class="on">Lucía</span><span>Tomás</span><span>Add a child</span></div><div class="opt"><i></i>Passing it along</div></div><span class="cta">Save to Lucía’s sky</span></div><figcaption>Saving. “Keeping for a child” sits between “For me” and “Passing it along.”</figcaption></figure>
+
+<figure class="phone"><div class="scr"><div class="top"><span>Close</span></div><div class="pg"><h3>Skies</h3><p class="sub">Yours, and the ones you are keeping.</p><div style="margin-top:14px;border-top:1px solid rgba(138,147,196,.3)">
+<div class="sky on"><svg width="40" height="40" viewBox="0 0 40 40" fill="#FFF8E6"><circle cx="6" cy="9" r="1.3"/><circle cx="14" cy="5" r="1"/><circle cx="22" cy="10" r="1.4"/><circle cx="31" cy="6" r="1"/><circle cx="35" cy="14" r="1.2"/><circle cx="9" cy="18" r="1"/><circle cx="18" cy="20" r="1.5"/><circle cx="27" cy="19" r="1"/><circle cx="34" cy="25" r="1.2"/><circle cx="5" cy="28" r="1.2"/><circle cx="13" cy="32" r="1"/><circle cx="22" cy="30" r="1.3"/><circle cx="30" cy="34" r="1"/><circle cx="20" cy="37" r="1"/></svg><div><h4>For me</h4><p>14 blessings since 2019</p></div></div>
+<div class="sky"><svg width="40" height="40" viewBox="0 0 40 40" fill="#FFF8E6"><circle cx="9" cy="10" r="1.4"/><circle cx="24" cy="7" r="1.1"/><circle cx="31" cy="18" r="1.4"/><circle cx="15" cy="24" r="1.1"/><circle cx="25" cy="33" r="1.4"/></svg><div><h4>Lucía</h4><p>Age 6. 5 blessings, kept by you</p></div></div>
+<div class="sky"><svg width="40" height="40" viewBox="0 0 40 40" fill="#FFF8E6"><circle cx="14" cy="14" r="1.4"/><circle cx="27" cy="26" r="1.3"/></svg><div><h4>Tomás</h4><p>Age 2. 2 blessings, kept by you</p></div></div>
+<div class="sky"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#8A93C4"><circle cx="20" cy="20" r="9"/><path d="M20 15v10M15 20h10"/></svg><div><h4>Add a child</h4><p>A name is all it needs</p></div></div>
+<div class="sky"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#8A93C4"><path d="M8 26C16 12 26 12 33 15"/><circle cx="33" cy="15" r="1.6" fill="#FFF8E6" stroke="none"/></svg><div><h4>Passing along</h4><p>1 blessing waiting to be sent</p></div></div>
+</div></div></div><figcaption>Tapping the title opens every sky on this phone. The dots are the real count.</figcaption></figure>
+</div>
+
+<div class="row">
+<figure class="phone"><div class="scr"><div class="top"><span>Skies</span><span class="gold">Give to Lucía</span></div><div class="tl-head"><h3>Lucía</h3><p class="sub">Kept by you since she was born</p></div>
+<svg class="chart" viewBox="0 0 268 400" fill="none" aria-hidden="true"><g stroke="#8A93C4" stroke-width="1" opacity=".55"><path d="M22 0V367"/><path d="M22 31h9M22 87h9M22 143h9M22 199h9M22 255h9M22 311h9M22 367h9M22 59h4M22 115h4M22 171h4M22 227h4M22 283h4M22 339h4"/></g><g fill="#8A93C4" font-family="Spectral,serif" font-size="10" font-style="italic"><text x="36" y="34">6</text><text x="36" y="90">5</text><text x="36" y="146">4</text><text x="36" y="202">3</text><text x="36" y="258">2</text><text x="36" y="314">1</text><text x="36" y="371">born</text></g><path d="M92 0C92 8 94 14 92 20C86 40 70 56 72 76C74 104 102 120 100 148C98 184 74 212 76 249C78 290 96 324 94 361L94 367" stroke="#CDAA63" stroke-width="1" opacity=".7"/><circle cx="94" cy="367" r="3.4" stroke="#CDAA63" opacity=".8"/><g fill="#FFF8E6"><circle cx="92" cy="20" r="3.2"/><circle cx="72" cy="76" r="2.4"/><circle cx="100" cy="148" r="2.4"/><circle cx="76" cy="249" r="2.4"/><circle cx="94" cy="356" r="2.4"/></g><circle cx="92" cy="20" r="9" fill="#CDAA63" opacity=".28"/></svg>
+<div class="it" style="top:124px"><time>Age 6</time><h4>First day of school</h4></div><div class="it" style="top:180px"><time>Age 5</time><h4>Before the ear surgery</h4></div><div class="it" style="top:252px"><time>Age 3</time><h4>When Tomás was born</h4></div><div class="it" style="top:353px"><time>Age 2</time><h4>The night of the fever</h4></div><div class="it" style="top:458px"><time>One month old</time><h4>Named and blessed</h4></div>
+<div class="nav"><span class="on">Lucía</span><span class="rec"><i></i></span><span>History</span></div></div><figcaption>A child’s sky. The ruler counts her age, and the first light is the day she was named.</figcaption></figure>
+
+<figure class="phone"><div class="scr"><div class="top"><span>Back</span></div><div class="pg"><svg width="224" height="56" viewBox="0 0 224 56" fill="none" aria-hidden="true"><path d="M6 44C40 50 60 14 96 22S150 46 218 10" stroke="#CDAA63" opacity=".7"/><g fill="#FFF8E6"><circle cx="14" cy="45" r="2.2"/><circle cx="62" cy="31" r="2.2"/><circle cx="104" cy="23" r="2.2"/><circle cx="158" cy="34" r="2.2"/><circle cx="212" cy="13" r="3"/></g><circle cx="212" cy="13" r="8" fill="#CDAA63" opacity=".28"/></svg><h3 style="margin-top:10px">Give Lucía her sky</h3><p class="sub">5 blessings, from the day she was named to this year. They open in her app as her own.</p><div class="f"><label>What to give</label></div><div class="opt on"><i></i>All 5 blessings</div><div class="opt"><i></i>Choose which ones</div><div class="f"><label>How</label></div><div class="opt on"><i></i>AirDrop or a file</div><div class="opt"><i></i>A private link</div><div class="keep"><span>Keep my copy<small>You can remove yours later.</small></span><i class="tog"></i></div></div><span class="cta">Give to Lucía</span></div><figcaption>Handing over. All at once or a few at a time, and the parent chooses whether to keep a copy.</figcaption></figure>
+
+<figure class="phone"><div class="scr"><svg style="position:absolute;left:0;top:40px" width="268" height="250" viewBox="0 0 268 250" fill="none" aria-hidden="true"><path d="M150 0C150 20 120 40 124 70S176 110 170 146S112 186 118 216L118 236" stroke="#CDAA63" opacity=".6"/><g fill="#CDAA63" opacity=".22"><circle cx="150" cy="14" r="10"/><circle cx="124" cy="70" r="10"/><circle cx="172" cy="130" r="10"/><circle cx="130" cy="186" r="10"/><circle cx="118" cy="232" r="10"/></g><g fill="#FFF8E6"><circle cx="150" cy="14" r="2.8"/><circle cx="124" cy="70" r="2.8"/><circle cx="172" cy="130" r="2.8"/><circle cx="130" cy="186" r="2.8"/><circle cx="118" cy="232" r="2.8"/></g></svg><div class="arrive"><h3>Lucía, these were kept for you</h3><p>5 blessings given to you since you were one month old. Emma wrote them down and saved them until now.</p></div><span class="cta">Add them to my sky</span></div><figcaption>On the child’s phone. Every light arrives with its original date.</figcaption></figure>
+</div>
+</main>
+</body>
+</html>
