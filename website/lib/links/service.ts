@@ -29,7 +29,6 @@ export const LIMITS = {
    * times, and creating is already capped per day by dayLinks.
    */
   readAll: [Number(process.env.LINKS_READS_PER_MINUTE ?? 3000), 60 * 1000] as const,
-  stopAll: [Number(process.env.LINKS_STOPS_PER_MINUTE ?? 600), 60 * 1000] as const,
   createAll: [Number(process.env.LINKS_CREATES_PER_MINUTE ?? 120), 60 * 1000] as const,
 };
 
@@ -46,9 +45,9 @@ export type Answer = { status: number; headers?: Record<string, string>; json?: 
  * sender who has gone longest without a request is dropped to make room: nobody is ever refused
  * because the table is full, and no request does more than a fixed, small amount of work (there is
  * no sweep). The cost is that under a flood from more than `maxClients` addresses a sender's count
- * can be forgotten early. What still holds then are the ceilings for everyone together, which no
- * number of addresses can raise: LIMITS.readAll, stopAll and createAll per minute, and the daily
- * budget (LIMITS.dayLinks, LIMITS.dayBytes). This is a deliberate trade: a full table that
+ * can be forgotten early. What still holds then are the ceilings newcomers share, which no
+ * number of addresses can raise (LIMITS.readAll and createAll per minute; see takeWithCeiling),
+ * and the daily budget (LIMITS.dayLinks, LIMITS.dayBytes). This is a deliberate trade: a full table that
  * refused unknown senders would let a flood lock honest people out, which is worse here than a
  * flood being held only by the shared ceilings.
  */
@@ -73,6 +72,24 @@ export class Limiter {
     if (w.count >= max) return Math.max(1, Math.ceil((w.ends - now) / 1000));
     w.count++;
     return 0;
+  }
+
+  /** Whether `client` is being counted for `what` right now (has a window that has not ended). */
+  knows(what: string, client: string, now: number): boolean {
+    const w = this.tables.get(what)?.get(client);
+    return w !== undefined && w.ends > now;
+  }
+
+  /**
+   * Take one from `client`'s own allowance; and if the limiter was not already counting them,
+   * one from the allowance all newcomers share. A sender who is already being counted is held
+   * only by their own limit, so a flood of new addresses cannot use up what honest people in the
+   * middle of something need. A flood is held by the shared allowance, because every address in
+   * it is a newcomer, the first time and again each time it is dropped from a full table.
+   */
+  takeWithCeiling(what: string, client: string, own: readonly [number, number], shared: readonly [number, number], now: number): number {
+    const newcomer = !this.knows(what, client, now);
+    return this.take(what, client, own, now) || (newcomer ? this.take(`${what}-all`, EVERYONE, shared, now) : 0);
   }
 
   /** How many senders are being counted for `what` (for tests). */
@@ -101,9 +118,8 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
   if (input.body.length < LIMITS.minBytes) return refuse(400, "too_small");
   if (input.body[0] !== LIMITS.version) return refuse(400, "version");
   const wait =
-    deps.limiter.take("create", input.client, LIMITS.create, now) ||
-    deps.limiter.take("create-day", input.client, LIMITS.createDay, now) ||
-    deps.limiter.take("create-all", EVERYONE, LIMITS.createAll, now);
+    deps.limiter.takeWithCeiling("create", input.client, LIMITS.create, LIMITS.createAll, now) ||
+    deps.limiter.take("create-day", input.client, LIMITS.createDay, now);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
 
@@ -130,7 +146,7 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
 export async function read(deps: Deps, input: { id: string; client: string }): Promise<Answer> {
   const now = deps.now();
   if (!ID.test(input.id)) return refuse(404, "not_found");
-  const wait = deps.limiter.take("read", input.client, LIMITS.read, now) || deps.limiter.take("read-all", EVERYONE, LIMITS.readAll, now);
+  const wait = deps.limiter.takeWithCeiling("read", input.client, LIMITS.read, LIMITS.readAll, now);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
   const copy = await deps.store.get(input.id);
@@ -146,10 +162,13 @@ export async function read(deps: Deps, input: { id: string; client: string }): P
 export async function stop(deps: Deps, input: { id: string; authorization: string | null; client: string }): Promise<Answer> {
   const now = deps.now();
   if (!ID.test(input.id)) return refuse(404, "not_found");
-  const wait = deps.limiter.take("stop", input.client, LIMITS.stop, now) || deps.limiter.take("stop-all", EVERYONE, LIMITS.stopAll, now);
-  if (wait) return slow(wait);
+  // The token's shape is checked before anything is counted, so a request with no usable token
+  // costs nothing. Stopping has no ceiling for everyone together: it can only erase a copy, it
+  // needs that copy's own 256-bit token, and a sender must always be able to stop their link.
   const token = /^Bearer ([^\s]+)$/.exec(input.authorization ?? "")?.[1];
   if (!token || !TOKEN.test(token)) return refuse(401, "no_token", { "WWW-Authenticate": "Bearer" });
+  const wait = deps.limiter.take("stop", input.client, LIMITS.stop, now);
+  if (wait) return slow(wait);
   if (!deps.store) return unavailable();
   const copy = await deps.store.get(input.id);
   if (!copy || copy.expires <= now) {

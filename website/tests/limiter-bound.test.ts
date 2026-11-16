@@ -67,3 +67,23 @@ test("the ceilings for everyone hold however many senders there are", async () =
   }
   assert.equal(slowed, 50);
 });
+
+test("a sender already being counted is not refused when newcomers have used up the shared allowance", async () => {
+  const { read, LIMITS } = await import("../lib/links/service.ts");
+  const limiter = new Limiter();
+  const deps = { store: null, limiter, now: () => 0 };
+  const id = "A".repeat(22);
+  assert.notEqual((await read(deps, { id, client: "honest" })).status, 429);
+  for (let i = 0; i < LIMITS.readAll[0] + 10; i++) await read(deps, { id, client: `flood${i}` });
+  assert.equal((await read(deps, { id, client: "one more newcomer" })).status, 429);
+  assert.notEqual((await read(deps, { id, client: "honest" })).status, 429);
+});
+
+test("a stop request with no usable token is refused before anything is counted", async () => {
+  const { stop, LIMITS } = await import("../lib/links/service.ts");
+  const limiter = new Limiter();
+  const deps = { store: null, limiter, now: () => 0 };
+  const id = "A".repeat(22);
+  for (let i = 0; i < LIMITS.stop[0] + 20; i++) assert.equal((await stop(deps, { id, authorization: null, client: "x" })).status, 401);
+  assert.equal(limiter.size("stop"), 0);
+});
