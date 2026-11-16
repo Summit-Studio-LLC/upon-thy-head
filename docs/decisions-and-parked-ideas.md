@@ -144,6 +144,14 @@ Sources:
 - whisper.cpp: https://github.com/ggml-org/whisper.cpp (Core ML, Neural Engine >3× encoder speed-up, first-run compile); Core ML on iOS 15 https://www.mintlify.com/mybigday/whisper.rn/platform-guides/ios ; iPhone figures https://jvoltci.github.io/mosaic/edge-ai/multimodal/whisper-cpp
 - Whisper licence and turbo: https://github.com/openai/whisper ; https://superlinked.com/models/openai-whisper-large-v3-turbo.md ; Spanish scores https://huggingface.co/adriszmar/whisper-large-v3-turbo-es and https://huggingface-proxy.pages.dev/surus-ai/whisper-large-v3-turbo-latam
 
+## Before the link goes live (found by the security reviews of the website, 2026-11-16)
+
+- Add proof that a request to make a link comes from the real app (Apple's App Attest, Google's Play Integrity). Without it the service is open to anyone on the internet, held only by rate limits and a daily budget.
+- Add a Vercel Firewall rate-limit rule on `POST /api/b` and `GET /api/b/*`, and set `CRON_SECRET`.
+- Accepted trade in the limiter (`website/lib/links/service.ts`): during a flood from very many addresses, someone opening or making a link for the first time may be told to wait. People already being counted are not affected, and a sender can always stop a link.
+- Test on a real iPhone that a link opened into the app arrives with its key (the part after `#`). The feature rests on it.
+- If someone took over the server they could change the receiver's page to read blessings opened in a browser from then on (not stored copies, not ones opened in the app). Noah has been told; no ruling yet.
+
 ## Open questions for Noah
 
 1. (Answered: Noah's iPhone, from 2026-11-16. Still untested until then: the new engine, Spanish, background recording, a real call, a real voice.)
