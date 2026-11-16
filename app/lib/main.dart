@@ -23,7 +23,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // the app's words follow the phone's first language (iOS restarts the app when it changes)
   Strings.use(UiLanguage.forLocales(WidgetsBinding.instance.platformDispatcher.locales));
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  // iPhone stays upright and iPad turns freely: Info.plist says which, per device (ruled 2026-11-16).
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
   runApp(UponThyHeadApp(store: await openAppStore(seed: seedSamplesFlag, dense: seedSamples == 'dense')));
 }

@@ -1,0 +1,583 @@
+import 'dart:async';
+
+import 'package:flutter/semantics.dart';
+import 'package:flutter/widgets.dart';
+
+import '../data/blessing.dart';
+import '../record/session.dart';
+import '../strings.dart';
+import '../theme.dart';
+import '../widgets/buttons.dart';
+import '../widgets/icons.dart';
+import '../widgets/scrims.dart';
+import 'first_run.dart';
+
+/// The first run's screens, drawn over the sky (design/onboarding/). The sky itself (its rising,
+/// the ring's sweep, the dimming between screens) is moved by the home screen.
+
+/// The widest the words run on a wide screen (iPad): the column stays a comfortable reading width.
+const double firstRunColumn = 460;
+
+/// The words of a first-run screen, from the bottom up so they grow upward at large text sizes,
+/// in one column of comfortable width; scrolls only if they no longer fit.
+class FirstRunFrame extends StatelessWidget {
+  const FirstRunFrame({super.key, required this.palette, required this.child, this.scrim = true});
+  final Palette palette;
+  final Widget child;
+  final bool scrim;
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return Stack(children: [
+      if (scrim) Positioned(left: 0, right: 0, bottom: 0, height: 460, child: BottomScrim(palette: palette)),
+      Positioned.fill(
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(28, mq.viewPadding.top + 24, 28, 42 + mq.viewPadding.bottom * .5),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: firstRunColumn), child: child),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// Arrives after [delay]: fades in and rises a little (only fades in with Reduce Motion).
+class Arrive extends StatefulWidget {
+  const Arrive({super.key, required this.delay, required this.child, this.rise = 10, this.duration = const Duration(milliseconds: 900)});
+  final Duration delay, duration;
+  final double rise;
+  final Widget child;
+
+  @override
+  State<Arrive> createState() => _ArriveState();
+}
+
+class _ArriveState extends State<Arrive> {
+  bool _on = false;
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer(widget.delay, () {
+      if (mounted) setState(() => _on = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.of(context).disableAnimations;
+    return AnimatedOpacity(
+      opacity: _on ? 1 : 0,
+      duration: widget.duration,
+      curve: easeOut,
+      child: AnimatedSlide(
+        offset: Offset(0, _on || still ? 0 : widget.rise / 100),
+        duration: widget.duration,
+        curve: easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// ---- 1 the opening ----
+
+/// The name, arriving once the ring has crossed the sky. A tap anywhere moves on.
+class OpeningLayer extends StatelessWidget {
+  const OpeningLayer({super.key, required this.palette, required this.onTap});
+  final Palette palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.of(context).disableAnimations;
+    return Semantics(
+      key: const Key('opening'),
+      button: true,
+      label: Strings.appName,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Align(
+          alignment: const Alignment(0, .133),
+          child: Arrive(
+            delay: Duration(milliseconds: still ? 600 : 2300),
+            duration: Duration(milliseconds: still ? 1000 : 800),
+            rise: 15,
+            child: Text(Strings.appName, style: serif(40, 46, palette.ink, tracking: -.01), textAlign: TextAlign.center),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---- 2 the welcome ----
+
+class WelcomeLayer extends StatelessWidget {
+  const WelcomeLayer({super.key, required this.palette, required this.onContinue});
+  final Palette palette;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final still = MediaQuery.of(context).disableAnimations;
+    Duration at(int ms) => Duration(milliseconds: still ? 200 : ms);
+    final line = serif(25, 31, p.ink, tracking: -.008);
+    return FirstRunFrame(
+      key: const Key('welcome'),
+      palette: p,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Arrive(delay: at(500), child: Text(Strings.welcome1, style: line)),
+          const SizedBox(height: 18),
+          Arrive(delay: at(1500), child: Text(Strings.welcome2, style: line)),
+          const SizedBox(height: 18),
+          Arrive(delay: at(2500), child: Text(Strings.welcome3, style: line)),
+          const SizedBox(height: 28),
+          Arrive(delay: at(3300), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
+          const SizedBox(height: 36),
+          Arrive(
+            delay: at(3700),
+            child: PillBtn(key: const Key('welcome-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- 3 the permissions ----
+
+class PermissionsLayer extends StatelessWidget {
+  const PermissionsLayer({super.key, required this.palette, required this.state, required this.onContinue});
+  final Palette palette;
+  final FirstRunPermissions state;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) {
+        final asking = state.asking;
+        return FirstRunFrame(
+          key: const Key('permissions'),
+          palette: p,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(header: true, child: Text(Strings.permsTitle, style: serif(30, 34.5, p.ink, tracking: -.012))),
+              const SizedBox(height: 10),
+              Text(Strings.permsLede, style: sans(17, 25, p.ink2)),
+              const SizedBox(height: 26),
+              for (final r in state.rows)
+                AnimatedOpacity(
+                  // while a question is up, its row is the lit one
+                  opacity: asking == null || asking == r.kind ? 1 : .32,
+                  duration: const Duration(milliseconds: 350),
+                  curve: easeOut,
+                  child: PermissionRowView(key: Key('row-${r.kind.name}'), palette: p, row: r),
+                ),
+              const SizedBox(height: 22),
+              AnimatedOpacity(
+                opacity: state.running ? .35 : 1,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  ignoring: state.running || !state.loaded,
+                  child: PillBtn(key: const Key('permissions-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PermissionRowView extends StatelessWidget {
+  const PermissionRowView({super.key, required this.palette, required this.row});
+  final Palette palette;
+  final PermissionRow row;
+
+  static const iconSize = 22.0;
+
+  /// Decorative: the row's label already names it, so VoiceOver never reads the icon.
+  Glyph get glyph => switch (row.kind) {
+        PermissionKind.microphone => Glyph.microphone,
+        PermissionKind.speech => Glyph.writing,
+        PermissionKind.location => Glyph.location,
+        PermissionKind.lock => row.title == 'Face ID' ? Glyph.faceId : Glyph.lock,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final lit = row.status == RowStatus.asking;
+    return Semantics(
+      container: true,
+      label: row.semantics,
+      excludeSemantics: true,
+      liveRegion: lit,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // the icon keeps its size at every text size, centred on the title's first line
+            Transform.translate(
+              // (may be a point above the row's top at the normal size, where the line is 20 and the icon 22)
+              offset: Offset(0, ((MediaQuery.textScalerOf(context).scale(15) * 20 / 15) - iconSize) / 2),
+              child: SizedBox.square(
+                dimension: iconSize,
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: lit ? p.light : p.ink2),
+                  duration: const Duration(milliseconds: 300),
+                  builder: (_, c, _) => GlyphIcon(glyph, color: c ?? p.ink2),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(row.title, style: sans(15, 20, lit ? p.light : p.ink, weight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Text(row.line, key: ValueKey(row.line), style: sans(15, 21, row.status == RowStatus.off ? p.ink : p.ink2)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 18,
+              height: 20,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: switch (row.status) {
+                  RowStatus.allowed => CustomPaint(key: const Key('mark-allowed'), painter: _Check(p.light.withValues(alpha: .85))),
+                  RowStatus.asking => Center(
+                      key: const Key('mark-asking'),
+                      child: Container(width: 7, height: 7, decoration: BoxDecoration(color: p.light, shape: BoxShape.circle)),
+                    ),
+                  _ => const SizedBox.shrink(),
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The small quiet mark for an allowed row.
+class _Check extends CustomPainter {
+  _Check(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final c = Offset(size.width / 2, size.height / 2);
+    canvas.drawPath(
+      Path()
+        ..moveTo(c.dx - 5, c.dy)
+        ..lineTo(c.dx - 1.5, c.dy + 3.5)
+        ..lineTo(c.dx + 5.5, c.dy - 4),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_Check old) => old.color != color;
+}
+
+// ---- 4b the rehearsal ----
+
+class RehearsalAskLayer extends StatelessWidget {
+  const RehearsalAskLayer({super.key, required this.palette, required this.onTry, required this.onNotNow});
+  final Palette palette;
+  final VoidCallback onTry, onNotNow;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return FirstRunFrame(
+      key: const Key('rehearsal'),
+      palette: p,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(header: true, child: Text(Strings.tryTitle, style: serif(30, 34.5, p.ink, tracking: -.012))),
+          const SizedBox(height: 10),
+          Text(Strings.tryBody, style: sans(17, 25, p.ink2)),
+          const SizedBox(height: 36),
+          PillBtn(key: const Key('try-it'), label: Strings.tryIt, palette: p, kind: PillKind.primary, onTap: onTry),
+          const SizedBox(height: 8),
+          PillBtn(key: const Key('try-not-now'), label: Strings.notNow, palette: p, kind: PillKind.quiet, onTap: onNotNow),
+        ],
+      ),
+    );
+  }
+}
+
+/// After the practice's Amen: what the phone wrote, and that nothing was kept.
+class PracticeResultLayer extends StatefulWidget {
+  const PracticeResultLayer({super.key, required this.palette, required this.session, required this.onContinue});
+  final Palette palette;
+  final RecordSession session;
+  final VoidCallback onContinue;
+
+  @override
+  State<PracticeResultLayer> createState() => _PracticeResultLayerState();
+}
+
+class _PracticeResultLayerState extends State<PracticeResultLayer> {
+  WordsState? _told;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return ListenableBuilder(
+      listenable: widget.session,
+      builder: (context, _) {
+        final s = widget.session;
+        final state = s.wordsState;
+        final words = s.words.trim();
+        final String? plain = switch (state) {
+          WordsState.none || WordsState.writing => Strings.practiceWriting,
+          WordsState.unavailable => Strings.practiceUnavailable,
+          WordsState.failed => Strings.practiceFailed,
+          WordsState.done => words.isEmpty ? Strings.practiceSilent : null,
+        };
+        final settled = state != WordsState.writing && state != WordsState.none;
+        if (settled && _told != state) {
+          _told = state;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final said = plain ?? '${Strings.phoneWrote}: $words';
+            SemanticsService.sendAnnouncement(View.of(context), '$said ${Strings.practiceKept}', TextDirection.ltr);
+          });
+        }
+        return FirstRunFrame(
+          key: const Key('practice-result'),
+          palette: p,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(Strings.phoneWrote, style: sans(13, 18, p.ink3)),
+              const SizedBox(height: 10),
+              if (plain == null)
+                Container(
+                  key: const Key('practice-words'),
+                  padding: const EdgeInsets.only(left: 16),
+                  decoration: BoxDecoration(border: Border(left: BorderSide(color: p.light.withValues(alpha: .5), width: 2))),
+                  child: Text(words, style: serif(22, 32, p.ink)),
+                )
+              else
+                Text(plain, key: const Key('practice-plain'), style: serif(22, 30, state == WordsState.writing ? p.ink2 : p.ink)),
+              const SizedBox(height: 18),
+              Text(Strings.practiceKept, style: sans(15, 21, p.ink2)),
+              const SizedBox(height: 36),
+              AnimatedOpacity(
+                opacity: settled ? 1 : .35,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  ignoring: !settled,
+                  child: PillBtn(key: const Key('practice-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: widget.onContinue),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ---- opened from a blessing file ----
+
+/// "A blessing has been shared with you." and Continue.
+class SharedLineLayer extends StatelessWidget {
+  const SharedLineLayer({super.key, required this.palette, required this.onContinue});
+  final Palette palette;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return FirstRunFrame(
+      key: const Key('shared-line'),
+      palette: p,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Arrive(delay: Duration.zero, child: Text(Strings.sharedWithYou, style: serif(30, 34.5, p.ink, tracking: -.012))),
+          const SizedBox(height: 36),
+          Arrive(
+            delay: const Duration(milliseconds: 500),
+            child: PillBtn(key: const Key('shared-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Read first": the blessing that was sent, to read before anything is kept, with Keep and Not
+/// now at the foot. Nothing here is dismissed by a stray tap: only the two buttons answer.
+class SharedPreviewLayer extends StatelessWidget {
+  const SharedPreviewLayer({super.key, required this.palette, required this.blessing, required this.onKeep, required this.onNotNow, this.busy = false});
+  final Palette palette;
+  final Blessing? blessing;
+  final VoidCallback onKeep, onNotNow;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final b = blessing;
+    if (b == null) return const SizedBox.shrink();
+    final mq = MediaQuery.of(context);
+    final title = Strings.isUntitled(b.title) ? Strings.untitled : b.title;
+    final paragraphs = b.words.split(RegExp(r'\n\s*\n')).map((x) => x.trim()).where((x) => x.isNotEmpty).toList();
+    final foot = Container(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + mq.viewPadding.bottom * .6),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: firstRunColumn),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(Strings.receiveAsk, style: sans(15, 21, p.ink)),
+            const SizedBox(height: 14),
+            IgnorePointer(
+              ignoring: busy,
+              child: Row(children: [
+                Expanded(
+                  child: PillBtn(key: const Key('preview-not-now'), label: Strings.notNow, palette: p, kind: PillKind.tonal, height: 48, fontSize: 16, onTap: onNotNow),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: PillBtn(key: const Key('preview-keep'), label: Strings.receiveKeep, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: onKeep),
+                ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+    return Stack(key: const Key('shared-preview'), children: [
+      Positioned.fill(child: ColoredBox(color: p.ground.withValues(alpha: .55))),
+      Positioned.fill(
+        child: Column(children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(24, mq.viewPadding.top + 40, 24, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(b.longDate, style: sans(13, 18, p.ink2, tracking: .005)),
+                    const SizedBox(height: 6),
+                    Semantics(header: true, child: Text(title, key: const Key('preview-title'), style: serif(30, 34.5, p.ink, tracking: -.012))),
+                    if (b.from.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(Strings.from(b.from), style: serif(18, 26, p.light, italic: true)),
+                    ],
+                    const SizedBox(height: 24),
+                    for (final para in paragraphs) ...[
+                      Text(para, style: serif(19, 29, p.ink)),
+                      const SizedBox(height: 14),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          foot,
+        ]),
+      ),
+    ]);
+  }
+}
+
+/// A first-run screen fading in when it is first built and out when [on] goes false (the home
+/// screen keeps it built for the fade out, then drops it).
+class FirstRunFade extends StatefulWidget {
+  const FirstRunFade({super.key, required this.on, required this.child, this.inDuration = const Duration(milliseconds: 700)});
+  final bool on;
+  final Widget child;
+  final Duration inDuration;
+
+  @override
+  State<FirstRunFade> createState() => _FirstRunFadeState();
+}
+
+class _FirstRunFadeState extends State<FirstRunFade> {
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _shown = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.on && _shown;
+    return IgnorePointer(
+      ignoring: !widget.on,
+      child: ExcludeSemantics(
+        excluding: !widget.on,
+        child: AnimatedOpacity(
+          opacity: on ? 1 : 0,
+          duration: on ? widget.inDuration : const Duration(milliseconds: 450),
+          curve: easeOut,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}

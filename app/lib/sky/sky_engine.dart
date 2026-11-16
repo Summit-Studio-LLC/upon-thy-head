@@ -18,7 +18,12 @@ class SkyView {
     required this.lights,
     required this.solo,
     required this.names,
+    this.ring = 0,
   });
+
+  /// The overhead circle alone, without the star names (the first run's opening): its strength
+  /// is the larger of this and [names].
+  final double ring;
 
   /// Field of view in degrees, top to bottom.
   final double fov;
@@ -41,6 +46,16 @@ class SkyView {
   static const review = SkyView(fov: 58, cy: .7, exp: .5, st: .5, orb: 0, lights: 1, solo: 1, names: 0);
   /// Settings: the home sky where it is, dimmed, with no lights, ring or names.
   static const settings = SkyView(fov: 90, cy: .2, exp: .45, st: .55, orb: 0, lights: 0, solo: 0, names: 0);
+
+  // ---- the first run (design/onboarding/): the ring and the sky, no lights, no names ----
+  /// Before the opening: black.
+  static const black = SkyView(fov: 80, cy: .15, exp: 0, st: 0, orb: 0, lights: 0, solo: 0, names: 0);
+  /// The opening: the sky risen, the ring across it.
+  static const opening = SkyView(fov: 80, cy: .15, exp: 1, st: 1, orb: 0, lights: 0, solo: 0, names: 0, ring: 1.1);
+  /// The welcome, and the practice's result: the same sky, dimmer.
+  static const welcome = SkyView(fov: 80, cy: .32, exp: .5, st: .7, orb: 0, lights: 0, solo: 0, names: 0, ring: .7);
+  /// The permissions screen and the rehearsal's question: dimmer still.
+  static const dim = SkyView(fov: 84, cy: .3, exp: .38, st: .6, orb: 0, lights: 0, solo: 0, names: 0, ring: .5);
 }
 
 class _Glide {
@@ -95,7 +110,18 @@ class SkyEngine extends ChangeNotifier {
 
   // Camera, eased every frame toward the goal.
   double ra = 0, dec = 0;
-  double fov = 90, cy = .2, exp = 1, st = 1, orb = 0, lights = 1, solo = 0, names = 1;
+  double fov = 90, cy = .2, exp = 1, st = 1, orb = 0, lights = 1, solo = 0, names = 1, ring = 0;
+
+  /// The overhead circle is drawn from the left edge across to the right, over [lineFor] seconds
+  /// from [lineFrom] (the opening's sweep); 0 draws it whole.
+  double lineFrom = 0, lineFor = 0;
+
+  /// How far across the screen the circle is drawn now, 0 to 1.
+  double get lineReveal {
+    if (lineFor <= 0 || reduceMotion) return 1;
+    final u = ((clock - lineFrom) / lineFor).clamp(0.0, 1.0);
+    return u < .5 ? 4 * u * u * u : 1 - math.pow(-2 * u + 2, 3) / 2;
+  }
   SkyView _goal = SkyView.home;
   double _goalFov = 90;
   double _bump = 0;
@@ -132,6 +158,7 @@ class SkyEngine extends ChangeNotifier {
     lights = _goal.lights;
     solo = _goal.solo;
     names = _goal.names;
+    ring = _goal.ring;
     if (blessings.isNotEmpty) {
       final b = blessings[_focus];
       ra = b.ra;
@@ -346,6 +373,7 @@ class SkyEngine extends ChangeNotifier {
     lights += (_goal.lights - lights) * k;
     solo += (_goal.solo - solo) * k;
     names += (_goal.names - names) * k;
+    ring += (_goal.ring - ring) * k;
 
     final g = _glide;
     if (g != null) {

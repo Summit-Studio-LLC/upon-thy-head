@@ -41,6 +41,25 @@ enum SpeechChannel {
       result(permissions())
     case "requestPermissions":
       requestPermissions { result(permissions()) }
+    case "requestMicrophone":
+      // the first run asks each on its own, so its row can light while the question is up
+      guard AVAudioApplication.shared.recordPermission == .undetermined else { return result(permissions()) }
+      LockChannel.systemPrompt += 1
+      AVAudioApplication.requestRecordPermission { _ in
+        DispatchQueue.main.async {
+          LockChannel.systemPrompt = max(0, LockChannel.systemPrompt - 1)
+          result(permissions())
+        }
+      }
+    case "requestSpeech":
+      guard SFSpeechRecognizer.authorizationStatus() == .notDetermined else { return result(permissions()) }
+      LockChannel.systemPrompt += 1
+      SFSpeechRecognizer.requestAuthorization { _ in
+        DispatchQueue.main.async {
+          LockChannel.systemPrompt = max(0, LockChannel.systemPrompt - 1)
+          result(permissions())
+        }
+      }
     case "openSettings":
       if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
       result(nil)

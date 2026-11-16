@@ -36,6 +36,7 @@ class RecordSession extends ChangeNotifier {
     this.transcriber = const SilentTranscriber(),
     this.audioDir = '',
     this.language = SpeechLanguage.english,
+    this.practice = false,
   }) : recorder = recorder ?? SilentRecorder();
 
   /// Seconds after Begin in which the ring discards instead of finishing.
@@ -52,6 +53,11 @@ class RecordSession extends ChangeNotifier {
 
   final Recorder recorder;
   final Transcriber transcriber;
+
+  /// The first run's rehearsal: the ring is Amen from the start, no recording note is written (so
+  /// nothing is ever rebuilt from it), and the audio goes to a folder of its own that is emptied
+  /// as soon as the words are shown (onboarding/first_run.dart).
+  final bool practice;
 
   /// The folder recordings are written to (see data/audio.dart).
   String audioDir;
@@ -85,7 +91,7 @@ class RecordSession extends ChangeNotifier {
   double get elapsed => _clock.elapsedMicroseconds / 1e6;
 
   /// Past the first ten seconds: the ring now finishes.
-  bool get amen => live && elapsed >= window;
+  bool get amen => live && (practice || elapsed >= window);
 
   /// The new blessing this recording becomes.
   Blessing? draft;
@@ -126,6 +132,14 @@ class RecordSession extends ChangeNotifier {
     KeepAwake.set(true);
     notifyListeners();
     _pausedSub ??= recorder.paused.listen(_onPaused);
+    if (practice) {
+      try {
+        await recorder.start(_path);
+      } catch (e) {
+        debugPrint('record: could not start the practice: $e');
+      }
+      return;
+    }
     // from this moment the blessing exists: if the app is closed before Amen, the next launch
     // rebuilds it from this note and the audio beside it (see recovery.dart)
     final d = draft!;

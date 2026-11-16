@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../data/blessing.dart';
+import '../place/where.dart';
 import '../polish/change.dart';
 import '../sky/astro.dart';
 import '../strings.dart';
@@ -11,9 +12,10 @@ import '../strings.dart';
 ///
 /// It carries exactly what the receiver needs to read what the sender reads, and to open the
 /// changes screen and restore the spoken words: id, title, the minute it was given and its clock
-/// offset, the giver, the recipient, tags, the language, the spoken words, and polish's changes
-/// with which are kept. Never the audio, the place, the first transcript, or anything about the
-/// sender's phone.
+/// offset, the giver, the recipient, tags, the language, the spoken words, polish's changes
+/// with which are kept, and the place it was given, rounded to a tenth of a degree as the app keeps
+/// it (optional; files made before 2026-11-16 have none). Never the audio, the first transcript,
+/// or anything about the sender's phone.
 ///
 /// Reading is strict, because a file is something a stranger could have made: a size limit, every
 /// field checked and length-limited, unknown fields ignored. Nothing in it is ever run or fetched;
@@ -55,6 +57,7 @@ class BlessingRecord {
     this.language = '',
     required this.spoken,
     this.changes = const [],
+    this.place,
   });
 
   /// What [b] shares: the words as spoken and its changes as they stand, so the receiver's reading
@@ -70,6 +73,7 @@ class BlessingRecord {
         language: b.language,
         spoken: b.rawText,
         changes: [for (final c in [...b.changes]..sort((x, y) => x.start.compareTo(y.start))) c.copy()],
+        place: roughly(b.place.lat, b.place.lon),
       );
 
   final String id, title, from, recipient, language, spoken;
@@ -79,6 +83,9 @@ class BlessingRecord {
   final Duration utcOffset;
   final List<String> tags;
   final List<Change> changes;
+
+  /// Where it was given, to a tenth of a degree; null in a file made before the place was carried.
+  final Place? place;
 
   /// The JSON object, keys in a fixed order (the same blessing always gives the same bytes).
   Map<String, Object> toJson() => {
@@ -96,6 +103,7 @@ class BlessingRecord {
         'changes': [
           for (final c in changes) {'at': c.start, 'was': c.was, 'now': c.now, 'kind': c.kind.code, 'source': c.source, 'kept': c.kept},
         ],
+        if (place != null) 'place': {'lat': place!.lat, 'lon': place!.lon},
       };
 
   /// The file's bytes: UTF-8 JSON, indented so a person who opens it in a text editor can read it.
@@ -120,7 +128,8 @@ class BlessingRecord {
     return true;
   }
 
-  /// A finished blessing of the person's own, at [place] (the receiver's; the file has none).
+  /// A finished blessing of the person's own, at the place it was given; for a file that carries
+  /// none (made before the place was carried), at [place] (the receiver's).
   Blessing toBlessing({required Place place, DateTime? now}) {
     final t = (now ?? DateTime.now()).toUtc();
     return Blessing(
@@ -130,7 +139,7 @@ class BlessingRecord {
       recipient: recipient,
       utc: utc,
       utcOffset: utcOffset,
-      place: place,
+      place: this.place ?? place,
       ownership: Ownership.forMe,
       rawText: spoken,
       // what arrived is the first writing this phone has of it
@@ -146,7 +155,9 @@ class BlessingRecord {
     );
   }
 
-  /// [b] made to say exactly this (Replace mine), keeping its own place and when it was made.
+  /// [b] made to say exactly this (Replace mine), keeping when it was made, its own draft state and
+  /// any recording kept with it (the caller decides about those); the place is the file's when it
+  /// carries one.
   void writeOver(Blessing b) {
     b
       ..title = title
@@ -160,8 +171,8 @@ class BlessingRecord {
       ..tags = [...tags]
       ..language = language
       ..ownership = Ownership.forMe
-      ..draft = false
       ..wordsStatus = WordsStatus.written;
+    if (place != null) b.place = place!;
     if (b.firstText.isEmpty) b.firstText = spoken;
   }
 }
@@ -303,7 +314,18 @@ BlessingRecord _record(Map<String, Object?> j, DateTime now) {
     language: language,
     spoken: spoken,
     changes: changes,
+    place: _place(j['place']),
   );
+}
+
+/// The optional place: `{"lat": 40.8, "lon": -111.9}`, kept to a tenth of a degree whatever was
+/// written. Missing or null is no place (a file made before it was carried).
+Place? _place(Object? v) {
+  if (v == null) return null;
+  if (v is! Map<String, Object?>) throw _Bad('place');
+  final lat = v['lat'], lon = v['lon'];
+  if (lat is! num || lon is! num || !lat.isFinite || !lon.isFinite || lat.abs() > 90 || lon.abs() > 180) throw _Bad('place');
+  return roughly(lat.toDouble(), lon.toDouble());
 }
 
 /// A string field: [max] long at most, no control characters (but line breaks and tabs where

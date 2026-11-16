@@ -30,7 +30,12 @@ class RecordLayer extends StatefulWidget {
     required this.onLanguage,
     required this.onOpenSettings,
     this.active = true,
+    this.practice = false,
   });
+
+  /// The first run's rehearsal: marked as practice, with "Not now" as the way out and Amen from
+  /// the start.
+  final bool practice;
 
   final Palette palette;
   final RecordSession session;
@@ -100,7 +105,7 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
   }
 
   void _tick(Duration _) {
-    _countdown.value = s.live ? (s.elapsed / RecordSession.window).clamp(0.0, 1.0) : 0;
+    _countdown.value = s.live ? (s.practice ? 1.0 : (s.elapsed / RecordSession.window).clamp(0.0, 1.0)) : 0;
     final amen = s.amen;
     if (amen != _amen) setState(() => _amen = amen);
   }
@@ -114,7 +119,9 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
   }
 
   /// Under Begin: what Begin does, and the language the blessing will be spoken in.
-  Widget _hintAndLanguage(Palette p) => Column(mainAxisSize: MainAxisSize.min, children: [
+  Widget _hintAndLanguage(Palette p) => widget.practice
+      ? Text(Strings.practiceHint, key: const Key('practice-hint'), style: sans(13, 18, p.ink3), textAlign: TextAlign.center)
+      : Column(mainAxisSize: MainAxisSize.min, children: [
         Text(Strings.nothingRecorded, style: sans(13, 18, p.ink3), textAlign: TextAlign.center),
         const SizedBox(height: 2),
         // the native menu button exists only while this screen is up and ready
@@ -176,14 +183,14 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
                     opacity: live ? 0 : 1,
                     duration: const Duration(milliseconds: 500),
                     curve: easeOut,
-                    child: Text(Strings.newBlessing, style: serif(17, 24, p.ink3, italic: true), textAlign: TextAlign.center),
+                    child: Text(widget.practice ? Strings.practice : Strings.newBlessing, style: serif(17, 24, p.ink3, italic: true), textAlign: TextAlign.center),
                   ),
                   Fade(
                     on: live,
                     inDuration: const Duration(milliseconds: 500),
                     outDuration: const Duration(milliseconds: 500),
                     delay: const Duration(milliseconds: 500),
-                    child: Text(s.paused ? Strings.paused : Strings.listening,
+                    child: Text(s.paused ? Strings.paused : (widget.practice ? Strings.practiceListening : Strings.listening),
                         key: const Key('listening'), style: serif(17, 24, p.ink3, italic: true), textAlign: TextAlign.center),
                   ),
                 ]),
@@ -202,9 +209,10 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
               outDuration: const Duration(milliseconds: 300),
               child: TextBtn(
                 key: const Key('rec-x'),
-                label: live ? Strings.discard : Strings.close,
+                label: widget.practice ? Strings.notNow : (live ? Strings.discard : Strings.close),
                 palette: p,
-                onTap: () => live ? s.showSheet(true) : widget.onClose(),
+                // a practice keeps nothing, so leaving it needs no question
+                onTap: () => live && !widget.practice ? s.showSheet(true) : widget.onClose(),
               ),
             ),
           ),

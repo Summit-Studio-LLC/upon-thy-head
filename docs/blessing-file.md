@@ -32,9 +32,10 @@ UTF-8 JSON, indented, one object, keys in this order:
 | `tags` | string[] | at most 40, each at most 60 |
 | `language` | string | the words' language (`"en"`, `"es"`, `"pt-BR"`), at most 20 |
 | `words` | string | the spoken words, exactly as spoken, at most 200,000 characters |
+| `place` | object, optional | where it was given, `{"lat": 40.8, "lon": -111.9}`, to a tenth of a degree as the app keeps it (about 11 km). Missing or null in a file made before 2026-11-16 |
 | `changes` | object[] | the polish changes, in order: `at` (character offset in `words`), `was`, `now`, `kind` (`filler`, `repeat`, `restart`, `grammar`, `punctuation`), `source`, `kept` (bool). At most 5,000 |
 
-Not carried: the audio, the place it was given, the first transcript, created/updated times, the
+Not carried: the audio, the first transcript, created/updated times, the
 draft flag, the owner flag, or anything about the sender's phone.
 
 The receiver reads the polished words (the spoken words with the kept changes applied), sees "Polished
@@ -45,6 +46,9 @@ from N changes", and can open the changes screen and restore any change to the s
 - At most 512 KiB; the native side reads at most one byte over and refuses without parsing.
 - Must be UTF-8, JSON, an object, `format` exact, `version` an integer ≥ 1.
 - Every field typed and bounded as above; unknown fields are ignored (so a later version can add some).
+- `place`, when present: an object with finite numbers `lat` (±90) and `lon` (±180), rounded to a
+  tenth of a degree on reading whatever was written. Anything else refuses the file. The version stays
+  `1`: the field is optional, and an older app ignores it.
 - No control characters anywhere except line breaks and tabs in `words`, `was`, `now`; no broken
   surrogate pairs.
 - `given` a real calendar minute between 1900 and two days from now.
@@ -64,11 +68,13 @@ from N changes", and can open the changes screen and restore any change to the s
 - Nothing interrupts a recording: the file waits until the recording is over and the person is back
   on the sky, a reading page or Settings.
 - New: the title, "A blessing from Dad" (or "A blessing"), the long date, "Keep it with your
-  blessings?", Keep / Not now. Keep saves it finished and as the person's own, at the receiver's
-  place, and opens its reading page.
+  blessings?", Keep / Not now. Keep saves it finished and as the person's own, at the place the file
+  carries (the receiver's own place for a file made before the place was carried), and opens its
+  reading page. Its light sits where the blessing was given.
 - The same id and the same content: no question; it opens, saying "You already have this blessing."
 - The same id, different content: "You already have this blessing, and this copy is different."
-  Replace mine / Keep mine.
+  Replace mine / Keep mine. Replace mine takes the file's words, details and place, and keeps the
+  recording kept with the person's own copy.
 - A newer version: "This blessing was made with a newer version of Upon Thy Head. Update the app to
   open it." OK. Anything else that fails: "This file could not be read." OK.
 
@@ -104,10 +110,10 @@ King James and Reina-Valera 1909 Gospel of John, as a stand-in for real blessing
 
 | text | words | file bytes | link characters |
 |---|---:|---:|---:|
-| sample "Comfort before surgery", 5 changes | 106 | 1,542 | 858 |
-| the same without its changes | 106 | | 685 |
-| blessing-style, English | 199 | | 1,002 |
-| blessing-style, Spanish | 185 | | 1,063 |
+| sample "Comfort before surgery", 5 changes | 106 | 1,589 | 891 |
+| the same without its changes | 106 | | 718 |
+| blessing-style, English | 199 | | 1,031 |
+| blessing-style, Spanish | 185 | | 1,095 |
 | prose, English | 100 | | 671 |
 | | 300 | | 1,214 |
 | | 600 | | 2,017 |
@@ -119,7 +125,11 @@ King James and Reina-Valera 1909 Gospel of John, as a stand-in for real blessing
 | | 1,500 | | 4,854 |
 | | 2,500 | 13,988 | 7,297 |
 
-Roughly 400 characters of fixed cost (the address, the key, the tag, the record's other fields),
+The link carries the place (decided 2026-11-16): it costs about 33 characters (858 → 891 for the
+sample), which moves no blessing across any limit below. The four rows above are measured with it; the
+prose rows were measured before it and are about 30 characters short.
+
+Roughly 430 characters of fixed cost (the address, the key, the tag, the record's other fields),
 then about 2.5 characters a word in English and 2.8 in Spanish.
 
 ### What a link meets

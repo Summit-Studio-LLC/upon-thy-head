@@ -58,6 +58,25 @@ enum LockChannel {
           result(ok)
         }
       }
+    case "biometry":
+      result(biometry())
+    case "askBiometrics":
+      // The first run's Face ID question: biometrics only, with no passcode fallback, so "Don't
+      // Allow" ends it rather than bringing up the passcode. After the question, iOS runs one scan;
+      // whatever the scan does, the answer to the question is what `biometry` reports afterwards.
+      let reason = args["reason"] as? String ?? "Unlock"
+      let context = LAContext()
+      context.localizedFallbackTitle = ""
+      var error: NSError?
+      guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else { return result(biometry()) }
+      systemPrompt += 1
+      context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { _, error in
+        DispatchQueue.main.async {
+          systemPrompt = max(0, systemPrompt - 1)
+          if let error { NSLog("lock: first run: %@", error.localizedDescription) }
+          result(biometry())
+        }
+      }
     case "cover":
       coverOn = args["on"] as? Bool ?? false
       if !coverOn { lift() }
@@ -89,6 +108,33 @@ enum LockChannel {
     case .opticID: return "opticID"
     default: return "passcode"
     }
+  }
+
+  /// What the first run's lock row shows: the kind of biometrics this phone has ("faceID",
+  /// "touchID", "opticID", "none"), whether it can be used now ("ok"), was refused ("denied"), has
+  /// nothing enrolled ("notEnrolled") or cannot be used ("unavailable"), and whether a passcode is set.
+  static func biometry() -> [String: Any] {
+    let context = LAContext()
+    var error: NSError?
+    let ok = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    let type: String
+    switch context.biometryType {
+    case .faceID: type = "faceID"
+    case .touchID: type = "touchID"
+    case .opticID: type = "opticID"
+    default: type = "none"
+    }
+    var state = "ok"
+    if !ok {
+      switch (error as? LAError)?.code {
+      case .biometryNotEnrolled: state = "notEnrolled"
+      case .biometryNotAvailable: state = type == "none" ? "unavailable" : "denied"
+      case .passcodeNotSet: state = "noPasscode"
+      default: state = "unavailable"
+      }
+    }
+    let passcode = LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
+    return ["type": type, "state": state, "passcode": passcode]
   }
 
   // ---- the cover ----

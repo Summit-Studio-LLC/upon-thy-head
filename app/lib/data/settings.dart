@@ -53,6 +53,19 @@ class Settings {
 
   Future<void> setLocationAsked() => _set('locationAsked', true);
 
+  /// Where the first-run flow stands (onboarding/first_run.dart): null on a fresh install, then
+  /// its steps by name, "done" when it is over. Kept here so it is shown once, and a reinstall
+  /// starts again.
+  String? get firstRun => _values['firstRun'] as String?;
+
+  Future<void> setFirstRun(String? step) => _set('firstRun', step);
+
+  /// The Face ID question has been put by the first-run flow (iOS can say "denied" afterwards,
+  /// but not "never asked" on a phone with Face ID off).
+  bool get faceIdAsked => _values['faceIdAsked'] as bool? ?? false;
+
+  Future<void> setFaceIdAsked() => _set('faceIdAsked', true);
+
   Future<void> _set(String key, Object? value) async {
     if (value == null) {
       _values.remove(key);

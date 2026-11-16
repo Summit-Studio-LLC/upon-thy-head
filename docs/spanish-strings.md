@@ -14,11 +14,10 @@ Change a wording there; this file is a copy for reading.
 
 ## The most important questions
 
-1. ★ **"Ajustes" or "Configuración".** The brief says Settings = "Ajustes", and the app's own page is
-   called that. But iOS in Latin American Spanish calls the iPhone's Settings app
-   **"Configuración"** ("Ajustes" is Spain's iOS). The button that opens the iPhone's Settings app
-   says "Abrir Configuración" so the person can find it. Should the app's own page also be
-   "Configuración", so there is only one word?
+1. (Settled 2026-11-16: Noah left it to Claude, who chose **"Configuración"**.) The app's own
+   Settings page, its "more" button and every place the app names Settings now say
+   "Configuración", the word Latin American iOS uses for the iPhone's Settings app, so the app uses
+   one word. ("Ajustes" is Spain's iOS.)
 2. ★ **"Pulir" for "polish".** "Pulir las palabras", "Pulidas para leer", "Usar pulidas". Natural
    for text ("pulir un texto"), but a speaker may prefer "Corregir", "Limpiar" or "Afinar".
 3. ★ **"Muletilla" for "filler".** "Muletilla" is the everyday word for "um", "este", "o sea". It
@@ -218,7 +217,7 @@ exact but more technical; the English avoids "transcribe" on purpose.
 
 | English | Spanish | Note |
 |---|---|---|
-| Settings | Ajustes | ★ question 1 |
+| Settings | Configuración | Settled (question 1) |
 | Back to the sky | Volver al cielo | |
 | App lock | Bloqueo de la app | |
 | Asks for Face ID when you open the app. Recording never waits for it. | Pide Face ID al abrir la app. Para grabar nunca hace falta. | ★ The second sentence is reworded ("it is never needed to record"). The literal one ("La grabación nunca lo espera") read oddly. |
@@ -273,6 +272,46 @@ and "Para …".
 | OK | OK | as iOS's own alerts in Latin American Spanish |
 | Blessing (the file type, in Files and the share sheet) | Bendición | app/ios/Runner/es.lproj/InfoPlist.strings |
 
+## The first run (opening, welcome, permissions, the practice)
+
+Shown once, on a fresh install. The app's name is the same in both languages.
+
+| English | Spanish |
+|---|---|
+| Record a blessing as it is given. | Graba una bendición mientras se da. |
+| The words are written on this phone. Nothing leaves it unless you share it. | Las palabras se escriben en este teléfono. Nada sale de él si tú no lo compartes. |
+| The words as they were spoken are always kept. | Las palabras tal como se dijeron siempre se guardan. |
+| Free. No account. No ads. | Gratis. Sin cuenta. Sin anuncios. |
+| Continue | Continuar |
+| A few things first | Primero, unas cosas |
+| The phone will ask for each of these. Each has a reason. | El teléfono te preguntará por cada una. Cada una tiene su razón. |
+| Microphone | Micrófono |
+| To hear the blessing as it is given. | Para oír la bendición mientras se da. |
+| Speech recognition | Reconocimiento de voz |
+| To write the words down, on this phone. | Para escribir las palabras, en este teléfono. |
+| Location | Ubicación |
+| To find the sky above you. Allow Once is enough. | Para encontrar el cielo sobre ti. Con «Permitir una vez» basta. |
+| To keep your blessings locked. | Para mantener tus bendiciones bloqueadas. |
+| Off. You can turn it on in Settings. | Desactivado. Puedes activarlo en Configuración. |
+| Off. The sky above the Salt Lake Temple will be used. | Desactivada. Se usará el cielo sobre el Templo de Salt Lake. |
+| Allowed (read by VoiceOver for the quiet mark: "Microphone: allowed") | Permitido ("Micrófono: permitido") ★ "permitido" stays masculine for every row, agreeing with the permission, not the row's name ("Ubicación: permitido"). "Permitida" for Ubicación is the other choice. |
+| The phone is asking now ("The phone is asking for Microphone now") | El teléfono está preguntando ("El teléfono está preguntando por Micrófono") |
+| Try a few words first? | ¿Probar primero con unas palabras? |
+| Say anything, then hold Amen. You will see what the phone wrote. Nothing is kept. | Di cualquier cosa y luego mantén presionado Amén. Verás lo que escribió el teléfono. No se guarda nada. |
+| Try it | Probar |
+| Not now | Ahora no |
+| Practice (the recording screen's title) | Práctica |
+| Listening, for practice | Escuchando, de práctica ★ "Escuchando (práctica)" may read more naturally. |
+| This is only practice. Nothing is kept. | Es solo una práctica. No se guarda nada. |
+| What the phone wrote | Lo que escribió el teléfono |
+| Nothing from the practice is kept. | No se guarda nada de la práctica. |
+| Writing the words… | Escribiendo las palabras… |
+| This phone cannot write down words in this language yet. A real recording is still kept, and its words are written when the phone can. | Este teléfono todavía no puede escribir las palabras en este idioma. Una grabación de verdad sí se guarda, y sus palabras se escriben cuando el teléfono pueda. |
+| Nothing was heard. Try again when you record a blessing. | No se oyó nada. Inténtalo de nuevo cuando grabes una bendición. |
+| The words could not be written this time. | Esta vez no se pudieron escribir las palabras. |
+| A blessing has been shared with you. (a first launch from a blessing file) | Alguien compartió una bendición contigo. |
+| Keep your blessings locked (under iOS's Face ID question, asked on Keep) | Mantener tus bendiciones bloqueadas |
+
 ## The system's questions (app/ios/Runner/es.lproj/InfoPlist.strings)
 
 iOS shows these under its own question. Apple writes the question's title and buttons, in the
@@ -292,7 +331,7 @@ phone's language.
 ## Words used throughout
 
 bendición (blessing) · Para mí · Nueva bendición · Comenzar · Amén · Descartar · Revisar ahora ·
-Guardar para después · Ajustes · Bloqueo de la app · grabación (recording) · las palabras (the
+Guardar para después · Configuración · Bloqueo de la app · grabación (recording) · las palabras (the
 words) · teléfono (phone) where English says phone, iPhone where English says iPhone · "tú"
 throughout.
 

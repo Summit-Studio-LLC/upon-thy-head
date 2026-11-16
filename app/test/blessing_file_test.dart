@@ -28,7 +28,7 @@ void main() {
   group('writing', () {
     test('the sample: every field the receiver needs, and nothing else', () {
       final j = jsonOf(BlessingRecord.of(surgery));
-      expect(j.keys.toList(), ['format', 'version', 'id', 'title', 'given', 'offset', 'from', 'for', 'tags', 'language', 'words', 'changes']);
+      expect(j.keys.toList(), ['format', 'version', 'id', 'title', 'given', 'offset', 'from', 'for', 'tags', 'language', 'words', 'changes', 'place']);
       expect(j['format'], 'upon-thy-head/blessing');
       expect(j['version'], 1);
       expect(j['id'], 'surgery');
@@ -40,9 +40,11 @@ void main() {
       expect(j['tags'], ['Comfort', 'Healing']);
       expect(j['words'], surgery.rawText);
       expect((j['changes'] as List).length, surgery.changes.length);
-      // no place, no audio, no first transcript, nothing about the phone
+      // the place, to a tenth of a degree (Noah, 2026-11-16: "Location can be shared")
+      expect(j['place'], {'lat': (surgery.place.lat * 10).round() / 10, 'lon': (surgery.place.lon * 10).round() / 10});
+      // no audio, no first transcript, nothing about the phone
       final text = utf8.decode(BlessingRecord.of(surgery).toFileBytes());
-      for (final word in ['lat', 'lon', 'place', 'audio', 'first', 'device', 'created', 'updated', 'draft']) {
+      for (final word in ['audio', 'first', 'device', 'created', 'updated', 'draft']) {
         expect(text.contains('"$word'), isFalse, reason: word);
       }
     });
@@ -73,10 +75,11 @@ void main() {
       expect(b.polishedText, surgery.polishedText);
       expect(b.keptChanges, surgery.keptChanges);
       expect([for (final c in b.changes) c.toString()], [for (final c in surgery.changes) c.toString()]);
-      // the receiver's own, finished, at the receiver's place
+      // the receiver's own, finished, at the place it was given (not the receiver's)
       expect(b.ownership, Ownership.forMe);
       expect(b.draft, isFalse);
-      expect(b.place.lat, 10);
+      expect(b.place.lat, (surgery.place.lat * 10).round() / 10);
+      expect(b.place.lon, (surgery.place.lon * 10).round() / 10);
       expect(b.audio, '');
       expect(back.sameAs(surgery), isTrue);
       // restoring every change gives the spoken words
@@ -106,11 +109,72 @@ void main() {
       expect(rec.sameAs(kept), isFalse);
     });
 
-    test('Replace mine writes every field over, keeping its place', () {
-      final mine = BlessingRecord.of(surgery).toBlessing(place: const Place(1, 2))..rawText = 'Changed.'..changes = [];
+    test('Replace mine writes every field over, the place too; draft and recording are left to the caller', () {
+      final mine = BlessingRecord.of(surgery).toBlessing(place: const Place(1, 2))
+        ..rawText = 'Changed.'
+        ..changes = []
+        ..place = const Place(1, 2)
+        ..draft = true
+        ..audio = 'surgery.m4a';
       BlessingRecord.of(surgery).writeOver(mine);
       expect(BlessingRecord.of(surgery).sameAs(mine), isTrue);
+      expect(mine.place.lat, (surgery.place.lat * 10).round() / 10);
+      expect(mine.draft, isTrue);
+      expect(mine.audio, 'surgery.m4a');
+    });
+
+    test('a file with no place (made before 2026-11-16) keeps the place already there on Replace mine', () {
+      final old = jsonOf(BlessingRecord.of(surgery))..remove('place');
+      final rec = ok(readMap(old));
+      final mine = rec.toBlessing(place: const Place(1, 2));
+      rec.writeOver(mine);
       expect(mine.place.lat, 1);
+    });
+  });
+
+  group('the place', () {
+    Map<String, Object?> good() => jsonOf(BlessingRecord.of(surgery));
+
+    test('a file made before the place was carried still opens, at the receiver\'s place, with nothing raised', () {
+      final old = good()..remove('place');
+      final rec = ok(readMap(old));
+      expect(rec.place, isNull);
+      final b = rec.toBlessing(place: const Place(19.4, -99.1));
+      expect(b.place.lat, 19.4);
+      expect(b.place.lon, -99.1);
+      // and writing it again leaves the field out
+      expect(jsonOf(rec).containsKey('place'), isFalse);
+    });
+
+    test('null is the same as missing', () {
+      expect(ok(readMap({...good(), 'place': null})).place, isNull);
+    });
+
+    test('whatever was written, only a tenth of a degree is kept', () {
+      final r = ok(readMap({...good(), 'place': {'lat': 40.770412, 'lon': -111.891937}}));
+      expect(r.place!.lat, 40.8);
+      expect(r.place!.lon, -111.9);
+      final whole = ok(readMap({...good(), 'place': {'lat': 0, 'lon': 180}}));
+      expect(whole.place!.lat, 0);
+      expect(whole.place!.lon, 180);
+    });
+
+    test('a sharper place in the sender\'s blessing is rounded before it is written', () {
+      final b = BlessingRecord.of(surgery).toBlessing(place: samplePlace)..place = const Place(40.770412, -111.891937);
+      expect(jsonOf(BlessingRecord.of(b))['place'], {'lat': 40.8, 'lon': -111.9});
+    });
+
+    test('a broken place refuses the file', () {
+      for (final p in [
+        'here',
+        [40.8, -111.9],
+        {'lat': 40.8},
+        {'lat': '40.8', 'lon': -111.9},
+        {'lat': 91, 'lon': 0},
+        {'lat': 0, 'lon': -180.5},
+      ]) {
+        bad(readMap({...good(), 'place': p}), '$p');
+      }
     });
   });
 

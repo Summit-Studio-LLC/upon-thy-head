@@ -13,11 +13,15 @@ import XCTest
 ///  - `open <bundle id>`: bring that app to the front
 ///  - `apptap <label>[|<label>…]`: wait up to 12 s for a button or row with one of those labels inside
 ///    the app under test (the system share sheet it presents) and tap it; `ok <label>` or `missing …`
+///  - `apphold <seconds> <label>[|<label>…]`: as `apptap`, but pressed and held, as a person holds
+///    Amen; `ok <label>` or `missing …`
+///  - `appswipeup`: drag the app's page up, to scroll it
 ///  - `appdismiss`: swipe the app's presented sheet down
 ///  - `applabels`: the labels of the buttons and rows the app shows now (for writing scripts)
 ///  - `files <name>`: open the Files app, go to On My iPhone, and tap the file whose name starts with
 ///    <name>, as a person opens a file they were sent; `ok <label>` or `missing …`
 ///  - `fileslabels`: what the Files app shows now (for writing scripts)
+///  - `sbhold [x y]`, `sbtap <label>`, `sblabels`: hold, tap or read the home screen (the icon style)
 ///  - `quit`: stop
 final class Tapper: XCTestCase {
   let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -51,6 +55,9 @@ final class Tapper: XCTestCase {
         from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 1.2)
       case "open": XCUIApplication(bundleIdentifier: arg).activate()
       case "apptap": answer = appTap(arg.components(separatedBy: "|"))
+      case "apphold":
+        let parts = arg.split(separator: " ", maxSplits: 1).map(String.init)
+        answer = appTap(parts.count > 1 ? parts[1].components(separatedBy: "|") : [], hold: Double(parts.first ?? "") ?? 1.5)
       case "appdismiss":
         // the iOS 26 share sheet has no Close button. `appdismiss <n>`: 0 taps outside it, 1 drags it
         // down by its top edge, 2 swipes down on the sheet itself
@@ -67,6 +74,32 @@ final class Tapper: XCTestCase {
       case "applabels":
         let app = XCUIApplication(bundleIdentifier: appBundle)
         answer = (app.buttons.allElementsBoundByIndex + app.cells.allElementsBoundByIndex).map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "appall":
+        // every labelled element, the rows and lines too (applabels is buttons and cells only)
+        let app = XCUIApplication(bundleIdentifier: appBundle)
+        answer = app.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "appswipeup":
+        // drag the app's page up by two thirds of the screen, slowly, so it scrolls without a fling
+        let app = XCUIApplication(bundleIdentifier: appBundle)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+          .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        answer = "ok"
+      case "sbhold":
+        // press and hold the home screen at a normalized point (default an empty spot low down)
+        let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let xy = arg.split(separator: " ").compactMap { Double($0) }
+        sb.coordinate(withNormalizedOffset: CGVector(dx: xy.count == 2 ? xy[0] : 0.5, dy: xy.count == 2 ? xy[1] : 0.78)).press(forDuration: 1.6)
+        answer = "ok"
+      case "sbtap":
+        // tap the first home-screen element (any kind) with that label, waiting up to 6 s
+        let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let e = sb.descendants(matching: .any).matching(NSPredicate(format: "label == %@", arg)).firstMatch
+        if e.waitForExistence(timeout: 6) { e.tap(); answer = "ok \(arg)" } else { answer = "missing \(arg)" }
+      case "sblabels":
+        let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        answer = sb.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "orient":
+        XCUIDevice.shared.orientation = arg == "landscape" ? .landscapeLeft : .portrait
       case "files": answer = openInFiles(arg)
       case "fileslabels":
         let f = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
@@ -103,7 +136,7 @@ final class Tapper: XCTestCase {
   let appBundle = ProcessInfo.processInfo.environment["APP_BUNDLE"] ?? "dev.summitstudio.uponThyHead"
 
   /// A button or a row of the share sheet the app presents, by its label.
-  func appTap(_ labels: [String]) -> String {
+  func appTap(_ labels: [String], hold: Double = 0) -> String {
     let app = XCUIApplication(bundleIdentifier: appBundle)
     let end = Date().addingTimeInterval(12)
     while Date() < end {
@@ -111,7 +144,7 @@ final class Tapper: XCTestCase {
         for q in [app.buttons, app.cells, app.staticTexts] {
           let e = q.matching(NSPredicate(format: "label == %@", l)).firstMatch
           if e.exists && e.isHittable {
-            e.tap()
+            if hold > 0 { e.press(forDuration: hold) } else { e.tap() }
             return "ok \(l)"
           }
         }

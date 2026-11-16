@@ -216,6 +216,43 @@ class Strings {
   static String get fileNewer => _w.fileNewer;
   static String get fileUnreadable => _w.fileUnreadable;
   static String get ok => _w.ok;
+
+  // ---- the first run (onboarding/) ----
+  static String get appName => _w.appName;
+  static String get welcome1 => _w.welcome1;
+  static String get welcome2 => _w.welcome2;
+  static String get welcome3 => _w.welcome3;
+  static String get welcomeFree => _w.welcomeFree;
+  static String get continueLabel => _w.continueLabel;
+  static String get permsTitle => _w.permsTitle;
+  static String get permsLede => _w.permsLede;
+  static String get microphone => _w.microphone;
+  static String get microphoneWhy => _w.microphoneWhy;
+  static String get speechRecognition => _w.speechRecognition;
+  static String get speechWhy => _w.speechWhy;
+  static String get location => _w.location;
+  static String get locationWhy => _w.locationWhy;
+  static String get faceIdWhy => _w.faceIdWhy;
+  static String get permissionOff => _w.permissionOff;
+  static String get locationOff => _w.locationOff;
+  static String get allowed => _w.allowed;
+  static String get askingNow => _w.askingNow;
+  static String get tryTitle => _w.tryTitle;
+  static String get tryBody => _w.tryBody;
+  static String get tryIt => _w.tryIt;
+  static String get practice => _w.practice;
+  static String get practiceListening => _w.practiceListening;
+  static String get practiceHint => _w.practiceHint;
+  static String get phoneWrote => _w.phoneWrote;
+  static String get practiceKept => _w.practiceKept;
+  static String get practiceWriting => _w.practiceWriting;
+  static String get practiceUnavailable => _w.practiceUnavailable;
+  static String get practiceSilent => _w.practiceSilent;
+  static String get practiceFailed => _w.practiceFailed;
+  static String get sharedWithYou => _w.sharedWithYou;
+  static String get faceIdKeepReason => _w.faceIdKeepReason;
+  static String rowOn(String name) => _w.rowOn(name);
+  static String rowAsking(String name) => _w.rowAsking(name);
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -361,6 +398,39 @@ extension WordsCatalogue on Words {
         'keepMine': keepMine,
         'fileNewer': fileNewer,
         'fileUnreadable': fileUnreadable,
+        'appName': appName,
+        'welcome1': welcome1,
+        'welcome2': welcome2,
+        'welcome3': welcome3,
+        'welcomeFree': welcomeFree,
+        'continueLabel': continueLabel,
+        'permsTitle': permsTitle,
+        'permsLede': permsLede,
+        'microphone': microphone,
+        'microphoneWhy': microphoneWhy,
+        'speechRecognition': speechRecognition,
+        'speechWhy': speechWhy,
+        'location': location,
+        'locationWhy': locationWhy,
+        'faceIdWhy': faceIdWhy,
+        'permissionOff': permissionOff,
+        'locationOff': locationOff,
+        'allowed': allowed,
+        'askingNow': askingNow,
+        'tryTitle': tryTitle,
+        'tryBody': tryBody,
+        'tryIt': tryIt,
+        'practice': practice,
+        'practiceListening': practiceListening,
+        'practiceHint': practiceHint,
+        'phoneWrote': phoneWrote,
+        'practiceKept': practiceKept,
+        'practiceWriting': practiceWriting,
+        'practiceUnavailable': practiceUnavailable,
+        'practiceSilent': practiceSilent,
+        'practiceFailed': practiceFailed,
+        'sharedWithYou': sharedWithYou,
+        'faceIdKeepReason': faceIdKeepReason,
       };
 }
 
@@ -655,6 +725,43 @@ class Words {
   String get fileNewer => 'This blessing was made with a newer version of Upon Thy Head. Update the app to open it.';
   String get fileUnreadable => 'This file could not be read.';
   String get ok => 'OK';
+
+  // ---- the first run (onboarding/) ----
+  String get appName => 'Upon Thy Head';
+  String get welcome1 => 'Record a blessing as it is given.';
+  String get welcome2 => 'The words are written on this phone. Nothing leaves it unless you share it.';
+  String get welcome3 => 'The words as they were spoken are always kept.';
+  String get welcomeFree => 'Free. No account. No ads.';
+  String get continueLabel => 'Continue';
+  String get permsTitle => 'A few things first';
+  String get permsLede => 'The phone will ask for each of these. Each has a reason.';
+  String get microphone => 'Microphone';
+  String get microphoneWhy => 'To hear the blessing as it is given.';
+  String get speechRecognition => 'Speech recognition';
+  String get speechWhy => 'To write the words down, on this phone.';
+  String get location => 'Location';
+  String get locationWhy => 'To find the sky above you. Allow Once is enough.';
+  String get faceIdWhy => 'To keep your blessings locked.';
+  String get permissionOff => 'Off. You can turn it on in Settings.';
+  String get locationOff => 'Off. The sky above the Salt Lake Temple will be used.';
+  String get allowed => 'Allowed';
+  String get askingNow => 'The phone is asking now';
+  String get tryTitle => 'Try a few words first?';
+  String get tryBody => 'Say anything, then hold Amen. You will see what the phone wrote. Nothing is kept.';
+  String get tryIt => 'Try it';
+  String get practice => 'Practice';
+  String get practiceListening => 'Listening, for practice';
+  String get practiceHint => 'This is only practice. Nothing is kept.';
+  String get phoneWrote => 'What the phone wrote';
+  String get practiceKept => 'Nothing from the practice is kept.';
+  String get practiceWriting => 'Writing the words…';
+  String get practiceUnavailable => 'This phone cannot write down words in this language yet. A real recording is still kept, and its words are written when the phone can.';
+  String get practiceSilent => 'Nothing was heard. Try again when you record a blessing.';
+  String get practiceFailed => 'The words could not be written this time.';
+  String get sharedWithYou => 'A blessing has been shared with you.';
+  String get faceIdKeepReason => 'Keep your blessings locked';
+  String rowOn(String name) => '$name: allowed';
+  String rowAsking(String name) => 'The phone is asking for $name now';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -1029,11 +1136,11 @@ class _Spanish implements Words {
   @override
   String get turnOffLockReason => 'Desactivar el bloqueo de la app';
   @override
-  String get more => 'Ajustes';
+  String get more => 'Configuración';
 
   // ---- settings ----
   @override
-  String get settings => 'Ajustes';
+  String get settings => 'Configuración';
   @override
   String get backFromSettings => 'Volver al cielo';
   @override
@@ -1120,4 +1227,76 @@ class _Spanish implements Words {
   String get fileUnreadable => 'No se pudo leer este archivo.';
   @override
   String get ok => 'OK';
+
+  // ---- la primera vez ----
+  @override
+  String get appName => 'Upon Thy Head';
+  @override
+  String get welcome1 => 'Graba una bendición mientras se da.';
+  @override
+  String get welcome2 => 'Las palabras se escriben en este teléfono. Nada sale de él si tú no lo compartes.';
+  @override
+  String get welcome3 => 'Las palabras tal como se dijeron siempre se guardan.';
+  @override
+  String get welcomeFree => 'Gratis. Sin cuenta. Sin anuncios.';
+  @override
+  String get continueLabel => 'Continuar';
+  @override
+  String get permsTitle => 'Primero, unas cosas';
+  @override
+  String get permsLede => 'El teléfono te preguntará por cada una. Cada una tiene su razón.';
+  @override
+  String get microphone => 'Micrófono';
+  @override
+  String get microphoneWhy => 'Para oír la bendición mientras se da.';
+  @override
+  String get speechRecognition => 'Reconocimiento de voz';
+  @override
+  String get speechWhy => 'Para escribir las palabras, en este teléfono.';
+  @override
+  String get location => 'Ubicación';
+  @override
+  String get locationWhy => 'Para encontrar el cielo sobre ti. Con «Permitir una vez» basta.';
+  @override
+  String get faceIdWhy => 'Para mantener tus bendiciones bloqueadas.';
+  @override
+  String get permissionOff => 'Desactivado. Puedes activarlo en Configuración.';
+  @override
+  String get locationOff => 'Desactivada. Se usará el cielo sobre el Templo de Salt Lake.';
+  @override
+  String get allowed => 'Permitido';
+  @override
+  String get askingNow => 'El teléfono está preguntando';
+  @override
+  String get tryTitle => '¿Probar primero con unas palabras?';
+  @override
+  String get tryBody => 'Di cualquier cosa y luego mantén presionado Amén. Verás lo que escribió el teléfono. No se guarda nada.';
+  @override
+  String get tryIt => 'Probar';
+  @override
+  String get practice => 'Práctica';
+  @override
+  String get practiceListening => 'Escuchando, de práctica';
+  @override
+  String get practiceHint => 'Es solo una práctica. No se guarda nada.';
+  @override
+  String get phoneWrote => 'Lo que escribió el teléfono';
+  @override
+  String get practiceKept => 'No se guarda nada de la práctica.';
+  @override
+  String get practiceWriting => 'Escribiendo las palabras…';
+  @override
+  String get practiceUnavailable => 'Este teléfono todavía no puede escribir las palabras en este idioma. Una grabación de verdad sí se guarda, y sus palabras se escriben cuando el teléfono pueda.';
+  @override
+  String get practiceSilent => 'No se oyó nada. Inténtalo de nuevo cuando grabes una bendición.';
+  @override
+  String get practiceFailed => 'Esta vez no se pudieron escribir las palabras.';
+  @override
+  String get sharedWithYou => 'Alguien compartió una bendición contigo.';
+  @override
+  String get faceIdKeepReason => 'Mantener tus bendiciones bloqueadas';
+  @override
+  String rowOn(String name) => '$name: permitido';
+  @override
+  String rowAsking(String name) => 'El teléfono está preguntando por $name';
 }

@@ -156,7 +156,7 @@ void main() {
                 r'Language of the blessing|turned off for|Original words restored|Polished words in use|Polished: '),
           ]
         : [
-            RegExp(r'bendici|grabaci|\bde la (mañana|tarde|noche)\b|\bpor revisar\b|\bcambios?\b|Para mí|Ajustes'),
+            RegExp(r'bendici|grabaci|\bde la (mañana|tarde|noche)\b|\bpor revisar\b|\bcambios?\b|Para mí|Configuración'),
             RegExp('\\b(${Strings.wordsFor(UiLanguage.spanish).months.join('|')})\\b'),
           ];
     // never translated: the app's name, language names, Apple's names

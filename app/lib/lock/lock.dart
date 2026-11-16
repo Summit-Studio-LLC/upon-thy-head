@@ -125,7 +125,8 @@ class AppLock extends ChangeNotifier {
   bool _ready = false;
   bool get ready => _ready;
 
-  Future<void> init(Settings settings) async {
+  /// [unlocked]: start unlocked this once (the first run, before anything is kept).
+  Future<void> init(Settings settings, {bool unlocked = false}) async {
     _settings = settings;
     try {
       method = await api.method();
@@ -133,7 +134,7 @@ class AppLock extends ChangeNotifier {
       debugPrint('lock: $e');
       method = LockMethod.none;
     }
-    _locked = active && !startUnlocked;
+    _locked = active && !startUnlocked && !unlocked;
     _ready = true;
     await _cover();
     notifyListeners();

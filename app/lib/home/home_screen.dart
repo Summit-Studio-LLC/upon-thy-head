@@ -13,6 +13,8 @@ import '../data/blessing.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import '../lock/lock.dart';
+import '../onboarding/first_run.dart';
+import '../onboarding/first_run_screens.dart';
 import '../place/where.dart';
 import '../polish/changes_screen.dart';
 import '../read/read_screen.dart';
@@ -49,6 +51,14 @@ import 'timeline.dart';
 /// Which screen is over the sky.
 enum Stage { home, record, after, read, review, changes, settings }
 
+/// Where the first run is (onboarding/first_run.dart); [none] once it is over or never shown.
+/// [waiting]: it will be shown, once the launch knows whether a blessing file opened the app.
+enum Onboard { none, waiting, opening, welcome, permissions, rehearsal, practice, practiceResult, sharedLine, sharedPreview }
+
+/// `--dart-define=FIRST_RUN_FEED=<name>`: the rehearsal's recording is replaced at Amen by the file
+/// of this name in the app's tmp folder (the acceptance runs, with the prepared speech file).
+const String firstRunFeed = String.fromEnvironment('FIRST_RUN_FEED');
+
 /// "For me": the night sky with a light for each blessing, the one in focus
 /// named below, and a ruler of months to move between them; or the same
 /// blessings as a list. The recording and reading screens are drawn over the
@@ -68,7 +78,14 @@ class HomeScreen extends StatefulWidget {
     this.lock,
     this.locator,
     this.share,
+    this.firstRunAsker,
   });
+
+  /// The first run's questions; the native ones on iOS when not given.
+  final FirstRunAsker? firstRunAsker;
+
+  /// Tests only: never show the first run (the integration tests begin on the sky as before).
+  static bool debugSkipFirstRun = false;
 
   /// The app lock; the native one on iOS when not given (on unless turned off).
   final AppLock? lock;
@@ -191,6 +208,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     defaultAudioDir(),
   ]).then((r) => (r[0] as Settings, r[1] as String));
 
+  // ---- the first run ----
+  Onboard _onboard = Onboard.none;
+
+  /// Steps fading out, kept built until they have.
+  final Set<Onboard> _leaving = {};
+  FirstRunPermissions? _perms;
+  Timer? _openingTimer;
+  bool _openingShared = false;
+
+  /// Locked at launch with the rest of the first run still to come: shown once unlocked.
+  FirstRunStart? _afterUnlock;
+
+  /// The blessing a file opened the app with on a fresh install ("Read first"), not yet kept.
+  Blessing? _shared;
+  bool _sharedBusy = false;
+
   /// The blessing written to the store at Amen, before its words are.
   Future<void>? _saved;
 
@@ -217,6 +250,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final rescued = _recovered.isEmpty ? -1 : list.indexWhere((b) => b.id == _recovered.last.id);
       _setBlessings(list, focus: rescued >= 0 ? rescued : list.length - 1);
       _recoveredSheet = _recovered.isNotEmpty;
+      if (_onboard == Onboard.waiting) _engine.setView(SkyView.black);
       _engine.snap();
       if (list.isEmpty || _locked) _engine.lookToward(emptyRa, emptyDec, instant: true);
       _shown = _engine.focus;
@@ -229,7 +263,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
       unawaited(_writeMissingWords());
-      unawaited(_startReceiving());
+      unawaited(_startReceiving().then((_) => _beginFirstRun()));
+      unawaited(_clearPractice());
       // locked at launch: the phone asks once, as the locked sky appears
       if (_locked) WidgetsBinding.instance.addPostFrameCallback((_) => _askToUnlock());
       return a;
@@ -246,7 +281,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final (settings, _) = await _speechSetup;
     _settings = settings;
     _where = BlessingPlace(settings: settings, locator: _locator);
-    await _lock.init(settings);
+    var anything = false;
+    try {
+      anything = (await _store.list()).isNotEmpty;
+    } catch (_) {}
+    if (!HomeScreen.debugSkipFirstRun) {
+      if (settings.firstRun == null && anything) {
+        // blessings from before the first run existed (or the seeded build): never shown
+        await settings.setFirstRun(FirstRun.existing);
+      } else if (firstRunStart(settings.firstRun, hasBlessings: anything, fileWaiting: false) != FirstRunStart.none) {
+        _onboard = Onboard.waiting;
+      }
+    }
+    // nothing kept yet, so nothing to lock while the first run is shown
+    await _lock.init(settings, unlocked: _onboard == Onboard.waiting && !anything);
     try {
       _version = await _lock.api.version();
     } catch (_) {}
@@ -260,6 +308,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (now == _wasLocked) return setState(() {});
     _wasLocked = now;
     now ? _hideBlessings() : _showBlessings();
+    final pending = _afterUnlock;
+    if (!now && pending != null) {
+      _afterUnlock = null;
+      unawaited(_resumeFirstRun(pending));
+    }
   }
 
   /// Locked: nothing of any blessing stays on screen or in the sky. A recording under way, or its
@@ -529,6 +582,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _swapTimer?.cancel();
     _demoTimer?.cancel();
     _noticeTimer?.cancel();
+    _openingTimer?.cancel();
+    _perms?.dispose();
     _session.dispose();
     if (widget.player == null) _player.dispose();
     _engine
@@ -577,11 +632,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ..setLanguage(SpeechLanguage.fromCode(settings.language ?? SpeechLanguage.forPhone(phone).code));
     // let the ready screen settle before the system asks
     await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (identical(s, _session) && !s.live) await s.checkPermissions();
+    // after the first run, the recording screen never puts a system question: its refused line
+    // and Open Settings are the way back
+    final ask = recordScreenMayAsk(settings.firstRun);
+    if (identical(s, _session) && !s.live) await s.checkPermissions(ask: ask);
     // then, the first time ever, where blessings are given (after the microphone and speech
     // questions, never once Begin is pressed; Begin never waits for it)
     bool ready() => identical(s, _session) && !s.live && _stage == Stage.record;
-    if (ready()) await _where?.onRecordScreen(stillReady: ready);
+    if (ready()) await _where?.onRecordScreen(stillReady: () => ask && ready());
   }
 
   /// The pull-down on the Begin screen. The choice is remembered: it is the same setting the
@@ -593,7 +651,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _begin() {
     if (!_session.canBegin) {
-      _session.checkPermissions();
+      _session.checkPermissions(ask: recordScreenMayAsk(_settings?.firstRun));
+      return;
+    }
+    if (_session.practice) {
+      // the practice puts no light in the sky and keeps nothing
+      _engine.setView(SkyView.record);
+      _session.begin();
       return;
     }
     final draft = _session.draft!;
@@ -629,6 +693,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Close before Begin, or Discard from the sheet: nothing kept, back to the sky.
   void _closeRecord() {
+    if (_session.practice) return unawaited(_closePractice());
     _session.discard();
     _engine.show?.stop();
     _setBlessings(_blessings, focus: _homeFocus);
@@ -638,6 +703,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _amen() {
+    if (_session.practice) return unawaited(_practiceAmen());
     final session = _session;
     _saved = _keep(session);
     _engine.show?.stop();
@@ -898,6 +964,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       !_arrivalBusy &&
       !_recoveredSheet &&
       !_session.live &&
+      _onboard == Onboard.none &&
       (_stage == Stage.home || _stage == Stage.read || _stage == Stage.settings);
 
   /// Called after each frame while files wait: the next one, when it may be shown.
@@ -957,9 +1024,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       } else if (a is ArrivalDifferent) {
         final mine = a.mine;
         a.record.writeOver(mine);
+        // A recording kept with the person's own copy stays (Noah, 2026-11-16): it is still the
+        // blessing as it was given. A draft with its recording stays a draft, so its review page
+        // (with the recording to listen to) is still the way to finish it; Done erases the
+        // recording then, as for any draft. Without a recording it is finished now.
+        if (_audioOf(mine) == null) mine.draft = false;
         await _store.update(mine);
-        // it is finished now; a recording kept for its review is no longer needed
-        if (mine.audio.isNotEmpty) await _store.eraseAudio(mine);
         id = mine.id;
       }
     } catch (e) {
@@ -997,6 +1067,304 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _noticeTimer = Timer(const Duration(milliseconds: 3500), () {
       if (mounted) setState(() => _noticeOn = false);
     });
+  }
+
+  // ---- the first run (onboarding/) ----
+
+  late final FirstRunAsker _asker = widget.firstRunAsker ?? NativeFirstRunAsker(_locator);
+
+  /// Move the first run to [next]; the step it leaves stays built while it fades out.
+  void _go(Onboard next) {
+    final was = _onboard;
+    if (was == next) return;
+    if (was != Onboard.none && was != Onboard.waiting) {
+      _leaving.add(was);
+      Timer(const Duration(milliseconds: 650), () {
+        if (mounted) setState(() => _leaving.remove(was));
+      });
+    }
+    _leaving.remove(next);
+    setState(() => _onboard = next);
+  }
+
+  /// Once the launch knows whether a blessing file opened the app: where the first run begins.
+  Future<void> _beginFirstRun() async {
+    if (_onboard != Onboard.waiting || !mounted) return;
+    final settings = _settings!;
+    // a file the app was opened with can land just after the first look
+    if (settings.firstRun == null && _inbox.isEmpty) await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted || _onboard != Onboard.waiting) return;
+    final start = firstRunStart(settings.firstRun, hasBlessings: _blessings.isNotEmpty, fileWaiting: _inbox.isNotEmpty);
+    debugPrint('first run: ${settings.firstRun ?? 'fresh'} -> ${start.name}');
+    if (_locked && start != FirstRunStart.none) {
+      // a blessing was kept at a shared first launch: the lock first, then the rest
+      _afterUnlock = start;
+      _engine.setView(SkyView.home);
+      return _go(Onboard.none);
+    }
+    await _resumeFirstRun(start);
+  }
+
+  Future<void> _resumeFirstRun(FirstRunStart start) async {
+    switch (start) {
+      case FirstRunStart.none:
+        _engine.setView(SkyView.home);
+        _go(Onboard.none);
+      case FirstRunStart.opening:
+        _startOpening(shared: false);
+      case FirstRunStart.shared:
+        await _startShared();
+      case FirstRunStart.permissions:
+        _showRing(instant: true);
+        _showPermissions();
+      case FirstRunStart.rehearsal:
+        _showRing(instant: true);
+        await _showRehearsal();
+    }
+  }
+
+  /// The overhead circle at the place blessings are given, the camera on the zenith now.
+  ({double ra, double dec}) _showRing({bool instant = false}) {
+    final place = _where?.place ?? saltLakeTemple;
+    final z = zenith(DateTime.now().toUtc(), place);
+    _line = [for (var i = 0; i <= 720; i++) Vec3.radec(i / 720 * tau, place.lat * deg)];
+    _engine.setBlessings(const [], focus: 0);
+    if (instant) _engine.lookToward(z.ra, z.dec, instant: true);
+    return z;
+  }
+
+  /// Black; the sky rises as if looking up; the ring sweeps across it left to right; the name.
+  /// It moves on by itself after about four seconds, or at a tap. Only the ring: the first light
+  /// anyone sees is their first blessing's (ruled 2026-11-16).
+  void _startOpening({required bool shared}) {
+    _openingShared = shared;
+    final z = _showRing();
+    _engine.setView(SkyView.black);
+    _engine.snap();
+    _engine.lookToward(z.ra, z.dec - 22 * deg, instant: true);
+    _engine.setView(SkyView.opening);
+    _engine.lookToward(z.ra, z.dec);
+    _engine.lineFrom = _engine.clock + .8;
+    _engine.lineFor = 1.5;
+    _openingTimer?.cancel();
+    _openingTimer = Timer(const Duration(milliseconds: 4000), _afterOpening);
+    _go(Onboard.opening);
+  }
+
+  void _afterOpening() {
+    _openingTimer?.cancel();
+    if (_onboard != Onboard.opening) return;
+    _engine.lineFor = 0;
+    _engine.setView(SkyView.welcome);
+    _go(_openingShared ? Onboard.sharedLine : Onboard.welcome);
+  }
+
+  Future<void> _welcomeDone() async {
+    if (_onboard != Onboard.welcome) return;
+    await _settings?.setFirstRun(FirstRun.permissions);
+    _showPermissions();
+  }
+
+  void _showPermissions() {
+    _perms?.dispose();
+    final perms = _perms = FirstRunPermissions(
+      asker: _asker,
+      settings: _settings!,
+      announce: (t) {
+        if (mounted) SemanticsService.sendAnnouncement(View.of(context), t, TextDirection.ltr);
+      },
+    );
+    unawaited(perms.load());
+    _engine.setView(SkyView.dim);
+    _go(Onboard.permissions);
+  }
+
+  /// Continue: iOS's questions, one after another; when the last is answered, on by itself.
+  Future<void> _runPermissions() async {
+    final perms = _perms;
+    if (perms == null || perms.running || _onboard != Onboard.permissions) return;
+    await perms.run();
+    if (!mounted || !identical(perms, _perms)) return;
+    // allowed: find the place now, so the first blessing is given under its own sky
+    if (perms.rows.any((r) => r.kind == PermissionKind.location && r.status == RowStatus.allowed)) unawaited(_where?.refresh());
+    unawaited(_lock.recheck());
+    await _settings?.setFirstRun(FirstRun.rehearsal);
+    // long enough to see the last mark once Face ID's own scan has gone, then on by itself
+    await Future<void>.delayed(const Duration(milliseconds: 1400));
+    if (mounted && _onboard == Onboard.permissions) await _showRehearsal();
+  }
+
+  /// "Try a few words first?", only when the microphone is allowed.
+  Future<void> _showRehearsal() async {
+    var mic = Permission.undetermined;
+    try {
+      mic = await _asker.microphone();
+    } catch (_) {}
+    if (!mounted) return;
+    if (mic != Permission.granted) return _finishFirstRun();
+    _engine.setView(SkyView.dim);
+    _go(Onboard.rehearsal);
+  }
+
+  /// The practice's own folder, in tmp: never the audio folder, so nothing in it is ever kept,
+  /// recovered or backed up; emptied at every launch and after every practice.
+  Future<String> _practiceDir() async => path.join(Directory.systemTemp.path, 'practice');
+
+  Future<void> _clearPractice() async {
+    try {
+      final d = Directory(await _practiceDir());
+      if (await d.exists()) await d.delete(recursive: true);
+    } catch (e) {
+      debugPrint('first run: $e');
+    }
+  }
+
+  /// "Try it": the real recording screen and the real engine, marked as practice.
+  Future<void> _openPractice() async {
+    if (_onboard != Onboard.rehearsal) return;
+    await _clearPractice();
+    final dir = await _practiceDir();
+    await Directory(dir).create(recursive: true);
+    final (settings, _) = await _speechSetup;
+    if (!mounted) return;
+    final phone = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    _session.dispose();
+    final s = _session = RecordSession(recorder: _recorder, transcriber: _transcriber, practice: true)
+      ..audioDir = dir
+      ..setLanguage(SpeechLanguage.fromCode(settings.language ?? SpeechLanguage.forPhone(phone).code))
+      ..draft = draftBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple);
+    if (firstRunFeed.isNotEmpty && _ios) {
+      final feed = path.join(Directory.systemTemp.path, firstRunFeed);
+      if (File(feed).existsSync()) unawaited(NativeSpeech.instance.debugFeed(feed));
+    }
+    unawaited(s.checkPermissions(ask: false));
+    _engine.setView(SkyView.ready);
+    setState(() => _stage = Stage.record);
+    _go(Onboard.practice);
+  }
+
+  /// Amen in the practice: the words are written by the real engine, shown, and the audio deleted.
+  Future<void> _practiceAmen() async {
+    final s = _session;
+    _engine.setView(SkyView.welcome);
+    setState(() => _stage = Stage.home);
+    _go(Onboard.practiceResult);
+    await s.finish();
+    await s.transcribe();
+    await _clearPractice();
+    if (firstRunFeed.isNotEmpty && _ios) unawaited(NativeSpeech.instance.debugFeed(null));
+    debugPrint('first run: practice ${s.wordsState.name}, ${s.words.length} characters');
+  }
+
+  /// "Not now" on the practice: nothing kept, on to the sky.
+  Future<void> _closePractice() async {
+    _session.discard();
+    await _clearPractice();
+    await _finishFirstRun();
+  }
+
+  /// The end of the first run (or of the shared first launch, with [state] "rest"): the person's
+  /// own sky, with "When a blessing is recorded, its light appears here." and New blessing.
+  Future<void> _finishFirstRun({String state = FirstRun.done}) async {
+    await _settings?.setFirstRun(state);
+    if (!mounted) return;
+    if (_session.practice) {
+      _session.dispose();
+      _session = RecordSession();
+    }
+    _perms?.dispose();
+    _perms = null;
+    _engine.lineFor = 0;
+    _setBlessings(_blessings, focus: _blessings.length - 1);
+    _engine.setView(SkyView.home);
+    _lookHome(_engine.focus);
+    setState(() => _stage = Stage.home);
+    _go(Onboard.none);
+  }
+
+  // ---- the first launch from a blessing file: "Read first" ----
+
+  Future<void> _startShared() async {
+    final f = _inbox.first;
+    Arrival a;
+    try {
+      a = await arrivalOf(f, _store.get);
+    } catch (e) {
+      a = ArrivalUnreadable('$e');
+    }
+    if (!mounted) return;
+    if (a is! ArrivalNew) {
+      // nothing to read here: the usual first run, and the file's own sheet after it
+      return _startOpening(shared: false);
+    }
+    _inbox.remove(f);
+    _shared = a.record.toBlessing(place: _where?.place ?? saltLakeTemple);
+    _startOpening(shared: true);
+  }
+
+  void _sharedContinue() {
+    if (_onboard != Onboard.sharedLine) return;
+    _engine.setView(SkyView.dim);
+    _go(Onboard.sharedPreview);
+  }
+
+  /// Keep: Face ID is asked now, and only now; then it is saved and opens in the person's sky.
+  Future<void> _keepShared() async {
+    final b = _shared;
+    if (b == null || _sharedBusy) return;
+    setState(() => _sharedBusy = true);
+    try {
+      final bio = await _asker.biometry();
+      if (bio.asks && bio.state == 'ok' && !(_settings?.faceIdAsked ?? true)) {
+        await _settings?.setFaceIdAsked();
+        await _asker.askBiometrics(Strings.faceIdKeepReason);
+      }
+    } catch (e) {
+      debugPrint('first run: $e');
+    }
+    try {
+      await _store.create(b);
+    } catch (e) {
+      debugPrint('first run: could not keep the shared blessing: $e');
+    }
+    await _lock.recheck();
+    await _settings?.setFirstRun(FirstRun.rest);
+    if (!mounted) return;
+    _shared = null;
+    _sharedBusy = false;
+    _line = const [];
+    _engine.lineFor = 0;
+    _go(Onboard.none);
+    await _openReceived(b.id);
+  }
+
+  /// Not now: nothing kept; the person's empty sky. The rest of the first run comes next launch.
+  Future<void> _notNowShared() async {
+    if (_sharedBusy) return;
+    _shared = null;
+    await _finishFirstRun(state: FirstRun.rest);
+  }
+
+  List<Widget> _firstRunLayers(Palette p) {
+    bool built(Onboard o) => _onboard == o || _leaving.contains(o);
+    Widget layer(Onboard o, Widget Function() child) =>
+        Positioned.fill(key: ValueKey('fr-${o.name}'), child: FirstRunFade(on: _onboard == o, child: child()));
+    return [
+      if (built(Onboard.opening)) layer(Onboard.opening, () => OpeningLayer(palette: p, onTap: _afterOpening)),
+      if (built(Onboard.welcome)) layer(Onboard.welcome, () => WelcomeLayer(palette: p, onContinue: _welcomeDone)),
+      if (built(Onboard.permissions) && _perms != null)
+        layer(Onboard.permissions, () => PermissionsLayer(palette: p, state: _perms!, onContinue: _runPermissions)),
+      if (built(Onboard.rehearsal))
+        layer(Onboard.rehearsal, () => RehearsalAskLayer(palette: p, onTry: _openPractice, onNotNow: _finishFirstRun)),
+      if (built(Onboard.practiceResult))
+        layer(Onboard.practiceResult, () => PracticeResultLayer(palette: p, session: _session, onContinue: _finishFirstRun)),
+      if (built(Onboard.sharedLine)) layer(Onboard.sharedLine, () => SharedLineLayer(palette: p, onContinue: _sharedContinue)),
+      if (built(Onboard.sharedPreview))
+        layer(
+          Onboard.sharedPreview,
+          () => SharedPreviewLayer(palette: p, blessing: _shared, busy: _sharedBusy, onKeep: _keepShared, onNotNow: _notNowShared),
+        ),
+    ];
   }
 
   // ---- reading ----
@@ -1097,7 +1465,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Positioned.fill(
               child: Fade(
                 key: const Key('stage-home'),
-                on: _stage == Stage.home && _lock.ready && !HomeScreen.debugBare,
+                on: _stage == Stage.home && _lock.ready && !HomeScreen.debugBare && _onboard == Onboard.none,
                 inDuration: inTime,
                 outDuration: outTime,
                 delay: delay,
@@ -1257,6 +1625,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onLanguage: _setLanguage,
                   onOpenSettings: _recorder.openSettings,
                   active: _stage == Stage.record,
+                  practice: _session.practice,
                 ),
               ),
             ),
@@ -1281,6 +1650,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
             ),
+            ..._firstRunLayers(p),
             // the app was closed while recording: what was kept, told once
             Positioned.fill(
               child: RecoveredSheet(

@@ -31,21 +31,25 @@ class Sheet extends StatelessWidget {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     // Reduce Motion: it is simply there, and simply gone
     final still = MediaQuery.of(context).disableAnimations;
-    final panel = IgnorePointer(
-      ignoring: !on,
-      child: AnimatedSlide(
-        offset: on ? Offset.zero : const Offset(0, 1.04),
-        duration: still ? Duration.zero : const Duration(milliseconds: 500),
-        curve: easeOut,
-        child: Container(
-          key: panelKey,
-          padding: EdgeInsets.fromLTRB(24, 20, 24, 38 + inset),
-          decoration: BoxDecoration(
-            color: p.raised,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: [BoxShadow(color: p.ink.withValues(alpha: .07), offset: const Offset(0, -1))],
+    // off, it is slid below the screen and still built: out of VoiceOver's reach as well as the finger's
+    final panel = ExcludeSemantics(
+      excluding: !on,
+      child: IgnorePointer(
+        ignoring: !on,
+        child: AnimatedSlide(
+          offset: on ? Offset.zero : const Offset(0, 1.04),
+          duration: still ? Duration.zero : const Duration(milliseconds: 500),
+          curve: easeOut,
+          child: Container(
+            key: panelKey,
+            padding: EdgeInsets.fromLTRB(24, 20, 24, 38 + inset),
+            decoration: BoxDecoration(
+              color: p.raised,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [BoxShadow(color: p.ink.withValues(alpha: .07), offset: const Offset(0, -1))],
+            ),
+            child: Semantics(scopesRoute: true, explicitChildNodes: true, label: label, child: child),
           ),
-          child: Semantics(scopesRoute: true, explicitChildNodes: true, label: label, child: child),
         ),
       ),
     );

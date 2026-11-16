@@ -139,7 +139,7 @@ class SkyPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..shader = _sky);
 
     // ---- the line the lights are strung on ----
-    if (e.names > .02 && line.isNotEmpty) _paintLine(canvas, size);
+    if (math.max(e.names, e.ring) > .02 && line.isNotEmpty) _paintLine(canvas, size);
 
     // ---- stars ----
     final sw = Stopwatch()..start();
@@ -318,13 +318,19 @@ class SkyPainter extends CustomPainter {
       ..strokeWidth =
           1 /
           dpr // one device pixel, as the prototype's GL line
-      ..color = Color.fromARGB((.2 * e.names * 255).round(), (l[0] * 255).round(), (l[1] * 255).round(), (l[2] * 255).round());
+      ..color = Color.fromARGB((.2 * math.min(1.0, math.max(e.names, e.ring)) * 255).round(), (l[0] * 255).round(), (l[1] * 255).round(), (l[2] * 255).round());
     var n = 0;
     void flush() {
       if (n >= 4) canvas.drawRawPoints(ui.PointMode.polygon, Float32List.sublistView(_linePts, 0, n), paint);
       n = 0;
     }
 
+    // the opening's sweep: drawn from the left edge as far across as it has reached
+    final reveal = e.lineReveal;
+    if (reveal < 1) {
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, 0, size.width * reveal, size.height));
+    }
     for (final v in line) {
       e.project(v, _p);
       final off = _p.z < .05 || _p.x < -200 || _p.x > size.width + 200 || _p.y < -200 || _p.y > size.height + 200;
@@ -336,6 +342,7 @@ class SkyPainter extends CustomPainter {
       _linePts[n++] = _p.y;
     }
     flush();
+    if (reveal < 1) canvas.restore();
   }
 
   TextPainter _label(String s, TextStyle style) => _text.putIfAbsent(

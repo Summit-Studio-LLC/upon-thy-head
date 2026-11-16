@@ -134,7 +134,8 @@ void main() {
       expect(es.reviewNow, 'Revisar ahora');
       expect(es.saveForLater, 'Guardar para después');
       expect(es.blessingFrom('Dad'), 'Una bendición de Dad');
-      expect(es.settings, 'Ajustes');
+      expect(es.settings, 'Configuración');
+      expect(es.more, 'Configuración');
       expect(es.appLock, 'Bloqueo de la app');
       expect(es.untitled, 'Bendición');
     });
@@ -142,8 +143,8 @@ void main() {
     test('every fixed string has Spanish, and only names stay the same', () {
       final e = en.catalogue, s = es.catalogue;
       expect(s.keys, e.keys);
-      // the same in both on purpose: a word Spanish shares
-      const same = {'original'};
+      // the same in both on purpose: a word Spanish shares, and the app's name
+      const same = {'original', 'appName'};
       for (final k in e.keys) {
         expect(s[k], isNotEmpty, reason: k);
         if (!same.contains(k)) expect(s[k], isNot(e[k]), reason: '$k is still English: "${e[k]}"');

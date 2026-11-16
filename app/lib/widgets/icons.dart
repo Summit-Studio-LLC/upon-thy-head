@@ -3,7 +3,11 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 
 /// The prototype's stroke icons, drawn on a 24-unit grid.
-enum Glyph { list, sky, forward, older, newer, upDown, play, pause, back10, cross, more, lock, share }
+enum Glyph {
+  list, sky, forward, older, newer, upDown, play, pause, back10, cross, more, lock, share,
+  // the first run's permission rows
+  microphone, writing, location, faceId,
+}
 
 class _IconPainter extends CustomPainter {
   _IconPainter(this.icon, this.color);
@@ -107,6 +111,62 @@ class _IconPainter extends CustomPainter {
             ..lineTo(8.75, 8.25)
             ..arcToPoint(const Offset(15.25, 8.25), radius: const Radius.circular(3.25))
             ..lineTo(15.25, 11),
+          paint,
+        );
+      case Glyph.microphone:
+        // the capsule in its cradle, on a short stand
+        canvas.drawRRect(RRect.fromLTRBR(9, 3, 15, 14, const Radius.circular(3)), paint);
+        canvas.drawArc(Rect.fromCircle(center: const Offset(12, 11), radius: 6), 0, 3.14159, false, paint);
+        poly([12, 17, 12, 20.5]);
+        poly([9, 20.5, 15, 20.5]);
+      case Glyph.writing:
+        // speech recognition: lines of writing, and the pencil writing the last of them
+        poly([4, 6, 20, 6]);
+        poly([4, 11, 16.5, 11]);
+        poly([4, 16, 10, 16]);
+        canvas.drawPath(
+          Path()
+            ..moveTo(13, 20)
+            ..lineTo(15.83, 19.29)
+            ..lineTo(21.13, 13.99)
+            ..lineTo(19.01, 11.87)
+            ..lineTo(13.71, 17.17)
+            ..close(),
+          paint,
+        );
+        poly([13.71, 17.17, 15.83, 19.29]);
+      case Glyph.location:
+        // the location arrow, as iOS draws "here", in outline
+        canvas.drawPath(
+          Path()
+            ..moveTo(19.5, 4.5)
+            ..lineTo(4.5, 11)
+            ..lineTo(11.5, 12.5)
+            ..lineTo(13, 19.5)
+            ..close(),
+          paint,
+        );
+      case Glyph.faceId:
+        // the four corners, and a face inside them
+        for (final (sx, sy) in [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)]) {
+          Offset q(double x, double y) => Offset(12 + sx * (x - 12), 12 + sy * (y - 12));
+          final a = q(3.5, 8), b = q(3.5, 6.5), c = q(6.5, 3.5), d = q(8, 3.5);
+          canvas.drawPath(
+            Path()
+              ..moveTo(a.dx, a.dy)
+              ..lineTo(b.dx, b.dy)
+              ..arcToPoint(c, radius: const Radius.circular(3), clockwise: sx * sy > 0)
+              ..lineTo(d.dx, d.dy),
+            paint,
+          );
+        }
+        poly([9, 8.75, 9, 10.25]);
+        poly([15, 8.75, 15, 10.25]);
+        poly([12.25, 8.75, 12.25, 13, 11.25, 13]);
+        canvas.drawPath(
+          Path()
+            ..moveTo(9, 15.5)
+            ..quadraticBezierTo(12, 17.75, 15, 15.5),
           paint,
         );
     }
