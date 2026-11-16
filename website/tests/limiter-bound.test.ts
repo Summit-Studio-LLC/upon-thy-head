@@ -52,3 +52,18 @@ test("IPv6 senders are counted by their /64, IPv4 singly", () => {
   assert.equal(networkOf("::ffff:203.0.113.7"), "::ffff:203.0.113.7");
   assert.equal(networkOf(""), "");
 });
+
+test("the ceilings for everyone hold however many senders there are", async () => {
+  const { read, LIMITS } = await import("../lib/links/service.ts");
+  const limiter = new Limiter();
+  const deps = { store: null, limiter, now: () => 0 };
+  const id = "A".repeat(22);
+  const [max] = LIMITS.readAll;
+  let slowed = 0;
+  // every request comes from a sender never seen before, so no per-client limit can catch it
+  for (let i = 0; i < max + 50; i++) {
+    const answer = await read(deps, { id, client: `sender${i}` });
+    if (answer.status === 429) slowed++;
+  }
+  assert.equal(slowed, 50);
+});

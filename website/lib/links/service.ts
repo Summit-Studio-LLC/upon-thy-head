@@ -21,6 +21,16 @@ export const LIMITS = {
   createDay: [40, 24 * 60 * 60 * 1000] as const,
   read: [120, 60 * 1000] as const,
   stop: [30, 60 * 1000] as const,
+  /**
+   * Everyone together, whoever they are. The per-client counts above can be outrun by a sender
+   * with more addresses than the limiter's table holds (it drops the longest-idle sender when
+   * full, so that nobody is locked out). These ceilings do not depend on how many senders there
+   * are, so they hold regardless. Set far above honest use: a blessing is opened a handful of
+   * times, and creating is already capped per day by dayLinks.
+   */
+  readAll: [Number(process.env.LINKS_READS_PER_MINUTE ?? 3000), 60 * 1000] as const,
+  stopAll: [Number(process.env.LINKS_STOPS_PER_MINUTE ?? 600), 60 * 1000] as const,
+  createAll: [Number(process.env.LINKS_CREATES_PER_MINUTE ?? 120), 60 * 1000] as const,
 };
 
 export const ID = /^[A-Za-z0-9_-]{22}$/;
@@ -36,8 +46,11 @@ export type Answer = { status: number; headers?: Record<string, string>; json?: 
  * sender who has gone longest without a request is dropped to make room: nobody is ever refused
  * because the table is full, and no request does more than a fixed, small amount of work (there is
  * no sweep). The cost is that under a flood from more than `maxClients` addresses a sender's count
- * can be forgotten early; the limit that still holds then is the daily budget for everyone
- * together (LIMITS.dayLinks, LIMITS.dayBytes), which no number of addresses can raise.
+ * can be forgotten early. What still holds then are the ceilings for everyone together, which no
+ * number of addresses can raise: LIMITS.readAll, stopAll and createAll per minute, and the daily
+ * budget (LIMITS.dayLinks, LIMITS.dayBytes). This is a deliberate trade: a full table that
+ * refused unknown senders would let a flood lock honest people out, which is worse here than a
+ * flood being held only by the shared ceilings.
  */
 export class Limiter {
   /** The most senders counted at once, per kind of request. Past this a table does not grow. */
@@ -68,6 +81,9 @@ export class Limiter {
   }
 }
 
+/** The one name everyone is counted under for the ceilings that ignore who is asking. */
+const EVERYONE = "*";
+
 export type Deps = { store: Store | null; limiter: Limiter; now: () => number; random?: (n: number) => Uint8Array };
 
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
@@ -84,7 +100,10 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
   if (input.body === "too_big" || input.body.length > LIMITS.maxBytes) return refuse(413, "too_big");
   if (input.body.length < LIMITS.minBytes) return refuse(400, "too_small");
   if (input.body[0] !== LIMITS.version) return refuse(400, "version");
-  const wait = deps.limiter.take("create", input.client, LIMITS.create, now) || deps.limiter.take("create-day", input.client, LIMITS.createDay, now);
+  const wait =
+    deps.limiter.take("create", input.client, LIMITS.create, now) ||
+    deps.limiter.take("create-day", input.client, LIMITS.createDay, now) ||
+    deps.limiter.take("create-all", EVERYONE, LIMITS.createAll, now);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
 
@@ -111,7 +130,7 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
 export async function read(deps: Deps, input: { id: string; client: string }): Promise<Answer> {
   const now = deps.now();
   if (!ID.test(input.id)) return refuse(404, "not_found");
-  const wait = deps.limiter.take("read", input.client, LIMITS.read, now);
+  const wait = deps.limiter.take("read", input.client, LIMITS.read, now) || deps.limiter.take("read-all", EVERYONE, LIMITS.readAll, now);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
   const copy = await deps.store.get(input.id);
@@ -127,7 +146,7 @@ export async function read(deps: Deps, input: { id: string; client: string }): P
 export async function stop(deps: Deps, input: { id: string; authorization: string | null; client: string }): Promise<Answer> {
   const now = deps.now();
   if (!ID.test(input.id)) return refuse(404, "not_found");
-  const wait = deps.limiter.take("stop", input.client, LIMITS.stop, now);
+  const wait = deps.limiter.take("stop", input.client, LIMITS.stop, now) || deps.limiter.take("stop-all", EVERYONE, LIMITS.stopAll, now);
   if (wait) return slow(wait);
   const token = /^Bearer ([^\s]+)$/.exec(input.authorization ?? "")?.[1];
   if (!token || !TOKEN.test(token)) return refuse(401, "no_token", { "WWW-Authenticate": "Bearer" });
