@@ -1,0 +1,775 @@
+/* Lamplight, exactly as in app/lib/theme.dart. */
+:root {
+  --ground: #0b0907;
+  --surface: #13100c;
+  --raised: #1d1913;
+  --ink: #efe6d4;
+  --ink-2: #b5ab98;
+  --ink-3: #8a806e;
+  --light: #f0c987;
+  --line: rgb(239 230 212 / 0.1);
+  --serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
+  --sans: -apple-system, "SF Pro Text", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --gutter: clamp(1.5rem, 6vw, 4rem);
+  --gap: clamp(5.5rem, 12vw, 10rem);
+  --horizon: clamp(3.5rem, 10vw, 9rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  overflow-x: clip;
+  background: var(--ground);
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: clip;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--light);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* ---------- the sky, at the top of the page and again at its close ---------- */
+
+.hero,
+.close {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.hero {
+  align-items: flex-end;
+  min-height: 100svh;
+}
+
+/* With the live sky running, the top of the page is held in place while the scene plays. */
+.journey[data-live] {
+  height: calc(100lvh + 260vh);
+}
+
+.journey[data-live] .hero {
+  position: sticky;
+  top: 0;
+  height: 100lvh;
+  min-height: 0;
+}
+
+.journey[data-live] .hero-words {
+  padding-bottom: calc(clamp(3rem, 9svh, 6rem) + 100lvh - 100svh);
+  will-change: transform, opacity;
+}
+
+.stage {
+  display: none;
+}
+
+/* The two lines that come and go under the halo. */
+.journey[data-live] .stage {
+  position: absolute;
+  inset: 54% 0 auto;
+  display: block;
+  padding: 0 var(--gutter);
+  font-size: clamp(2rem, 5.6vw, 4.25rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-wrap: balance;
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.sky,
+.sky-still {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+}
+
+.sky picture,
+.sky img,
+.sky canvas,
+.sky-still img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sky img,
+.sky-still img {
+  object-fit: cover;
+}
+
+.sky img {
+  will-change: transform, opacity;
+}
+
+/* The top sky arrives out of the dark; the script brings it up. */
+.hero .sky img,
+.hero .sky canvas {
+  opacity: 0;
+}
+
+/* The sky sinks into the ground so the words sit on the page, as in the app. */
+.hero::after,
+.close::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.hero::after {
+  background: linear-gradient(
+    to bottom,
+    rgb(11 9 7 / 0.35) 0%,
+    rgb(11 9 7 / 0) 22%,
+    rgb(11 9 7 / 0) 45%,
+    rgb(11 9 7 / 0.72) 74%,
+    var(--ground) 100%
+  );
+}
+
+/* The ring and its lights as plain markup: used when JavaScript is off, and along section edges. */
+.ring {
+  position: absolute;
+  inset: 20svh 0 auto;
+  height: max(48vw, 16rem);
+  z-index: -1;
+}
+
+.ring svg,
+.horizon svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ring path,
+.horizon-ring {
+  fill: none;
+  stroke: var(--light);
+  stroke-opacity: 0.3;
+  stroke-width: 0.75px;
+}
+
+.light {
+  --d: calc(var(--size) * 0.5rem);
+  position: absolute;
+  width: var(--d);
+  height: var(--d);
+  margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
+  border-radius: 50%;
+  background: #fff7e6;
+  box-shadow:
+    0 0 calc(var(--d) * 0.6) calc(var(--d) * 0.15) rgb(255 204 128 / 0.85),
+    0 0 calc(var(--d) * 2.6) calc(var(--d) * 0.7) rgb(255 168 92 / 0.28);
+}
+
+/* The newest blessing: a little larger, with the app's thin cross of light. */
+.light-bright::before,
+.light-bright::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--d) * 9);
+  height: 1px;
+  translate: -50% -50%;
+  background: linear-gradient(to right, transparent, rgb(255 214 150 / 0.75), transparent);
+}
+
+.light-bright::after {
+  rotate: 90deg;
+}
+
+.hero-words {
+  padding-top: 40svh;
+  padding-bottom: clamp(3rem, 9svh, 6rem);
+}
+
+h1 {
+  font-size: clamp(3.25rem, 13.5vw, 7.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.022em;
+}
+
+.hero-sentence {
+  max-width: 21em;
+  margin-top: 1.25rem;
+  font-size: clamp(1.25rem, 2.4vw, 1.5rem);
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero .ring path {
+    animation: appear 3s var(--ease) 0.2s backwards;
+  }
+
+  .hero .light {
+    animation: appear 2.6s var(--ease) calc(0.9s + var(--order) * 0.55s) backwards;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- the one action ---------- */
+
+.action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem 1.5rem;
+  margin-top: 2rem;
+}
+
+.download {
+  display: inline-block;
+  padding: 0.8125rem 1.5rem;
+  border-radius: 999px;
+  background: var(--light);
+  color: var(--ground);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.3;
+  text-decoration: none;
+  transition: background-color 0.3s var(--ease);
+  will-change: transform;
+  touch-action: manipulation;
+}
+
+.download:hover {
+  background: #f6d9a6;
+}
+
+.action-note {
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+/* ---------- headings and running text ---------- */
+
+h2 {
+  max-width: 14em;
+  font-size: clamp(2.25rem, 6.4vw, 4.25rem);
+  line-height: 1.03;
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  font-size: 1.625rem;
+  line-height: 1.2;
+  letter-spacing: -0.008em;
+}
+
+main p {
+  color: var(--ink-2);
+}
+
+/* ---------- a picture of the app, or the place kept for it ---------- */
+
+.shot-wrap {
+  position: relative;
+  width: min(74%, 18rem);
+}
+
+.shot {
+  position: relative;
+  aspect-ratio: 1206 / 2622;
+  overflow: hidden;
+  border-radius: 13% / 6%;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 2.5rem 5rem -1.5rem rgb(0 0 0 / 0.8);
+}
+
+.band .shot {
+  background: var(--ground);
+}
+
+.shot img {
+  object-fit: cover;
+}
+
+.shot-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1.5rem;
+  padding: 1rem;
+  color: var(--ink-2);
+  font-style: italic;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.shot-light {
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: #fff7e6;
+  box-shadow:
+    0 0 0.25rem 0.0625rem rgb(255 204 128 / 0.8),
+    0 0 1rem 0.3rem rgb(255 168 92 / 0.25);
+}
+
+/* Lamplight behind the first picture: the glow of the app's own recording screen. */
+.lamp::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: -1;
+  width: 240%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(240 201 135 / 0.16),
+    rgb(240 201 135 / 0.05) 50%,
+    rgb(240 201 135 / 0) 100%
+  );
+  pointer-events: none;
+}
+
+/* ---------- words beside a picture ---------- */
+
+main {
+  overflow-x: clip;
+}
+
+.pair {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 3.5rem;
+  padding-block: var(--gap);
+}
+
+.first {
+  padding-top: clamp(3rem, 8vw, 5rem);
+}
+
+.pair-words p {
+  max-width: 29em;
+  margin-top: 1.25rem;
+}
+
+.pair-words h2 + p {
+  margin-top: 1.75rem;
+}
+
+.pair-words .aside {
+  color: var(--light);
+  font-style: italic;
+}
+
+/* ---------- a band of the page whose top edge is the ring ---------- */
+
+.band {
+  position: relative;
+  margin-top: var(--horizon);
+  padding-block: clamp(2.5rem, 6vw, 4.5rem) var(--gap);
+  background: var(--surface);
+}
+
+.horizon {
+  position: absolute;
+  inset: calc(var(--horizon) * -1) 0 auto;
+  height: calc(var(--horizon) + 1px);
+}
+
+.horizon-ground {
+  fill: var(--surface);
+}
+
+/* ---------- three steps, hung along the curve ---------- */
+
+.steps {
+  display: grid;
+  gap: 4.5rem;
+  margin-top: 3.5rem;
+  list-style: none;
+}
+
+.steps p {
+  max-width: 26em;
+  margin-top: 0.75rem;
+}
+
+.steps .shot-wrap {
+  margin-top: 2.25rem;
+}
+
+/* ---------- word for word ---------- */
+
+.words {
+  display: grid;
+  gap: 3rem;
+  padding-block: var(--gap);
+}
+
+.words-intro p {
+  max-width: 27em;
+  margin-top: 1.75rem;
+}
+
+.specimen {
+  counter-reset: cuts;
+}
+
+.specimen-text {
+  color: var(--ink);
+  font-size: clamp(1.625rem, 3.5vw, 2.625rem);
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+  text-wrap: wrap;
+}
+
+.cut {
+  position: relative;
+  cursor: pointer;
+}
+
+.cut input {
+  position: absolute;
+  inset: -0.25em 0;
+  width: 100%;
+  height: calc(100% + 0.5em);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cut input:checked {
+  counter-increment: cuts;
+}
+
+.cut span {
+  border-radius: 0.2em;
+  text-decoration: line-through 1px transparent;
+  transition:
+    color 0.5s var(--ease),
+    text-decoration-color 0.5s var(--ease);
+}
+
+.cut input:checked + span {
+  color: var(--ink-3);
+  text-decoration-color: var(--light);
+}
+
+.cut input:focus-visible + span {
+  outline: 2px solid var(--light);
+  outline-offset: 3px;
+}
+
+.specimen-note {
+  margin-top: 2rem;
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.specimen-count {
+  color: var(--light);
+}
+
+.specimen-count::after {
+  content: counter(cuts) ". ";
+}
+
+/* ---------- the promises, set as lines to be read ---------- */
+
+.litany {
+  display: grid;
+  gap: 2.75rem;
+  margin-top: 3.5rem;
+  list-style: none;
+}
+
+.litany h3 {
+  font-size: clamp(1.75rem, 4.2vw, 2.875rem);
+  line-height: 1.1;
+  letter-spacing: -0.016em;
+}
+
+.litany p {
+  max-width: 25em;
+  margin-top: 0.75rem;
+}
+
+/* ---------- the close ---------- */
+
+.close {
+  align-items: center;
+  min-height: min(100svh, 56rem);
+  padding-block: var(--gap);
+}
+
+.close::after {
+  background: linear-gradient(
+    to bottom,
+    var(--ground) 0%,
+    rgb(11 9 7 / 0.25) 30%,
+    rgb(11 9 7 / 0.25) 62%,
+    var(--ground) 100%
+  );
+}
+
+.close .ring {
+  top: calc(2rem - 8vw);
+}
+
+.close-words {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.close h2 {
+  font-size: clamp(2.75rem, 9vw, 5.5rem);
+}
+
+.close .action {
+  flex-direction: column;
+}
+
+.app-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6rem;
+  height: 6rem;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  border-radius: 22.37%;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.8);
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.footer {
+  padding-block: 1rem 4rem;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.footer p {
+  max-width: 44em;
+}
+
+.footer p + p {
+  margin-top: 0.75rem;
+}
+
+.footer .footer-plain {
+  color: var(--ink-2);
+}
+
+.footer a {
+  text-underline-offset: 0.2em;
+}
+
+/* ---------- wider than a phone ---------- */
+
+@media (min-width: 760px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: clamp(3rem, 8vw, 7rem);
+    align-items: center;
+  }
+
+  .pair .shot-wrap {
+    width: clamp(15rem, 27vw, 21rem);
+  }
+
+  /* The first picture rises into the sky above it. */
+  .first .shot-wrap {
+    margin-top: -4rem;
+  }
+
+  .first .pair-words {
+    padding-top: 2rem;
+  }
+
+  .pair-flipped {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pair-flipped .shot-wrap {
+    order: -1;
+  }
+
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: clamp(2rem, 5vw, 5rem);
+    align-items: start;
+  }
+
+  /* Each step hangs a little lower or higher, following the curve above it. */
+  .steps li:nth-child(2) {
+    margin-top: 4.5rem;
+  }
+
+  .steps li:nth-child(3) {
+    margin-top: 1.75rem;
+  }
+
+  .steps .shot-wrap {
+    width: 100%;
+  }
+
+  .words {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(3rem, 7vw, 6rem);
+    align-items: start;
+  }
+
+  .litany {
+    gap: 3.25rem;
+  }
+
+  .litany li {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: clamp(2rem, 5vw, 5rem);
+    align-items: baseline;
+  }
+
+  .litany p {
+    margin-top: 0;
+  }
+}
+
+/* ---------- the page moving with the scroll ---------- */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Pictures drift a little against the page, each at its own depth. */
+    .shot {
+      --drift: 2.25rem;
+      animation: drift linear both;
+      animation-timeline: view();
+    }
+
+    .steps li:nth-child(2) .shot {
+      --drift: 3.75rem;
+    }
+
+    .steps li:nth-child(3) .shot {
+      --drift: 1.25rem;
+    }
+
+    .lamp::before {
+      --drift: -5rem;
+      animation: drift linear both;
+      animation-timeline: view();
+    }
+
+    /* The ring along a section's edge draws itself, and its lights come on in turn. */
+    .horizon {
+      view-timeline: --horizon block;
+    }
+
+    .horizon-ring {
+      stroke-dasharray: 1;
+      animation: draw linear both;
+      animation-timeline: --horizon;
+      animation-range: entry 10% cover 55%;
+    }
+
+    .horizon .light {
+      animation: appear linear both;
+      animation-timeline: --horizon;
+      animation-range: entry calc(55% + var(--order) * 30%) cover calc(38% + var(--order) * 12%);
+    }
+  }
+}
+
+@keyframes drift {
+  from {
+    translate: 0 var(--drift);
+  }
+
+  to {
+    translate: 0 calc(var(--drift) * -1);
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
