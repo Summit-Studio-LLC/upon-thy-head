@@ -21,8 +21,15 @@ export const HEADERS = {
 // A fresh secret each time the server starts. The address is mixed with it and only the mix is
 // held, in memory, for as long as a rate-limit window lasts. It is never stored and never logged.
 const secret = randomBytes(32);
+//
+// Which address: only the one the platform's own proxy wrote. On Vercel that is
+// `x-vercel-forwarded-for`, which Vercel sets itself and a client cannot supply. `x-forwarded-for`
+// is never read: anyone can send it, and a sender who could choose their own address could give
+// themselves a fresh allowance with every request. Anywhere else (this Mac, a test) there is no
+// trusted proxy, so every request counts against one shared allowance.
 export function clientOf(request: Request): string {
-  const address = (request.headers.get("x-vercel-forwarded-for") ?? request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  const trusted = process.env.VERCEL ? request.headers.get("x-vercel-forwarded-for") : null;
+  const address = (trusted ?? "").split(",")[0].trim() || "shared";
   return createHmac("sha256", secret).update(address).digest("base64url").slice(0, 22);
 }
 

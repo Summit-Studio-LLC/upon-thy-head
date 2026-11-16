@@ -30,12 +30,20 @@ export type Answer = { status: number; headers?: Record<string, string>; json?: 
 
 /** Counts in memory only, so nothing about a client is ever written anywhere. */
 export class Limiter {
+  /** The most senders counted separately at once. Past this the table does not grow. */
+  static readonly maxClients = 20000;
   private windows = new Map<string, { count: number; ends: number }>();
 
   /** Take one from `client`'s allowance for `what`. Returns 0 if allowed, or the seconds to wait. */
   take(what: string, client: string, [max, windowMs]: readonly [number, number], now: number): number {
-    if (this.windows.size > 20000) for (const [k, w] of this.windows) if (w.ends <= now) this.windows.delete(k);
-    const key = `${what}:${client}`;
+    let key = `${what}:${client}`;
+    if (!this.windows.has(key) && this.windows.size >= Limiter.maxClients) {
+      for (const [k, w] of this.windows) if (w.ends <= now) this.windows.delete(k);
+      // Still full of live windows: the table never grows past its bound. Senders it has no room
+      // to count separately share one allowance until room returns, so a flood of new addresses
+      // is slowed as one sender would be instead of filling the memory.
+      if (this.windows.size >= Limiter.maxClients) key = `${what}:overflow`;
+    }
     let w = this.windows.get(key);
     if (!w || w.ends <= now) this.windows.set(key, (w = { count: 0, ends: now + windowMs }));
     if (w.count >= max) return Math.max(1, Math.ceil((w.ends - now) / 1000));
