@@ -29,8 +29,25 @@ const secret = randomBytes(32);
 // trusted proxy, so every request counts against one shared allowance.
 export function clientOf(request: Request): string {
   const trusted = process.env.VERCEL ? request.headers.get("x-vercel-forwarded-for") : null;
-  const address = (trusted ?? "").split(",")[0].trim() || "shared";
+  const address = networkOf((trusted ?? "").split(",")[0].trim()) || "shared";
   return createHmac("sha256", secret).update(address).digest("base64url").slice(0, 22);
+}
+
+/**
+ * The network an address belongs to, for counting. One household or phone is usually handed a
+ * whole IPv6 /64 (2^64 addresses), so IPv6 senders are counted by their /64: otherwise one
+ * sender could look like as many senders as they pleased. IPv4 addresses are counted singly.
+ */
+export function networkOf(address: string): string {
+  if (!address.includes(":")) return address;
+  const bare = address.split("%")[0].toLowerCase();
+  if (bare.includes(".")) return bare; // an IPv4 address written the IPv6 way
+  const [head, tail] = bare.split("::");
+  const front = head ? head.split(":") : [];
+  const back = tail !== undefined && tail !== "" ? tail.split(":") : [];
+  const gap = tail === undefined ? [] : new Array(Math.max(0, 8 - front.length - back.length)).fill("0");
+  const groups = [...front, ...gap, ...back].map((g) => g.replace(/^0+(?=.)/, ""));
+  return groups.length === 8 ? groups.slice(0, 4).join(":") + "::/64" : bare;
 }
 
 export function respond(answer: Answer): Response {

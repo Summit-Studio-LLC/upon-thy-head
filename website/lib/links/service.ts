@@ -28,27 +28,43 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 export type Answer = { status: number; headers?: Record<string, string>; json?: unknown; bytes?: Uint8Array };
 
-/** Counts in memory only, so nothing about a client is ever written anywhere. */
+/**
+ * Counts in memory only, so nothing about a client is ever written anywhere.
+ *
+ * Each kind of request ("create", "read", …) has its own table, so the day-long windows of one
+ * kind cannot use up the room another needs. Every table has a hard bound. When one is full, the
+ * sender who has gone longest without a request is dropped to make room: nobody is ever refused
+ * because the table is full, and no request does more than a fixed, small amount of work (there is
+ * no sweep). The cost is that under a flood from more than `maxClients` addresses a sender's count
+ * can be forgotten early; the limit that still holds then is the daily budget for everyone
+ * together (LIMITS.dayLinks, LIMITS.dayBytes), which no number of addresses can raise.
+ */
 export class Limiter {
-  /** The most senders counted separately at once. Past this the table does not grow. */
+  /** The most senders counted at once, per kind of request. Past this a table does not grow. */
   static readonly maxClients = 20000;
-  private windows = new Map<string, { count: number; ends: number }>();
+  private tables = new Map<string, Map<string, { count: number; ends: number }>>();
 
   /** Take one from `client`'s allowance for `what`. Returns 0 if allowed, or the seconds to wait. */
   take(what: string, client: string, [max, windowMs]: readonly [number, number], now: number): number {
-    let key = `${what}:${client}`;
-    if (!this.windows.has(key) && this.windows.size >= Limiter.maxClients) {
-      for (const [k, w] of this.windows) if (w.ends <= now) this.windows.delete(k);
-      // Still full of live windows: the table never grows past its bound. Senders it has no room
-      // to count separately share one allowance until room returns, so a flood of new addresses
-      // is slowed as one sender would be instead of filling the memory.
-      if (this.windows.size >= Limiter.maxClients) key = `${what}:overflow`;
+    let table = this.tables.get(what);
+    if (!table) this.tables.set(what, (table = new Map()));
+    let w = table.get(client);
+    // A Map keeps the order things were put in, so taking a sender out and putting them back
+    // moves them to the end: the front is always whoever has gone longest without a request.
+    if (w) table.delete(client);
+    if (!w || w.ends <= now) {
+      if (table.size >= Limiter.maxClients) table.delete(table.keys().next().value as string);
+      w = { count: 0, ends: now + windowMs };
     }
-    let w = this.windows.get(key);
-    if (!w || w.ends <= now) this.windows.set(key, (w = { count: 0, ends: now + windowMs }));
+    table.set(client, w);
     if (w.count >= max) return Math.max(1, Math.ceil((w.ends - now) / 1000));
     w.count++;
     return 0;
+  }
+
+  /** How many senders are being counted for `what` (for tests). */
+  size(what: string): number {
+    return this.tables.get(what)?.size ?? 0;
   }
 }
 
