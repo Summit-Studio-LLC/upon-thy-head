@@ -7,24 +7,33 @@
 
 precision highp float;
 
-uniform vec2 uSize;   // logical size of the canvas
-uniform float uDpr;   // device pixels per logical pixel
-uniform vec3 uF;      // camera forward
-uniform vec3 uR;      // camera right
-uniform vec3 uU;      // camera up
-uniform vec2 uT;      // tangent scale (x, y)
-uniform float uCy;    // vertical offset of the look point, in clip units
-uniform float uExp;   // exposure of the Milky Way
-uniform float uHas;   // 1 when the texture is loaded
+// The numbers arrive packed four to a vec4: Impeller on Metal gives every uniform its own buffer,
+// and the iOS 17 simulator allows only 14 (18 loose ones crashed it, Q61). The names below are
+// the ones the code uses; lib/sky/sky_painter.dart writes the floats in this order.
+uniform vec4 uP0;     // uSize, uDpr, uCy
+uniform vec4 uP1;     // uF, uExp
+uniform vec4 uP2;     // uR, uHas
+uniform vec4 uP3;     // uU, uSoft
+uniform vec4 uP4;     // uT, uTex
+uniform vec4 uP5;     // uTexS, unused
 uniform vec4 uOrb;    // glow: centre x, centre y (clip units), radius, strength
 uniform vec3 uSky;    // base sky colour (linear)
 uniform vec3 uTint;   // palette tint of the Milky Way
 uniform vec3 uO1;
 uniform vec3 uO2;
 uniform vec3 uO3;
-uniform vec2 uTex;    // texture size in texels
-uniform vec2 uTexS;   // size of the soft copy in texels
-uniform float uSoft;  // 0 at the home framing, rising to 1 as the view zooms in
+#define uSize uP0.xy  // logical size of the canvas
+#define uDpr  uP0.z   // device pixels per logical pixel
+#define uCy   uP0.w   // vertical offset of the look point, in clip units
+#define uF    uP1.xyz // camera forward
+#define uExp  uP1.w   // exposure of the Milky Way
+#define uR    uP2.xyz // camera right
+#define uHas  uP2.w   // 1 when the texture is loaded
+#define uU    uP3.xyz // camera up
+#define uSoft uP3.w   // 0 at the home framing, rising to 1 as the view zooms in
+#define uT    uP4.xy  // tangent scale (x, y)
+#define uTex  uP4.zw  // texture size in texels
+#define uTexS uP5.xy  // size of the soft copy in texels
 uniform sampler2D uMW;
 uniform sampler2D uMWs; // the Milky Way at half size, averaged in linear light
 

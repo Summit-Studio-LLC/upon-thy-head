@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -13,6 +12,7 @@ import '../data/blessing.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import '../lock/lock.dart';
+import '../not_yet.dart';
 import '../onboarding/first_run.dart';
 import '../onboarding/first_run_screens.dart';
 import '../place/where.dart';
@@ -150,15 +150,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   BlessingStore get _store => widget.store;
 
-  static bool get _ios => defaultTargetPlatform == TargetPlatform.iOS;
+  static bool get _ios => Phone.ios;
 
-  late final Recorder _recorder = widget.recorder ?? (_ios ? NativeSpeech.instance : SilentRecorder());
-  late final Transcriber _transcriber = widget.transcriber ?? (_ios ? NativeSpeech.instance : const SilentTranscriber());
-  late final Player _player = widget.player ?? (_ios ? NativePlayer() : SilentPlayer());
-  late final AudioJoiner _joiner = widget.joiner ?? (_ios ? NativeSpeech.instance : const FileJoiner());
-  late final AppLock _lock = widget.lock ?? AppLock(api: _ios ? NativeLockApi() : NoLockApi());
-  late final Locator _locator = widget.locator ?? (_ios ? NativeLocator() : const NoLocator());
-  late final ShareApi _share = widget.share ?? (_ios ? NativeShareApi() : NoShareApi());
+  // iPhone and Android answer the same channels; on Android most answers are still stand-ins that
+  // say "not on this phone yet" (not_yet.dart). Elsewhere (tests on the host) the silent ones.
+  static bool get _native => Phone.native;
+
+  late final Recorder _recorder = widget.recorder ?? (_native ? NativeSpeech.instance : SilentRecorder());
+  late final Transcriber _transcriber = widget.transcriber ?? (_native ? NativeSpeech.instance : const SilentTranscriber());
+  late final Player _player = widget.player ?? (_native ? NativePlayer() : SilentPlayer());
+  late final AudioJoiner _joiner = widget.joiner ?? (_native ? NativeSpeech.instance : const FileJoiner());
+  late final AppLock _lock = widget.lock ?? AppLock(api: _native ? NativeLockApi() : NoLockApi());
+  late final Locator _locator = widget.locator ?? (_native ? NativeLocator() : const NoLocator());
+  late final ShareApi _share = widget.share ?? (_native ? NativeShareApi() : NoShareApi());
 
   /// "The place blessings are given" (place/where.dart), once the settings are read.
   BlessingPlace? _where;
@@ -202,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ChangesLayerState> _changesKey = GlobalKey();
   List<String> _knownTags = const [];
   final GlobalKey<ReviewLayerState> _reviewKey = GlobalKey();
+  final GlobalKey<ReadLayerState> _readKey = GlobalKey();
 
   /// The remembered language, and where recordings go; read once at start.
   late final Future<(Settings, String)> _speechSetup = Future.wait<Object>([
@@ -1414,6 +1419,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _openRead();
   }
 
+  // ---- Android's back: the gesture and the button ----
+
+  /// Back leaves the app (with Android's own animation home) only from the sky itself with nothing
+  /// over it, and from the first run (which resumes where it was). Everywhere else [_systemBack]
+  /// does what that page's own way back does.
+  bool get _backLeavesApp {
+    if (_locked) return true;
+    if (_onboard == Onboard.practice) return false;
+    if (_onboard != Onboard.none) return true;
+    return _stage == Stage.home && !_list && !_recoveredSheet && !_receiving;
+  }
+
+  /// Back on Android: closes a sheet; otherwise goes back as the page's chevron does. It never ends
+  /// or throws away a recording: while one listens it does nothing (Discard and its sheet are the
+  /// only way to throw one away), and on the page after Amen its two buttons are the way on.
+  void _systemBack() {
+    if (_locked) return;
+    if (_onboard == Onboard.practice) {
+      // "Not now", before Begin; nothing once the practice listens
+      if (!_session.live) unawaited(_closePractice());
+      return;
+    }
+    if (_onboard != Onboard.none) return;
+    switch (_stage) {
+      case Stage.home:
+        // a shared blessing is declined only by its own button (question 49)
+        if (_receiving) return;
+        if (_recoveredSheet) return _laterRecovered();
+        if (_list) setState(() => _list = false);
+      case Stage.record:
+        if (_session.sheet) return _session.showSheet(false);
+        if (!_session.live) _closeRecord();
+      case Stage.after:
+        return;
+      case Stage.read:
+        if (_readKey.currentState?.closeSheet() ?? false) return;
+        _closeRead();
+      case Stage.review:
+        if (_reviewKey.currentState?.closeSheet() ?? false) return;
+        unawaited(_reviewKey.currentState?.back());
+      case Stage.changes:
+        _closeChanges();
+      case Stage.settings:
+        _closeSettings();
+    }
+  }
+
+  /// Tests: what Android's back would do now, without the system.
+  @visibleForTesting
+  bool debugSystemBack() {
+    if (_backLeavesApp) return false;
+    _systemBack();
+    return true;
+  }
+
   void _closeRead() {
     _engine.setView(SkyView.home);
     _engine.lookAt(_engine.focus);
@@ -1464,8 +1524,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // locked: no blessing is handed to any page, even one faded out
     final reading = _blessings.isEmpty || _locked ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)];
     if (_inbox.isNotEmpty) _scheduleArrival();
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+    return PopScope(
+      canPop: _backLeavesApp,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _systemBack();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: systemBars,
       child: ColoredBox(
         color: p.ground,
         child: Stack(
@@ -1558,6 +1623,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   enabled: _stage == Stage.read && !_locked,
                   onBack: _closeRead,
                   child: ReadLayer(
+                    key: _readKey,
                     palette: p,
                   blessing: reading,
                   placement: placement,
@@ -1730,6 +1796,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
           ],
         ),
+      ),
       ),
     );
   }

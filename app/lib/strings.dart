@@ -1,6 +1,7 @@
 import 'dart:ui' show Locale;
 
 import 'lock/lock.dart';
+import 'not_yet.dart';
 import 'record/transcriber.dart';
 
 /// The language the app's own words are in. It follows the phone's first language and has no
@@ -185,14 +186,14 @@ class Strings {
   static String get noPasscode => _w.noPasscode;
   static String get recordingLanguage => _w.recordingLanguage;
   static String get recordingLanguageHint => _w.recordingLanguageHint;
-  static String get sameAsPhone => _w.sameAsPhone;
+  static String get sameAsPhone => Phone.android ? _w.sameAsPhoneAndroid : _w.sameAsPhone;
   static String get whereGiven => _w.whereGiven;
   static String get nearTemple => _w.nearTemple;
   static String near(double lat, double lon) => _w.near(lat, lon);
   static String get whereHint => _w.whereHint;
   static String get useMyLocation => _w.useMyLocation;
   static String get about => _w.about;
-  static String get aboutBody => _w.aboutBody;
+  static String get aboutBody => Phone.android ? _w.aboutBodyAndroid : _w.aboutBody;
   static String version(String v) => _w.version(v);
   static String fullDate(DateTime d) => _w.fullDate(d);
   static String get share => _w.share;
@@ -225,13 +226,13 @@ class Strings {
   static String get welcomeFree => _w.welcomeFree;
   static String get continueLabel => _w.continueLabel;
   static String get permsTitle => _w.permsTitle;
-  static String get permsLede => _w.permsLede;
+  static String get permsLede => NotYet.recording ? _w.permsLedeNotYet : _w.permsLede;
   static String get microphone => _w.microphone;
   static String get microphoneWhy => _w.microphoneWhy;
   static String get speechRecognition => _w.speechRecognition;
   static String get speechWhy => _w.speechWhy;
   static String get location => _w.location;
-  static String get locationWhy => _w.locationWhy;
+  static String get locationWhy => Phone.android ? _w.locationWhyAndroid : _w.locationWhy;
   static String get faceIdWhy => _w.faceIdWhy;
   static String get requiredMark => _w.requiredMark;
   static String get optionalMark => _w.optionalMark;
@@ -259,6 +260,15 @@ class Strings {
   static String allowFor(String name) => _w.allowFor(name);
   static String settingsFor(String name) => _w.settingsFor(name);
   static String stillNeeded({required bool microphone, required bool speech}) => _w.stillNeeded(microphone: microphone, speech: speech);
+
+  // ---- Android: its own names for its own things, and what it cannot do yet (not_yet.dart) ----
+  static String get notifications => _w.notifications;
+  static String get notificationsWhy => _w.notificationsWhy;
+  static String get screenLock => _w.screenLock;
+  static String get notYetOnThisPhone => _w.notYetOnThisPhone;
+  static String get recordingNotYet => _w.recordingNotYet;
+  static String get lockNotYet => _w.lockNotYet;
+  static String get locationNotYet => _w.locationNotYet;
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -412,12 +422,14 @@ extension WordsCatalogue on Words {
         'continueLabel': continueLabel,
         'permsTitle': permsTitle,
         'permsLede': permsLede,
+        'permsLedeNotYet': permsLedeNotYet,
         'microphone': microphone,
         'microphoneWhy': microphoneWhy,
         'speechRecognition': speechRecognition,
         'speechWhy': speechWhy,
         'location': location,
         'locationWhy': locationWhy,
+        'locationWhyAndroid': locationWhyAndroid,
         'faceIdWhy': faceIdWhy,
         'requiredMark': requiredMark,
         'optionalMark': optionalMark,
@@ -441,6 +453,15 @@ extension WordsCatalogue on Words {
         'practiceFailed': practiceFailed,
         'sharedWithYou': sharedWithYou,
         'faceIdKeepReason': faceIdKeepReason,
+        'sameAsPhoneAndroid': sameAsPhoneAndroid,
+        'aboutBodyAndroid': aboutBodyAndroid,
+        'notifications': notifications,
+        'notificationsWhy': notificationsWhy,
+        'screenLock': screenLock,
+        'notYetOnThisPhone': notYetOnThisPhone,
+        'recordingNotYet': recordingNotYet,
+        'lockNotYet': lockNotYet,
+        'locationNotYet': locationNotYet,
       };
 }
 
@@ -745,12 +766,14 @@ class Words {
   String get continueLabel => 'Continue';
   String get permsTitle => 'A few things first';
   String get permsLede => 'Tap Allow beside each, and the phone will ask.';
+  String get permsLedeNotYet => 'This is what the app will ask for. None of it can be turned on here yet.';
   String get microphone => 'Microphone';
   String get microphoneWhy => 'To hear the blessing as it is given.';
   String get speechRecognition => 'Speech recognition';
   String get speechWhy => 'To write the words down, on this phone.';
   String get location => 'Location';
   String get locationWhy => 'To find the sky above you, not the Salt Lake Temple\'s. Allow Once is enough.';
+  String get locationWhyAndroid => 'To find the sky above you, not the Salt Lake Temple\'s. Approximate is enough.';
   String get faceIdWhy => 'To keep your blessings locked.';
   String get locationOff => 'The sky above the Salt Lake Temple will be used.';
   String get requiredMark => 'Required';
@@ -782,6 +805,17 @@ class Words {
       : microphone
           ? 'Allow the microphone to go on.'
           : 'Allow speech recognition to go on.';
+
+  // ---- Android (docs/android-plan.md 9; the iPhone's strings above stay as they are) ----
+  String get sameAsPhoneAndroid => 'Same as this phone';
+  String get aboutBodyAndroid => 'Your words stay on this phone. Nothing is sent anywhere.';
+  String get notifications => 'Notifications';
+  String get notificationsWhy => 'So you can see that it is still recording when the phone is locked.';
+  String get screenLock => 'Screen lock';
+  String get notYetOnThisPhone => 'Not available on this phone yet.';
+  String get recordingNotYet => 'Recording is not available on this phone yet.';
+  String get lockNotYet => 'The lock is not available on this phone yet.';
+  String get locationNotYet => 'Finding where you are is not available on this phone yet, so the Salt Lake Temple is used.';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -1266,6 +1300,8 @@ class _Spanish implements Words {
   @override
   String get permsLede => 'Toca Permitir junto a cada una y el teléfono te preguntará.';
   @override
+  String get permsLedeNotYet => 'Esto es lo que la app te pedirá. Todavía no se puede activar nada aquí.';
+  @override
   String get microphone => 'Micrófono';
   @override
   String get microphoneWhy => 'Para oír la bendición mientras se da.';
@@ -1277,6 +1313,8 @@ class _Spanish implements Words {
   String get location => 'Ubicación';
   @override
   String get locationWhy => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con «Permitir una vez» basta.';
+  @override
+  String get locationWhyAndroid => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con la ubicación aproximada basta.';
   @override
   String get faceIdWhy => 'Para mantener tus bendiciones bloqueadas.';
   @override
@@ -1335,6 +1373,25 @@ class _Spanish implements Words {
       : microphone
           ? 'Permite el micrófono para seguir.'
           : 'Permite el reconocimiento de voz para seguir.';
+
+  @override
+  String get sameAsPhoneAndroid => 'Igual que este teléfono';
+  @override
+  String get aboutBodyAndroid => 'Tus palabras se quedan en este teléfono. No se envía nada a ningún lado.';
+  @override
+  String get notifications => 'Notificaciones';
+  @override
+  String get notificationsWhy => 'Para que veas que sigue grabando cuando el teléfono está bloqueado.';
+  @override
+  String get screenLock => 'Bloqueo de pantalla';
+  @override
+  String get notYetOnThisPhone => 'Todavía no está disponible en este teléfono.';
+  @override
+  String get recordingNotYet => 'Todavía no se puede grabar en este teléfono.';
+  @override
+  String get lockNotYet => 'El bloqueo todavía no está disponible en este teléfono.';
+  @override
+  String get locationNotYet => 'Todavía no se puede saber dónde estás en este teléfono, así que se usa el Templo de Salt Lake.';
 }
 
 /// A row's name inside a sentence: "Microphone" reads "microphone"; "Face ID" stays as it is.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
@@ -315,8 +316,12 @@ class PermissionsLayer extends StatelessWidget {
 }
 
 /// One row: the icon at the left, the title (with Required or Optional) and its reason in the
-/// middle, and at the right its own control: Allow; the quiet tick; or "Off" and Settings. At large
-/// text sizes the control drops beneath the words.
+/// middle, and at the right its own control: Allow, or the quiet tick once allowed. At large text
+/// sizes the control drops beneath the words.
+///
+/// The control's room is the Allow button's, whatever it shows, so when a row is answered its words
+/// keep their width and the row its height: nothing re-wraps and nothing below moves. Refused, the
+/// row's "Off" and Settings go beneath its words, which still keep their width.
 class PermissionRowView extends StatelessWidget {
   const PermissionRowView({super.key, required this.palette, required this.row, this.onAllow, this.onSettings});
   final Palette palette;
@@ -332,7 +337,7 @@ class PermissionRowView extends StatelessWidget {
   /// Decorative: the row's label already names it, so VoiceOver never reads the icon.
   Glyph get glyph => switch (row.kind) {
         PermissionKind.microphone => Glyph.microphone,
-        PermissionKind.speech => Glyph.writing,
+        PermissionKind.speech => row.title == Strings.notifications ? Glyph.bell : Glyph.writing,
         PermissionKind.location => Glyph.location,
         PermissionKind.lock => row.title == 'Face ID' ? Glyph.faceId : Glyph.lock,
       };
@@ -351,7 +356,8 @@ class PermissionRowView extends StatelessWidget {
       TextSpan(text: row.required ? Strings.requiredMark : Strings.optionalMark, style: markStyle),
     ]);
     final control = _RowControl(palette: p, row: row, onAllow: onAllow, onSettings: onSettings);
-    final controlSize = control.size(scaler);
+    final slot = control.slot(scaler);
+    final off = row.status == RowStatus.off;
 
     return Semantics(
       container: true,
@@ -359,8 +365,8 @@ class PermissionRowView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: LayoutBuilder(builder: (context, box) {
           final words = box.maxWidth - iconSize - _iconGap;
-          final beside = controlSize.width == 0 || words - _controlGap - controlSize.width >= minWords;
-          final textWidth = beside && controlSize.width > 0 ? words - _controlGap - controlSize.width : words;
+          final beside = slot.width == 0 || words - _controlGap - slot.width >= minWords;
+          final textWidth = beside && slot.width > 0 ? words - _controlGap - slot.width : words;
           // The icon and the control are centred on the block of the title and the reason's first
           // line, however either wraps, at every text size.
           final t = TextPainter(text: title, textScaler: scaler, textDirection: TextDirection.ltr)..layout(maxWidth: textWidth);
@@ -404,16 +410,22 @@ class PermissionRowView extends StatelessWidget {
               ),
               const SizedBox(width: _iconGap),
               Expanded(
-                child: beside
+                child: beside && !off
                     ? text
                     : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         text,
-                        if (controlSize.width > 0) ...[const SizedBox(height: 10), control],
+                        if (slot.width > 0) ...[
+                          const SizedBox(height: 10),
+                          off ? control : SizedBox(height: slot.height, child: Align(alignment: Alignment.centerLeft, child: control)),
+                        ],
                       ]),
               ),
-              if (beside && controlSize.width > 0) ...[
+              if (beside && slot.width > 0) ...[
                 const SizedBox(width: _controlGap),
-                _At(top: centre - controlSize.height / 2, child: control),
+                _At(
+                  top: centre - slot.height / 2,
+                  child: SizedBox.fromSize(size: slot, child: off ? null : Align(alignment: Alignment.centerRight, child: control)),
+                ),
               ],
             ],
           );
@@ -450,24 +462,16 @@ class _RowControl extends StatelessWidget {
   bool get _off => row.status == RowStatus.off;
   String get _offWord => Strings.offWord(feminine: row.kind == PermissionKind.location);
 
-  /// Its size at this text size, so the row can centre it and decide where it goes.
-  Size size(TextScaler scaler) {
-    double w(String s, TextStyle st) {
-      final tp = TextPainter(text: TextSpan(text: s, style: st), textScaler: scaler, textDirection: TextDirection.ltr)..layout();
-      final x = tp.width;
-      tp.dispose();
-      return x;
-    }
-
-    return switch (row.status) {
-      RowStatus.info => Size.zero,
-      RowStatus.allowed || RowStatus.asking => _mark,
-      RowStatus.waiting => Size(w(Strings.allowLabel, _RowPill.style(palette, true)) + _RowPill.padX * 2, _RowPill.heightFor(scaler)),
-      RowStatus.off => Size(
-          w(_offWord, _offStyle) + 10 + w(Strings.settingsButton, _RowPill.style(palette, false)) + _RowPill.padX * 2,
-          _RowPill.heightFor(scaler),
-        ),
-    };
+  /// The room a row keeps for its control at this text size, the same in every state: the Allow
+  /// button's (the tick and the asking dot are smaller). Nothing for an info row. "Off" and Settings
+  /// go beneath the words instead.
+  Size slot(TextScaler scaler) {
+    if (_none) return Size.zero;
+    final tp = TextPainter(text: TextSpan(text: Strings.allowLabel, style: _RowPill.style(palette, true)), textScaler: scaler, textDirection: TextDirection.ltr)
+      ..layout();
+    final allow = tp.width + _RowPill.padX * 2;
+    tp.dispose();
+    return Size(math.max(allow, _mark.width), math.max(_RowPill.heightFor(scaler), _mark.height));
   }
 
   TextStyle get _offStyle => sans(15, 20, palette.ink);

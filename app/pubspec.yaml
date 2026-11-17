@@ -23,7 +23,9 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter:
-  uses-material-design: false
+  # true for one glyph: the "more" button of Android's own copy and paste menu (review_screen.dart).
+  # Release builds keep only the glyphs used, a few kilobytes.
+  uses-material-design: true
 
   assets:
     - assets/sky/stars.bin
@@ -45,8 +47,8 @@ flutter:
         - asset: assets/fonts/Newsreader-Italic.ttf
           style: italic
 
-# Use the SQLite that ships with iOS and macOS rather than downloading a build.
-hooks:
-  user_defines:
-    sqlite3:
-      source: system
+# SQLite: the build package:sqlite3 bundles with the app (compiled from upstream SQLite and checked
+# against the sha256 sums published with the package), on every platform. Android does not let an
+# app load the system's own SQLite, and the package's choice is one for the whole project, so iOS
+# and macOS use the bundled build too (docs/android-plan.md 8.1). The database file is the same
+# SQLite format either way: an install made with the system's SQLite opens unchanged.

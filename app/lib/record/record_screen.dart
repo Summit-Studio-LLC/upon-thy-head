@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../not_yet.dart';
 import '../sky/sky_engine.dart';
 import '../strings.dart';
 import '../theme.dart';
@@ -131,6 +132,9 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
           const SizedBox(height: 40),
       ]);
 
+  /// Under a dimmed Begin on a phone that cannot record yet: only that, said plainly.
+  Widget _notYet(Palette p) => Text(Strings.recordingNotYet, key: const Key('not-yet'), style: sans(13, 18, p.ink2), textAlign: TextAlign.center);
+
   /// Under a dimmed Begin: what was refused, and the way to Settings.
   Widget _refused(Palette p, Permissions perms) => Column(mainAxisSize: MainAxisSize.min, children: [
         Text(
@@ -157,7 +161,9 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
     final mq = MediaQuery.of(context);
     final live = s.live;
     final perms = s.permissions;
-    final refused = perms?.anyDenied ?? false;
+    // Android cannot record yet (not_yet.dart): Begin stays dimmed, with a plain line and no Settings
+    final notYet = NotYet.recording;
+    final refused = notYet || (perms?.anyDenied ?? false);
     final top = math.max(62.0, mq.viewPadding.top);
     return LayoutBuilder(builder: (context, box) {
       final h = box.maxHeight;
@@ -252,7 +258,7 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
             child: AnimatedOpacity(
               opacity: live ? 0 : 1,
               duration: const Duration(milliseconds: 400),
-              child: refused ? _refused(p, perms!) : _hintAndLanguage(p),
+              child: notYet ? _notYet(p) : refused ? _refused(p, perms!) : _hintAndLanguage(p),
             ),
           ),
         ),

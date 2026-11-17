@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../data/settings.dart';
 import '../lock/lock.dart';
+import '../not_yet.dart';
 import '../place/where.dart';
 import '../record/transcriber.dart';
 import '../strings.dart';
@@ -294,6 +295,22 @@ class FirstRunPermissions extends ChangeNotifier {
   bool get canContinue => loaded && _asking == null && stillNeeded.isEmpty;
 
   Future<List<PermissionRow>> _read() async {
+    // Android (docs/android-plan.md 9): microphone, notifications, location and the screen lock,
+    // none of which it can ask for yet (not_yet.dart). Each row says why it will be needed and
+    // that it is not here yet; none is waiting, so Continue is open.
+    if (NotYet.recording) {
+      PermissionRow notYet(PermissionKind k, {String? name, String? why}) {
+        final r = PermissionRow(k, RowStatus.info, name: name);
+        return PermissionRow(k, RowStatus.info, name: name, note: '${why ?? r.reason} ${Strings.notYetOnThisPhone}');
+      }
+
+      return [
+        notYet(PermissionKind.microphone),
+        notYet(PermissionKind.speech, name: Strings.notifications, why: Strings.notificationsWhy),
+        notYet(PermissionKind.location),
+        notYet(PermissionKind.lock, name: Strings.screenLock),
+      ];
+    }
     final out = <PermissionRow>[];
     Future<RowStatus> safe(Future<RowStatus> Function() f) async {
       try {

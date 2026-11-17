@@ -1,6 +1,6 @@
 # Android: what it needs, and where the hard parts are
 
-Research only, written 2026-11-16, no code. It is for Noah. It covers everything the iPhone app does with Apple's own code (about 2,000 lines of Swift in `app/ios/Runner/`), the Android equivalent of each, and the order to build them in.
+Research written 2026-11-16; tasks 1–3 of section 12 built the same day (see **Built so far** in section 12, and **Stand-ins** after it). It is for Noah. It covers everything the iPhone app does with Apple's own code (about 2,000 lines of Swift in `app/ios/Runner/`), the Android equivalent of each, and the order to build them in.
 
 How to read the marks:
 - **(Google)** means the claim was checked against Google's own pages, which are linked.
@@ -206,6 +206,8 @@ The iPhone must set AirDrop to "Everyone for 10 Minutes". Nothing in the app mak
 
 The app tells the `sqlite3` package to use the system's own SQLite (`source: system` in `pubspec.yaml`). On Android, apps are not allowed to load the system's private SQLite library *(confident: Android 7 and later block non-public system libraries)*. The package's options are per project, not per platform (only the library *name* can vary by platform) **(package docs, `doc/hook.md`)**. So the project has to switch to the package's bundled SQLite for all platforms, or build SQLite from source. That is a small decision for iPhone too. It is the first Android task because nothing runs without it.
 
+**Done (task 1):** every platform now uses the package's bundled SQLite (`pubspec.yaml`). An iPhone install made with the system's SQLite opens unchanged: the upgrade replay (section 12, task 1) kept every row, tag and change byte for byte.
+
 ### 8.2 Backup
 
 Android backs apps up to Google Drive by default. Turn that off for the app (`allowBackup="false"`), and add backup rules that exclude everything. **(Google)** [Auto Backup](https://developer.android.com/guide/topics/data/autobackup)
@@ -222,11 +224,13 @@ On-device work does not count as "collecting". But ML Kit's usage statistics do:
 New apps and updates must target **Android 16 (API 36)** from 31 August 2026. **(Google)** [Target API requirements](https://developer.android.com/google/play/requirements/target-sdk). Targeting 36 brings two changes:
 - **Edge-to-edge is enforced:** the app draws under the status and navigation bars. Flutter handles this, and the sky already fills the screen; check the bottom rings against the gesture bar. **(Google)** [Android 15 changes](https://developer.android.com/about/versions/15/behavior-changes-15)
 - **Predictive back is on:** the system's back gesture animates and the old back callback is no longer used. **(Google)** [Android 16 changes](https://developer.android.com/about/versions/16/behavior-changes-16)
-  - **This matters for the recording screen.** A back swipe must never end or discard a recording. Block back while recording and send it to the existing Discard path. Each screen with its own back behaviour (review, changes sheet, first run) needs a check.
+  - **This matters for the recording screen.** A back swipe must never end or discard a recording. *Correction (task 2):* back is simply **blocked** while a recording is live, not sent to Discard; Discard stays a deliberate tap, as on iPhone. On every other layer back does what the iPhone's close or swipe does (list, reading, review, Settings, sheets, the recording screen when idle), and on the home sky it leaves the app.
 
 ### 8.5 16 KB page size
 
 Google Play requires native code to work on phones with 16 KB memory pages (needs NDK r28 or later). **(Google)** [Page sizes](https://developer.android.com/guide/practices/page-sizes). Flutter 3.44 builds are fine *(unconfirmed)*. The SQLite library and whisper.cpp or sherpa-onnx must be built for it. The Pixel_10_Pro emulator on this Mac already runs a 16 KB system image, so this can be proven here.
+
+**Checked (task 1):** the debug APK passes `zipalign -c -P 16`, and the native libraries' LOAD segments are aligned at 16 KB (SQLite, dartjni) or 64 KB (Flutter). It runs on the 16 KB emulator.
 
 ---
 
@@ -244,6 +248,8 @@ On iPhone the screen "A few things first" has four rows: Microphone, Speech reco
 
 So the screen keeps four rows. Speech becomes Notifications, and "Face ID" is named for what the phone has ("Fingerprint", "Screen lock"). The same "Hey, there are a couple of things we need" flow still works. Android also stops asking after two refusals and sends the person to Settings, which the "off" state of each row already handles.
 
+**Now (stand-in):** Android shows these four rows (Microphone, Notifications, Location, Screen lock) as plain information, each ending "Not available on this phone yet.", with Continue open and a lede that promises nothing ("This is what the app will ask for. None of it can be turned on here yet."). The practice recording is skipped because there is no microphone. Each row becomes a real question in its own task (6, 11, 12).
+
 ---
 
 ## 10. The sky
@@ -254,6 +260,8 @@ So the screen keeps four rows. Speech becomes Notifications, and "Face ID" is na
   - It declares `precision highp float`. Mali and older Adreno chips handle precision differently, which can cause banding in the glow *(unconfirmed)*.
   - The 4K Milky Way texture costs about 64 MB of graphics memory uncompressed *(arithmetic, if 4096×4096 RGBA)*. That is fine on 6 GB phones and tight on 3–4 GB ones.
   - Android emulators have had trouble with Vulkan; for example, [flutter#148481](https://github.com/flutter/flutter/issues/148481) reports emulator crashes with Vulkan validation layers. Judge looks and speed only on a real phone.
+- **Done (task 3):** on the Pixel_10_Pro emulator the sky's average colour matches the iPhone simulator's within one level per channel on home, list, zoomed in, ruler, reading, Settings and after a restart (`design/sim/android/pair-*.png`). Real graphics chips are still task 15's.
+- **Uniforms packed (2026-11-16):** `sky.frag` now passes its numbers as six `vec4`s instead of 18 loose uniforms. Impeller on Metal gives each uniform its own buffer and the iOS 17 simulator allows only 14, which was the iOS 17.4 simulator crash (Q61). The iOS 26 look is unchanged (screenshots before and after differ by under 0.1 %).
 - **Floor:** Android 13 (see section 11). Treat phones with at least 4 GB of memory and a 2021-or-newer chip as the low end to test *(judgement)*.
 
 ---
@@ -270,6 +278,36 @@ So the screen keeps four rows. Speech becomes Notifications, and "Face ID" is na
 ## 12. Build order (tasks of about half a day)
 
 Each task has a "proved by" line: what shows it works. The Mac emulators are enough up to task 14; the rest needs a real phone.
+
+### Built so far (2026-11-16)
+
+Screenshots are in `design/sim/android/`; the scripted run is `app/tool/android_tests.sh` (boots the emulator, runs `integration_test/android_test.dart` in two parts with a real kill between, every step under a time limit, and shuts the emulator down).
+
+- **Task 1, done.** `app/android/`: package `dev.summitstudio.uponthyhead`, minimum API 33, target and compile 36; adaptive icon with a themed (monochrome) layer from `design/icon/final` (`tool/android_icons.sh`); a dark launch with the icon on the sky's ground colour; upright on phones, free on tablets (smallest width 600 dp or more); backup off. SQLite bundled (8.1); 16 KB checked (8.5).
+  - Proved by: the app opens on Pixel_10_Pro (Android 17) and Pixel_3a (Android 14) with the five samples; the launch frames never go white (`01-launch-frames.png`); the launcher icon, normal and themed (`08`–`11`); the iPhone upgrade replay: the committed build seeded with data still in the WAL, then this build installed over it, gave identical rows, tags and changes (md5), `integrity_check` ok, `user_version` 6, and the app opened on "Five blessings since June 2024" (`28-ios-upgrade-replay.png`).
+- **Task 2, done.** Edge to edge (the bars are transparent; Flutter reports their sizes as padding, so the rings clear the gesture bar); back and predictive back on every layer (8.4); Android's own selection handles and copy menu on the review page (`27-review-selection-handles.png`); the fonts are the app's own (Newsreader), with Roboto standing in for SF Pro, which may not ship on Android.
+  - Proved by: `android_test.dart` on Pixel_10_Pro: the list, zoom by pinch, the ruler, reading to the end, editing a title with the keyboard up (the field stays above it), the delete question closed by back, a deletion confirmed, Settings, the recording screen; back from each; then the app killed and reopened with the edit kept and the deletion gone. The same test passes on the iPhone simulator (`--ios`) for the side-by-side shots. Spanish by the emulator's language (`12`–`14`), the largest font and display size (`15`–`25`; two layouts were fixed for it: list rows overlapped, and the Settings language row overflowed).
+- **Task 3, done.** See section 10. Proved by `pair-*.png`.
+
+### Stand-ins (what Android says until each task lands)
+
+Every iPhone channel has an Android answer in `MainActivity.kt` (`NotYet`) that means "this phone cannot", never "done", and `lib/not_yet.dart` names the same list on the Dart side. Nothing crashes and nothing pretends.
+
+| Stand-in | What the person sees | Replaced by |
+|---|---|---|
+| Recording and speech | The recording screen opens with Begin dimmed and "Recording is not available on this phone yet."; first run's practice is skipped | Tasks 4–10 |
+| App lock and recent-apps cover | Settings shows the lock switch off with "The lock is not available on this phone yet."; **recent apps shows the sky and blessings** | Task 11 |
+| Location | Every blessing uses the Salt Lake Temple; Settings says so | Task 12 |
+| Sharing | The reading page has no share button | Task 13 |
+| Receiving `.blessing` files | Nothing registered | Task 14 |
+| Listening back | No player on the review page | Task 18 (and the plain player before it) |
+| The phone check page (test builds) | Answers "unavailable" | Its own task, not yet numbered |
+| The recording-language menu | Tap to cycle languages (Flutter has no menu matching iOS's) | With the recording tasks |
+| First-run wording | The lede and the location line say what Android will do, not "Tap Allow" (`lib/strings.dart`, `permsLedeNotYet`, `locationWhyAndroid`) | When each row becomes a real question |
+
+**Wording still written for iPhone** and needing an Android version when its feature lands (all in `lib/strings.dart`; iPhone's wording stays as is): `noPasscode`, `asFileHint` ("another iPhone"), `faceIdWhy` and the Face ID / Touch ID names, `settingsFor`, `openSettings`, the phone check's strings, the speech row's strings, `stillNeeded`.
+
+### The plan
 
 1. **Make the Android project and switch SQLite to the bundled build.** Proved by: the app opens on the Pixel_10_Pro emulator (Android 37, 16 KB pages) and shows the five samples behind the test flag; iPhone still builds.
 2. **Edge-to-edge and back gesture.** Proved by: the rings clear the gesture bar on the emulator; a back swipe while recording does nothing; a back swipe on review returns as on iPhone.
@@ -298,12 +336,15 @@ Tasks 15–17 can start as soon as a phone arrives. Do task 15 early, because it
 
 ## 13. Testing here, and which phone to get
 
-**Provable on this Mac's emulators** (Pixel_10_Pro is Android 37 with Google Play and 16 KB pages; Pixel_7_API_31 is Android 12; Pixel_3a_API_34 is Android 14 without Play):
+**Provable on this Mac's emulators** (Pixel_10_Pro is Android 17, API 37, with Google Play and 16 KB pages, 1280×2856 at 480 dpi; Pixel_3a_API_34 is Android 14; Pixel_7_API_31 is Android 12, **below the minimum**, so it cannot install the app and is not used):
+- *The Pixel_10_Pro's storage is nearly full* (about 500 MB free). A second install of the debug APK beside the first does not fit, so `tool/android_tests.sh` installs once and attaches to the installed app for the restart part. Growing its data partition in Device Manager would remove the problem.
 - Layout, the back gesture, the database, the first-run screens.
 - Recording from the Mac's microphone (`hw.audioInput=yes` on all three); a kill and recovery; locked-screen recording; a simulated incoming call.
 - Fingerprint unlock and PIN fallback (a fingerprint can be enrolled and "touched" from adb *(standard emulator feature)*).
 - The recent-apps view; sharing to Files; opening a file with no type.
-- Some Android licences on this Mac are not accepted yet. Accepting them (`flutter doctor --android-licenses`) is needed before the first build.
+- Some Android licences on this Mac are not accepted yet (`flutter doctor --android-licenses`). The builds for tasks 1–3 did not stop on one, so none was accepted.
+- The keyboard: the emulator's keyboard follows the **system** dark theme; an app cannot ask for a dark keyboard on Android. With the system dark, it is dark (`design/sim/android/26-review-keyboard-dark-theme.png`).
+- Themed icons: the Pixel launcher themes only icons on the home screen, never the app drawer, and the gold ring in the dock marks a suggested app, not the icon.
 
 **Probably not provable on an emulator:**
 - ML Kit Advanced: it needs Gemini Nano on a supported phone, and Google says it refuses unlocked bootloaders (emulators look unlocked) *(inference)*.
@@ -334,6 +375,8 @@ If only one phone: the Galaxy A, because it is where the speech plan is most at 
 8. **A phone to buy or borrow:** a Pixel 10, a Galaxy A, or both?
 9. **Hiding the app in recent apps** shows a plain sky-coloured card on Android, not the sky picture iPhone shows. Fine?
 10. **The app in "Open with" for unknown files.** To catch `.blessing` files from Gmail and WhatsApp, the app may appear in "Open with" for other unknown files too, and says "This file could not be read" if picked. Acceptable?
+11. **The name under the icon** (found in task 1). On the Pixel launcher "Upon Thy Head" is cut to "Upon Thy He…" (`08-launcher-home.png`). The Pixel home screen shows one line *(other launchers may differ)*. Keep it cut, or give the launcher alone a shorter name (the app's own name stays "Upon Thy Head" everywhere else)? If shorter, which words?
+12. **Recent apps shows the blessings until the lock lands** (task 11). Until then Android's recent-apps card shows the sky and the newest blessing's title (`07-recents.png`). Acceptable for test builds, or should the cover come first?
 
 ---
 

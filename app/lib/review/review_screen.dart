@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' as m;
 
 import '../data/blessing.dart';
+import '../not_yet.dart';
 import '../polish/polish.dart';
 import '../record/session.dart';
 import '../strings.dart';
@@ -273,6 +275,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
 
   /// The back chevron (and the edge swipe, and VoiceOver's go back): everything typed is kept, and
   /// it stays a draft.
+  /// Android's back: the finish sheet goes, if it is up. True when it went.
+  bool closeSheet() {
+    if (!_finishing) return false;
+    setState(() => _finishing = false);
+    return true;
+  }
+
   Future<void> back() async {
     FocusManager.instance.primaryFocus?.unfocus();
     await flush();
@@ -543,10 +552,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   }) {
     final p = widget.palette;
     final dy = math.max(62.0, MediaQuery.viewPaddingOf(context).top) - 62;
-    return MergeSemantics(
-      child: Semantics(
-        label: label,
-        child: CupertinoTextField(
+    final field = CupertinoTextField(
           key: key,
           controller: controller,
           focusNode: focus,
@@ -563,7 +569,26 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
           padding: EdgeInsets.zero,
           decoration: null,
           scrollPadding: EdgeInsets.fromLTRB(20, 150 + dy, 20, 40),
-        ),
+          // Android's own selection handles and its own copy and paste menu, in the sky's gold; the
+          // iPhone keeps iOS's. (Android has no per-app dark keyboard: the keyboard follows the
+          // phone's own dark theme, and keyboardAppearance is read only by iOS.)
+          selectionControls: Phone.android ? m.materialTextSelectionHandleControls : null,
+          contextMenuBuilder: Phone.android
+              ? (context, s) => m.AdaptiveTextSelectionToolbar.editableText(editableTextState: s)
+              : (context, s) => CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: s),
+        );
+    return MergeSemantics(
+      child: Semantics(
+        label: label,
+        child: Phone.android
+            ? m.Theme(
+                data: m.ThemeData(
+                  brightness: Brightness.dark,
+                  textSelectionTheme: m.TextSelectionThemeData(selectionHandleColor: p.light, cursorColor: p.light),
+                ),
+                child: field,
+              )
+            : field,
       ),
     );
   }

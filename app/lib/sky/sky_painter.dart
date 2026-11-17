@@ -100,40 +100,26 @@ class SkyPainter extends CustomPainter {
     final br = e.reduceMotion ? .6 : SkyEngine.breath(e.clock - e.breathT0);
     var i = 0;
     void f(double v) => _sky.setFloat(i++, v);
-    f(w);
-    f(h);
-    f(dpr);
-    f(e.fx);
-    f(e.fy);
-    f(e.fz);
-    f(e.rx);
-    f(e.ry);
-    f(e.rz);
-    f(e.ux);
-    f(e.uy);
-    f(e.uz);
-    f(e.tx);
-    f(e.ty);
-    f(e.cy);
-    f(e.exp);
-    f(1);
-    f(0);
-    f(e.cy);
-    f(.15 + .075 * br);
-    f(e.orb * (.55 + .45 * br));
+    // the order of shaders/sky.frag's packed uniforms (uP0 to uP5, then the colours)
+    // the soft copy fades in from just past the home framing (fov 90) to about fov 46
+    final mag = math.tan(90 * deg / 4) / math.tan(e.fov * deg / 4);
+    final u = ((mag - 1.15) / (2.2 - 1.15)).clamp(0.0, 1.0);
+    for (final v in [
+      w, h, dpr, e.cy, // uP0
+      e.fx, e.fy, e.fz, e.exp, // uP1
+      e.rx, e.ry, e.rz, 1.0, // uP2
+      e.ux, e.uy, e.uz, softMilkyWay ? u * u * (3 - 2 * u) : 0.0, // uP3
+      e.tx, e.ty, assets.milkyWay.width.toDouble(), assets.milkyWay.height.toDouble(), // uP4
+      assets.milkyWaySoft.width.toDouble(), assets.milkyWaySoft.height.toDouble(), 0.0, 0.0, // uP5
+      0.0, e.cy, .15 + .075 * br, e.orb * (.55 + .45 * br), // uOrb
+    ]) {
+      f(v);
+    }
     for (final c in [palette.sky, palette.tint, ...palette.orb]) {
       f(c[0]);
       f(c[1]);
       f(c[2]);
     }
-    f(assets.milkyWay.width.toDouble());
-    f(assets.milkyWay.height.toDouble());
-    f(assets.milkyWaySoft.width.toDouble());
-    f(assets.milkyWaySoft.height.toDouble());
-    // the soft copy fades in from just past the home framing (fov 90) to about fov 46
-    final mag = math.tan(90 * deg / 4) / math.tan(e.fov * deg / 4);
-    final u = ((mag - 1.15) / (2.2 - 1.15)).clamp(0.0, 1.0);
-    f(softMilkyWay ? u * u * (3 - 2 * u) : 0);
     _sky.setImageSampler(0, assets.milkyWay); // nearest; the shader filters (see sky.frag)
     _sky.setImageSampler(1, assets.milkyWaySoft);
     canvas.drawRect(Offset.zero & size, Paint()..shader = _sky);

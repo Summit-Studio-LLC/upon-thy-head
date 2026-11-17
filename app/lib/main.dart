@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -24,7 +26,9 @@ Future<void> main() async {
   // the app's words follow the phone's first language (iOS restarts the app when it changes)
   Strings.use(UiLanguage.forLocales(WidgetsBinding.instance.platformDispatcher.locales));
   // iPhone stays upright and iPad turns freely: Info.plist says which, per device (ruled 2026-11-16).
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+  SystemChrome.setSystemUIOverlayStyle(systemBars);
+  // Android: the sky under the status and navigation bars, whose sizes come as padding (as on iPhone)
+  unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
   runApp(UponThyHeadApp(store: await openAppStore(seed: seedSamplesFlag, dense: seedSamples == 'dense')));
 }
 
@@ -56,7 +60,8 @@ class UponThyHeadApp extends StatelessWidget {
       // selection menu, VoiceOver's language) agree with them
       locale: Strings.locale,
       supportedLocales: [for (final l in UiLanguage.values) l.locale],
-      localizationsDelegates: const [GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
+      // (the Material ones for Android's own copy and paste menu, review_screen.dart)
+      localizationsDelegates: const [GlobalCupertinoLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
       theme: CupertinoThemeData(
         brightness: Brightness.dark,
         primaryColor: palette.light,

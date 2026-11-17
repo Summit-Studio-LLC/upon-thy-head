@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
+import '../not_yet.dart';
 import 'sheet.dart';
 
 /// iOS's back swipe for a page with a back chevron (the owner's ruling, 2026-11-16): a drag from
@@ -134,7 +135,8 @@ class EdgeSwipeBackState extends State<EdgeSwipeBack>
                   child: widget.child,
                 ),
               ),
-              if (widget.enabled)
+              // Android's own back gesture owns the left edge there (home_screen.dart, `_systemBack`)
+              if (widget.enabled && !Phone.android)
                 Positioned(
                   left: 0,
                   top: 0,

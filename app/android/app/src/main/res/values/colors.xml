@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The sky's ground (lib/theme.dart, Palette.lamplight.ground): the launch screen, the
+         window behind the app, and the icon's background. -->
+    <color name="ground">#FF0B0907</color>
+</resources>

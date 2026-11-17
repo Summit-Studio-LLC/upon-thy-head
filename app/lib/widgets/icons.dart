@@ -7,6 +7,8 @@ enum Glyph {
   list, sky, forward, older, newer, upDown, play, pause, back10, cross, more, lock, share,
   // the first run's permission rows
   microphone, writing, location, faceId,
+  // Android's notifications row (docs/android-plan.md 9)
+  bell,
 }
 
 /// Vertical corrections, in grid units, so glyphs shown together sit on one line.
@@ -143,6 +145,21 @@ class _IconPainter extends CustomPainter {
           paint,
         );
         poly([13.71, 17.17, 15.83, 19.29]);
+      case Glyph.bell:
+        // a bell: its dome and flared rim, and the clapper below
+        canvas.drawPath(
+          Path()
+            ..moveTo(5, 17)
+            ..lineTo(19, 17)
+            ..lineTo(17.5, 15)
+            ..lineTo(17.5, 10)
+            ..arcToPoint(const Offset(6.5, 10), radius: const Radius.circular(5.5), clockwise: false)
+            ..lineTo(6.5, 15)
+            ..close(),
+          paint,
+        );
+        canvas.drawArc(Rect.fromCircle(center: const Offset(12, 18.5), radius: 2), 0, 3.14159, false, paint);
+        poly([12, 3, 12, 4.5]);
       case Glyph.location:
         // the location arrow, as iOS draws "here", in outline
         canvas.drawPath(

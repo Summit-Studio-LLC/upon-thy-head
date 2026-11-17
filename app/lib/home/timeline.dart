@@ -45,7 +45,10 @@ class TimelineLayout {
 
   static const _month = 30.4375 * 864e5;
 
-  static TimelineLayout of(List<Blessing> bs, DateTime now, double screenH, double dy) {
+  /// [rowHeights], when given, is each row's own height (oldest first): a gap never comes out
+  /// shorter than the row above it, so rows never overlap however large the text (at the usual
+  /// sizes every row is shorter than [Timeline.minGap], and the gaps are just the time's).
+  static TimelineLayout of(List<Blessing> bs, DateTime now, double screenH, double dy, {List<double>? rowHeights}) {
     const t = Timeline.firstRow;
     final ticks = <({double y, bool year})>[];
     // the wall-clock time where each blessing was given, read as UTC so months line up
@@ -72,7 +75,7 @@ class TimelineLayout {
     for (var i = n - 1; i >= 0; i--) {
       if (i < n - 1) {
         final a = ms(bs[i + 1].local), b = ms(bs[i].local);
-        final gap = ((a - b) / _month * Timeline.perMonth).clamp(Timeline.minGap, Timeline.maxGap);
+        final gap = math.max(((a - b) / _month * Timeline.perMonth).clamp(Timeline.minGap, Timeline.maxGap), rowHeights?[i + 1] ?? 0);
         if (a > b) tick(a, b, y, y + gap);
         y += gap;
       }
@@ -93,7 +96,7 @@ class TimelineState extends State<Timeline> with SingleTickerProviderStateMixin 
   // when the list was never opened, and that throws
   late final AnimationController _draw;
   TimelineLayout? _layout;
-  ({List<Blessing> bs, double h, double dy})? _for;
+  ({List<Blessing> bs, double h, double dy, double w, TextScaler scaler})? _for;
 
   @override
   void initState() {
@@ -145,9 +148,11 @@ class TimelineState extends State<Timeline> with SingleTickerProviderStateMixin 
     _dy = math.max(62.0, mq.viewPadding.top) - 62;
     return LayoutBuilder(builder: (context, box) {
       final h = box.maxHeight;
-      final key = (bs: widget.blessings, h: h, dy: _dy);
+      final scaler = mq.textScaler;
+      final key = (bs: widget.blessings, h: h, dy: _dy, w: box.maxWidth, scaler: scaler);
       if (_layout == null || _for != key) {
-        _layout = TimelineLayout.of(widget.blessings, widget.now, h, _dy);
+        final rows = [for (final b in widget.blessings) _Row.height(b, box.maxWidth, scaler)];
+        _layout = TimelineLayout.of(widget.blessings, widget.now, h, _dy, rowHeights: rows);
         _for = key;
       }
       final l = _layout!;
@@ -259,6 +264,25 @@ class _Row extends StatefulWidget {
   final bool showYear, lit, current;
   final VoidCallback onTap;
 
+  static const _pad = EdgeInsets.fromLTRB(112, 8, 24, 8);
+
+  /// The row's height at this width and text size: its title, giver and draft line, as built below.
+  static double height(Blessing b, double width, TextScaler scaler) {
+    final w = math.max(1.0, width - _pad.horizontal);
+    double h(String text, TextStyle style) {
+      final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: scaler)..layout(maxWidth: w);
+      final r = tp.height;
+      tp.dispose();
+      return r;
+    }
+
+    const ink = Color(0xFFFFFFFF);
+    return _pad.vertical +
+        h(b.shownTitle, serif(20, 24, ink)) +
+        (b.from.isEmpty ? 0 : h(Strings.from(b.from), serif(15, 22, ink, italic: true))) +
+        (b.draft ? h(Strings.notReviewedNote, sans(13, 18, ink)) : 0);
+  }
+
   @override
   State<_Row> createState() => _RowState();
 }
@@ -287,7 +311,7 @@ class _RowState extends State<_Row> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           color: p.ink.withValues(alpha: _down ? .05 : 0),
-          padding: const EdgeInsets.fromLTRB(112, 8, 24, 8),
+          padding: _Row._pad,
           child: Stack(clipBehavior: Clip.none, children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               AnimatedDefaultTextStyle(duration: fade, style: serif(20, 24, cur ? p.ink : p.ink2), child: Text(b.shownTitle)),

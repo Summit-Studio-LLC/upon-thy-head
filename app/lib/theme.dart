@@ -1,6 +1,7 @@
 import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 
 /// A palette: 60 night, 30 page, 10 light. Lamplight is the chosen default;
 /// Vigil is kept as the alternate.
@@ -115,3 +116,16 @@ TextStyle sans(double size, double height, Color color, {FontWeight weight = Fon
     );
 
 const Curve easeOut = Cubic(.22, 1, .36, 1);
+
+/// The status bar (and on Android the navigation bar) over the sky: light marks, and on Android both
+/// bars clear, so the sky runs under them edge to edge. iOS reads only the light marks, as before.
+const SystemUiOverlayStyle systemBars = SystemUiOverlayStyle(
+  statusBarColor: Color(0x00000000),
+  statusBarBrightness: Brightness.dark,
+  statusBarIconBrightness: Brightness.light,
+  systemNavigationBarColor: Color(0x00000000),
+  systemNavigationBarDividerColor: Color(0x00000000),
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemNavigationBarContrastEnforced: false,
+  systemStatusBarContrastEnforced: false,
+);

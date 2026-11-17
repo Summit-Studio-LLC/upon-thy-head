@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../not_yet.dart';
 import '../check/checks.dart';
 import '../lock/lock.dart';
 import '../place/where.dart';
@@ -89,18 +90,45 @@ class SettingsLayer extends StatelessWidget {
                     ),
                   ]),
                   const SizedBox(height: 6),
-                  Text(canLock ? Strings.lockHint(lock.method) : Strings.noPasscode, key: const Key('settings-lock-hint'), style: hint),
+                  Text(
+                    canLock ? Strings.lockHint(lock.method) : (NotYet.lock ? Strings.lockNotYet : Strings.noPasscode),
+                    key: const Key('settings-lock-hint'),
+                    style: hint,
+                  ),
                 ]),
                 hairline(),
                 // ---- language ----
                 row(key: const Key('settings-language'), [
-                  Row(children: [
-                    Expanded(child: Text(Strings.recordingLanguage, style: label)),
-                    Transform.translate(
-                      offset: const Offset(12, 0),
-                      child: SettingsLanguageControl(palette: p, code: language, onChanged: onLanguage),
-                    ),
-                  ]),
+                  // side by side; at the largest text sizes, when the two no longer fit on one line, the
+                  // menu goes under the words (its own words then line up with them)
+                  LayoutBuilder(builder: (context, box) {
+                    final scaler = MediaQuery.textScalerOf(context);
+                    double width(String text, TextStyle style) {
+                      final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+                      final w = tp.width;
+                      tp.dispose();
+                      return w;
+                    }
+
+                    final control = SettingsLanguageControl(palette: p, code: language, onChanged: onLanguage);
+                    final controlWidth = width(SettingsLanguageControl.nameOf(language), sans(15, 20, p.ink2)) + 3 + 13 + 24 - 12;
+                    // the words beside the menu in at most two lines, no word broken
+                    final beside = TextPainter(text: TextSpan(text: Strings.recordingLanguage, style: label), textDirection: TextDirection.ltr, textScaler: scaler);
+                    final room = box.maxWidth - controlWidth;
+                    beside.layout(maxWidth: math.max(1.0, room));
+                    final fits = beside.minIntrinsicWidth <= room && beside.computeLineMetrics().length <= 2;
+                    beside.dispose();
+                    if (fits) {
+                      return Row(children: [
+                        Expanded(child: Text(Strings.recordingLanguage, style: label)),
+                        Transform.translate(offset: const Offset(12, 0), child: control),
+                      ]);
+                    }
+                    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(Strings.recordingLanguage, style: label),
+                      Transform.translate(offset: const Offset(-12, 0), child: control),
+                    ]);
+                  }),
                   const SizedBox(height: 2),
                   Text(Strings.recordingLanguageHint, style: hint),
                 ]),
@@ -113,10 +141,17 @@ class SettingsLayer extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(Strings.whereHint, style: hint),
                   const SizedBox(height: 4),
-                  Transform.translate(
-                    offset: const Offset(-12, 0),
-                    child: _GoldWord(key: const Key('settings-use-location'), label: Strings.useMyLocation, palette: p, onTap: onUseLocation),
-                  ),
+                  // Android cannot find the place yet (not_yet.dart): said plainly, with no button
+                  if (NotYet.location)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(Strings.locationNotYet, key: const Key('settings-location-not-yet'), style: hint),
+                    )
+                  else
+                    Transform.translate(
+                      offset: const Offset(-12, 0),
+                      child: _GoldWord(key: const Key('settings-use-location'), label: Strings.useMyLocation, palette: p, onTap: onUseLocation),
+                    ),
                 ]),
                 hairline(),
                 // ---- about ----
@@ -323,7 +358,7 @@ class SettingsLanguageControlState extends State<SettingsLanguageControl> {
     final words = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(name, key: const Key('settings-language-label'), style: sans(15, 20, p.ink2)),
+        Flexible(child: Text(name, key: const Key('settings-language-label'), style: sans(15, 20, p.ink2))),
         const SizedBox(width: 3),
         SizedBox(width: 13, height: 13, child: GlyphIcon(Glyph.upDown, color: p.ink3)),
       ]),

@@ -5,6 +5,7 @@ import 'package:upon_thy_head/data/blessing.dart';
 import 'package:upon_thy_head/data/settings.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:upon_thy_head/not_yet.dart';
 import 'package:upon_thy_head/onboarding/first_run.dart';
 import 'package:upon_thy_head/onboarding/first_run_screens.dart';
 import 'package:upon_thy_head/theme.dart';
@@ -325,6 +326,64 @@ void main() {
       await pumpRow(t, r, 3.12);
       expect(t.getRect(find.byKey(const Key('allow-speech'))).top, greaterThan(t.getRect(find.text(r.line)).top));
       expect(t.takeException(), isNull);
+    });
+
+    // Answering a row must not move anything: its words keep their width and the row its height,
+    // from Allow to the asking dot to the tick, in both languages, up to the first accessibility size
+    // (1.76). Refused, Off and Settings go beneath the words, which still keep their width.
+    for (final scale in [1.0, 1.24, 1.76]) {
+      testWidgets('nothing moves when a row is answered at $scale', (t) async {
+        for (final lang in UiLanguage.values) {
+          Strings.use(lang);
+          for (final k in PermissionKind.values) {
+            final name = k == PermissionKind.lock ? 'Face ID' : null;
+            ({Rect row, Rect title, Rect line})? first;
+            for (final st in [RowStatus.waiting, RowStatus.asking, RowStatus.allowed, RowStatus.off]) {
+              final r = PermissionRow(k, st, name: name);
+              await pumpRow(t, r, scale);
+              final now = (
+                row: t.getRect(find.byType(PermissionRowView)),
+                title: t.getRect(find.byKey(const Key('row-title'))),
+                line: t.getRect(find.text(r.line)),
+              );
+              final why = '${lang.name} ${k.name} ${st.name} at $scale';
+              if (first == null) {
+                first = now;
+                continue;
+              }
+              expect(now.title.width, closeTo(first.title.width, .01), reason: 'the title re-wrapped: $why');
+              expect(now.title.top, closeTo(first.title.top, .01), reason: 'the title moved: $why');
+              if (st == RowStatus.off) {
+                // (refused, location's line becomes a different, shorter one)
+                if (k != PermissionKind.location) expect(now.row.height, greaterThanOrEqualTo(first.row.height - .01), reason: why);
+              } else {
+                expect(now.line.size, first.line.size, reason: 'the reason re-wrapped: $why');
+                expect(now.row.height, closeTo(first.row.height, .01), reason: 'the row changed height: $why');
+              }
+            }
+          }
+        }
+        Strings.use(UiLanguage.english);
+        expect(t.takeException(), isNull);
+      });
+    }
+
+    test('Android, for now: four rows saying what is not built yet, nothing to allow, Continue open', () async {
+      NotYet.debugAndroid = true;
+      addTearDown(() => NotYet.debugAndroid = false);
+      for (final lang in UiLanguage.values) {
+        Strings.use(lang);
+        final p = perms(FakeAsker());
+        await p.load();
+        expect(p.rows.map((r) => r.title), [Strings.microphone, Strings.notifications, Strings.location, Strings.screenLock]);
+        for (final r in p.rows) {
+          expect(r.status, RowStatus.info, reason: r.title);
+          expect(r.line, endsWith(Strings.notYetOnThisPhone), reason: r.title);
+        }
+        expect(p.canContinue, isTrue);
+        expect(Strings.permsLede, isNot(contains(lang == UiLanguage.english ? 'Allow' : 'Permitir')));
+      }
+      Strings.use(UiLanguage.english);
     });
 
     testWidgets('refused: Off and Settings in place of Allow; allowed: the tick', (t) async {

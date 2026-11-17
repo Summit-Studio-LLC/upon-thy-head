@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
+import '../not_yet.dart';
 import '../data/blessing.dart';
 import '../share/blessing_file.dart';
 import '../share/share.dart';
@@ -48,10 +49,10 @@ class ReadLayer extends StatefulWidget {
   static const double scrolledAt = 132;
 
   @override
-  State<ReadLayer> createState() => _ReadLayerState();
+  State<ReadLayer> createState() => ReadLayerState();
 }
 
-class _ReadLayerState extends State<ReadLayer> {
+class ReadLayerState extends State<ReadLayer> {
   final ScrollController _scroll = ScrollController();
   bool _scrolled = false, _deleting = false, _sharing = false;
 
@@ -65,16 +66,16 @@ class _ReadLayerState extends State<ReadLayer> {
   }
 
   @override
-  void didUpdateWidget(ReadLayer old) {
-    super.didUpdateWidget(old);
-    if (widget.on && (!old.on || old.blessing?.id != widget.blessing?.id)) {
+  void didUpdateWidget(ReadLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.on && (!oldWidget.on || oldWidget.blessing?.id != widget.blessing?.id)) {
       // every visit starts at the top of the page
       if (_scroll.hasClients) _scroll.jumpTo(0);
       _scrolled = false;
       _deleting = false;
       _sharing = false;
     }
-    if (!widget.on && old.on) {
+    if (!widget.on && oldWidget.on) {
       _deleting = false;
       _sharing = false;
     }
@@ -84,6 +85,13 @@ class _ReadLayerState extends State<ReadLayer> {
   void dispose() {
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Android's back: the share or delete sheet goes, if one is up. True when one went.
+  bool closeSheet() {
+    if (!_sharing && !_deleting) return false;
+    setState(() => _sharing = _deleting = false);
+    return true;
   }
 
   @override
@@ -180,8 +188,9 @@ class _ReadLayerState extends State<ReadLayer> {
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             IconBtn(key: const Key('read-back'), icon: Glyph.older, color: p.ink, palette: p, semantics: Strings.back, onTap: widget.onBack),
             Row(mainAxisSize: MainAxisSize.min, children: [
-              // a draft has not been reviewed, so it cannot leave the phone yet
-              if (b != null && !b.draft && widget.share != null)
+              // a draft has not been reviewed, so it cannot leave the phone yet; on Android, sending
+              // is not built yet (not_yet.dart), so there is no share button at all
+              if (b != null && !b.draft && widget.share != null && !NotYet.sharing)
                 IconBtn(key: const Key('read-share'), icon: Glyph.share, color: p.ink, palette: p, semantics: Strings.share, onTap: () => setState(() => _sharing = true)),
               LightTextBtn(
                 key: const Key('read-edit'),
