@@ -15,13 +15,15 @@ import io.flutter.plugin.common.MethodChannel
  * The Android app: the Flutter view, edge to edge, and the native side of every channel the Dart
  * code calls (the iPhone's are the Swift files in ios/Runner).
  *
- * Built so far: recording (SpeechChannel, SegmentRecorder, RecordingService), listening back on the
+ * Built so far: recording (SpeechChannel, SegmentRecorder, RecordingService), writing the words on
+ * the phone with a model downloaded with the person's consent (WordsChannel, WhisperEngine,
+ * ModelStore), listening back on the
  * review page (PlayerChannel), keeping the screen awake while a recording listens, the link's
  * cryptography (LinkChannel), sharing and receiving blessings by link, text, PDF and file
  * (ShareChannel, BlessingFiles), the app lock and the recent-apps cover (LockChannel), approximate
  * location (LocationChannel), the version, and opening this app's page in the system Settings.
- * Everything else is a stand-in that answers safely, so nothing crashes and nothing pretends to
- * work: see [NotYet] and "Stand-ins" in docs/android-plan.md, which names the task that replaces each.
+ * The one thing left is the phone check page (test builds only), a stand-in that answers safely:
+ * see [NotYet] and "Stand-ins" in docs/android-plan.md.
  *
  * One Flutter engine for the whole process: the first activity makes it (with the flags it was
  * started with) and it is kept, so a new activity (Android's "Don't keep activities", or the system
@@ -122,6 +124,9 @@ class MainActivity : FlutterActivity() {
         val lock = MethodChannel(m, "upon_thy_head/lock")
         lock.setMethodCallHandler(LockChannel({ this }, applicationContext))
         LockChannel.channel = lock
+        val words = MethodChannel(m, "upon_thy_head/words")
+        words.setMethodCallHandler(WordsChannel(applicationContext))
+        WordsChannel.channel = words
         MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(LocationChannel({ this }, applicationContext))
         val player = MethodChannel(m, "upon_thy_head/player")
         player.setMethodCallHandler(PlayerChannel.get(this))

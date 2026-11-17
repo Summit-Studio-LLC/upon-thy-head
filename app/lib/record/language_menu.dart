@@ -7,11 +7,13 @@ import 'package:flutter/widgets.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
+import '../widgets/pull_down.dart';
 import 'transcriber.dart';
 
 /// The language a blessing is spoken in, as a small quiet control: "English ⌃⌄". On iOS a
 /// tap opens the system pull-down menu (ios/Runner/LanguageMenu.swift, a clear native button
-/// laid over these words); elsewhere a tap moves to the other language.
+/// laid over these words); elsewhere (Android) a tap opens the same menu drawn in Flutter
+/// ([showPullDown]).
 class LanguageControl extends StatefulWidget {
   const LanguageControl({super.key, required this.palette, required this.language, required this.onChanged});
 
@@ -68,10 +70,20 @@ class LanguageControlState extends State<LanguageControl> {
         button: true,
         label: Strings.languageLabel(widget.language),
         excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => widget.onChanged(widget.language == SpeechLanguage.english ? SpeechLanguage.spanish : SpeechLanguage.english),
-          child: words,
+        child: Builder(
+          builder: (context) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              final code = await showPullDown(
+                context,
+                palette: p,
+                choices: [for (final l in SpeechLanguage.values) (l.code, Strings.languageName(l))],
+                selected: widget.language.code,
+              );
+              if (code != null && code != widget.language.code && mounted) widget.onChanged(SpeechLanguage.fromCode(code));
+            },
+            child: words,
+          ),
         ),
       );
     }

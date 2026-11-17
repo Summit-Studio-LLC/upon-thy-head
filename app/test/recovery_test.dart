@@ -194,7 +194,7 @@ void main() {
           ..draft = draft
           ..rawText = words
           ..wordsStatus = status;
-    // Android today: the words come in a coming version, so Done keeps the recording, typed or not
+    // Android before the model is downloaded: Done keeps the recording, typed or not
     expect(keepsRecording(b()), isTrue);
     expect(keepsRecording(b(words: 'typed by hand')), isTrue);
     expect(keepsRecording(b(draft: false, words: 'typed by hand')), isTrue, reason: 'finished, still kept');

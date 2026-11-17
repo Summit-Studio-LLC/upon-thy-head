@@ -9,11 +9,14 @@ import 'package:flutter/widgets.dart';
 import '../check/checks.dart';
 import '../lock/lock.dart';
 import '../place/where.dart';
+import '../not_yet.dart';
 import '../record/transcriber.dart';
+import '../record/words_model.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
 import '../widgets/over_sky_page.dart';
+import '../widgets/pull_down.dart';
 
 /// Settings, over the dimmed sky, in the reading page's family: the back chevron, a large serif
 /// title, and four quiet rows with hairlines, each explained in a line of small sans.
@@ -177,6 +180,44 @@ class SettingsLayer extends StatelessWidget {
                   Text(Strings.recordingLanguageHint, style: hint),
                 ]),
                 hairline(),
+                // ---- Android: the speech model, its size, and Remove ----
+                if (Phone.android) ...[
+                  ListenableBuilder(
+                    listenable: WordsModel.instance,
+                    builder: (context, _) {
+                      final m = WordsModel.instance;
+                      final st = m.status;
+                      final mb = st.ready && st.size > 0 ? (st.size / 1000000).round() : m.spec.megabytes;
+                      final String state;
+                      if (st.ready) {
+                        state = Strings.modelOnPhone(mb);
+                      } else if (st.state == ModelState.downloading) {
+                        state = Strings.modelProgress((st.got / 1000000).round(), (st.total / 1000000).round());
+                      } else if (st.state == ModelState.waiting) {
+                        state = Strings.modelWaiting;
+                      } else if (st.state == ModelState.checking) {
+                        state = Strings.modelChecking;
+                      } else {
+                        state = Strings.modelNotDownloaded;
+                      }
+                      return row(key: const Key('settings-model'), [
+                        Text(Strings.modelSetting, style: label),
+                        const SizedBox(height: 6),
+                        Text(state, key: const Key('settings-model-state'), style: sans(15, 20, p.ink2)),
+                        const SizedBox(height: 6),
+                        Text(Strings.modelBody(m.spec.megabytes), style: hint),
+                        const SizedBox(height: 4),
+                        Transform.translate(
+                          offset: const Offset(-12, 0),
+                          child: st.ready || st.busy
+                              ? _GoldWord(key: const Key('settings-model-remove'), label: Strings.remove, palette: p, onTap: m.remove)
+                              : _GoldWord(key: const Key('settings-model-download'), label: Strings.download, palette: p, onTap: m.download),
+                        ),
+                      ]);
+                    },
+                  ),
+                  hairline(),
+                ],
                 // ---- where ----
                 row(key: const Key('settings-where'), [
                   Text(Strings.whereGiven, style: label),
@@ -343,7 +384,7 @@ class _GoldWordState extends State<_GoldWord> {
 }
 
 /// "Same as this iPhone ⌃⌄": on iOS the system pull-down menu (ios/Runner/LanguageMenu.swift, given
-/// three choices); elsewhere a tap moves to the next choice.
+/// three choices); elsewhere (Android) the same menu drawn in Flutter ([showPullDown]).
 class SettingsLanguageControl extends StatefulWidget {
   const SettingsLanguageControl({super.key, required this.palette, required this.code, required this.onChanged});
   final Palette palette;
@@ -402,13 +443,21 @@ class SettingsLanguageControlState extends State<SettingsLanguageControl> {
     );
     final label = '${Strings.recordingLanguage}: $name';
     if (!_native) {
-      final codes = SettingsLanguageControl.choices.map((c) => c.$1).toList();
-      final next = codes[(codes.indexOf(widget.code ?? SettingsLanguageControl.phone) + 1) % codes.length];
       return Semantics(
         button: true,
         label: label,
         excludeSemantics: true,
-        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => debugPick(next), child: words),
+        child: Builder(
+          builder: (context) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              final was = widget.code ?? SettingsLanguageControl.phone;
+              final code = await showPullDown(context, palette: p, choices: SettingsLanguageControl.choices, selected: was);
+              if (code != null && code != was && mounted) debugPick(code);
+            },
+            child: words,
+          ),
+        ),
       );
     }
     return Stack(children: [

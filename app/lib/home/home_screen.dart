@@ -25,7 +25,9 @@ import '../record/record_screen.dart';
 import '../record/recovered_sheet.dart';
 import '../record/recovery.dart';
 import '../record/session.dart';
+import '../record/android_words.dart';
 import '../record/speech.dart';
+import '../record/words_model.dart';
 import '../record/transcriber.dart';
 import '../review/player.dart';
 import '../review/review_screen.dart';
@@ -62,7 +64,7 @@ enum Stage { home, record, after, read, review, changes, settings, passing, link
 
 /// Where the first run is (onboarding/first_run.dart); [none] once it is over or never shown.
 /// [waiting]: it will be shown, once the launch knows whether a blessing file opened the app.
-enum Onboard { none, waiting, opening, welcome, permissions, rehearsal, practice, practiceResult, sharedLine, sharedPreview }
+enum Onboard { none, waiting, opening, welcome, permissions, model, rehearsal, practice, practiceResult, sharedLine, sharedPreview }
 
 /// `--dart-define=FIRST_RUN_FEED=<name>`: the rehearsal's recording is replaced at Amen by the file
 /// of this name in the app's tmp folder (the acceptance runs, with the prepared speech file).
@@ -244,7 +246,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final Future<(Settings, String)> _speechSetup = Future.wait<Object>([
     Settings.open(),
     defaultAudioDir(),
-  ]).then((r) => (r[0] as Settings, r[1] as String));
+  ]).then((r) {
+    // Android keeps the place of words being written beside the audio folder (android_words.dart)
+    AndroidWords.useAudioFolder(r[1] as String);
+    return (r[0] as Settings, r[1] as String);
+  });
 
   // ---- the first run ----
   Onboard _onboard = Onboard.none;
@@ -304,6 +310,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
       unawaited(_writeMissingWords());
+      if (Phone.android) {
+        // the model arriving (downloaded now, or carried on from an earlier launch) writes the words
+        // of every recording that waited for it
+        WordsModel.instance.whenReady(_modelArrived);
+        unawaited(WordsModel.instance.refresh(resume: true));
+      }
       unawaited(_startReceiving().then((_) => _beginFirstRun()));
       unawaited(_clearPractice());
       // locked at launch: the phone asks once, as the locked sky appears
@@ -459,18 +471,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  /// Blessings saved before their words were written (closed just after Amen, or recovered):
-  /// the words are written now from the audio, one at a time, as after any Amen.
+  void _modelArrived() => unawaited(_writeMissingWords());
+
+  /// [_writeMissingWords] is running; asked again meanwhile: run once more when it ends.
+  bool _missingRunning = false, _missingAgain = false;
+
+  /// Blessings saved before their words were written (closed just after Amen, or recovered), and
+  /// recordings kept for their words (Android, waiting for the model): the words are written now
+  /// from the audio, one at a time, oldest first. Recording is never held up by it: on Android
+  /// each piece waits while the microphone is live, and a new blessing's words go first.
   Future<void> _writeMissingWords() async {
+    if (_missingRunning) {
+      _missingAgain = true;
+      return;
+    }
+    _missingRunning = true;
+    try {
+      do {
+        _missingAgain = false;
+        await _writeMissingOnce();
+      } while (_missingAgain && mounted);
+    } finally {
+      _missingRunning = false;
+    }
+  }
+
+  Future<void> _writeMissingOnce() async {
     final List<Blessing> all;
     try {
-      all = await _store.list();
+      all = waitingOrder(await _store.list());
     } catch (e) {
       return debugPrint('words: $e');
+    }
+    if (Phone.android) {
+      // the places kept for recordings no longer on the phone
+      final names = {for (final b in all) ?_audioOf(b)}.map(path.basename).toSet();
+      unawaited(AndroidWords.instance.tidy(names));
     }
     for (final stored in all) {
       final path = _audioOf(stored);
       if (path == null) continue;
+      // the blessing just recorded: its session is writing its words
+      if (stored.id == _session.draft?.id && (_session.wordsState == WordsState.writing || _session.wordsState == WordsState.none)) continue;
       if (wordsDueFromRecording(stored, audioOnPhone: true)) {
         await _writeLaterWords(stored);
         continue;
@@ -564,24 +606,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final b = [..._blessings, ..._passing].firstWhere((x) => x.id == stored.id, orElse: () => stored);
       final Transcript t;
+      // Android with the model here: the page shows the words being written, piece by piece
+      final able = Phone.android && WordsModel.instance.status.ready;
+      if (able && mounted) setState(() => _writing[b.id] = WordsState.writing);
       try {
         t = await _transcriber.transcribe(path, SpeechLanguage.fromCode(b.language));
       } catch (e) {
+        if (able && mounted) setState(() => _writing.remove(b.id));
         return debugPrint('words: later ${b.id}: $e');
       }
-      if (t.later || t.unavailable) return;
-      final typed = b.rawText.trim().isNotEmpty;
-      if (typed) {
-        b.firstText = t.text;
-      } else {
-        b
-          ..rawText = t.text
-          ..firstText = t.text;
+      if (t.later || t.unavailable) {
+        if (able && mounted) setState(() => _writing.remove(b.id));
+        return;
       }
-      b.wordsStatus = WordsStatus.written;
+      final typed = b.rawText.trim().isNotEmpty;
+      final erase = takeLaterWords(b, t.text);
+      // the blessing just recorded is held by its session as a copy of its own: the page after Amen
+      // and its review read that one, so it takes the words too
+      final draft = _session.draft;
+      if (draft != null && draft.id == b.id && !identical(draft, b)) takeLaterWords(draft, t.text);
       try {
         await _store.update(b);
-        if (!b.draft) await _store.eraseAudio(b);
+        if (erase) await _store.eraseAudio(b);
         debugPrint('words: wrote ${b.id} from its kept recording (${t.text.length} characters, typed: $typed)');
       } on StateError {
         return; // deleted meanwhile
@@ -709,6 +755,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    WordsModel.instance.notWhenReady(_modelArrived);
     _lock.removeListener(_onLock);
     _lock.api.onActive = null;
     _swapTimer?.cancel();
@@ -952,9 +999,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// as being written at this launch.
   WordsState? _wordsOf(Blessing? b) {
     if (b == null) return null;
-    if (identical(b, _session.draft)) return _session.wordsState;
+    // written at this launch (a kept recording, once the model arrived) before the session's state
     final w = _writing[b.id];
     if (w != null) return w;
+    if (identical(b, _session.draft)) return _session.wordsState;
     return switch (b.wordsStatus) {
       WordsStatus.written => WordsState.done,
       WordsStatus.unavailable => WordsState.unavailable,
@@ -1471,17 +1519,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted && _onboard == Onboard.permissions) await _showRehearsal(slide: true);
   }
 
-  /// "Try a few words first?", only when the microphone is allowed.
-  Future<void> _showRehearsal({bool slide = false}) async {
+  /// "Try a few words first?", only when the microphone is allowed. On Android, first the one-time
+  /// download that lets the phone write the words ([ModelAskLayer]); the practice shows only the
+  /// words, so it is offered only once the model is here.
+  Future<void> _showRehearsal({bool slide = false, bool askedModel = false}) async {
     var mic = Permission.undetermined;
     try {
       mic = await _asker.microphone();
     } catch (_) {}
     if (!mounted) return;
-    // Android cannot write words yet (not_yet.dart), and the practice shows only the words
-    if (mic != Permission.granted || NotYet.words) return _finishFirstRun();
+    if (mic != Permission.granted) return _finishFirstRun();
+    if (Phone.android && !WordsModel.instance.status.ready) {
+      await WordsModel.instance.refresh();
+      if (!mounted) return;
+      if (!WordsModel.instance.status.ready) {
+        if (askedModel) return _finishFirstRun();
+        _engine.setView(SkyView.dim);
+        return _go(Onboard.model, slide: slide);
+      }
+    }
     _engine.setView(SkyView.dim);
     _go(Onboard.rehearsal, slide: slide);
+  }
+
+  /// Later or Continue on the download step: the practice if the model is here, else the sky (the
+  /// download, if started, carries on).
+  Future<void> _modelNext() async {
+    if (_onboard != Onboard.model) return;
+    await _showRehearsal(slide: true, askedModel: true);
   }
 
   /// The practice's own folder, in tmp: never the audio folder, so nothing in it is ever kept,
@@ -1636,6 +1701,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (built(Onboard.welcome)) layer(Onboard.welcome, () => WhileVisible(child: WelcomeLayer(palette: p, onContinue: _welcomeDone))),
       if (built(Onboard.permissions) && _perms != null)
         layer(Onboard.permissions, () => PermissionsLayer(palette: p, state: _perms!, onContinue: _permissionsContinue)),
+      if (built(Onboard.model)) layer(Onboard.model, () => ModelAskLayer(palette: p, onNext: _modelNext)),
       if (built(Onboard.rehearsal))
         layer(Onboard.rehearsal, () => RehearsalAskLayer(palette: p, onTry: _openPractice, onNotNow: _finishFirstRun)),
       if (built(Onboard.practiceResult))
@@ -2083,8 +2149,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   builder: (context, _) => AfterLayer(
                     palette: p,
                     blessing: _session.draft,
-                    words: _session.wordsState,
-                    heard: _session.words.trim().isNotEmpty,
+                    words: _wordsOf(_session.draft) ?? _session.wordsState,
+                    heard: _session.words.trim().isNotEmpty || (_session.draft?.rawText.trim().isNotEmpty ?? false),
+                    audioPath: _session.audioPath,
                     on: _stage == Stage.after,
                     onReview: _reviewNow,
                     onSave: _saveForLater,

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart' as m;
 import '../data/blessing.dart';
 import '../not_yet.dart';
 import '../polish/polish.dart';
+import '../record/model_offer.dart';
 import '../record/session.dart';
 import '../strings.dart';
 import '../theme.dart';
@@ -620,7 +621,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     final stacked = MediaQuery.textScalerOf(context).scale(15) > 28;
     final labelText = ExcludeSemantics(child: Text(label, style: sans(15, 20, p.ink2)));
     final children = <Widget>[
-      if (stacked) Padding(padding: const EdgeInsets.only(top: 12), child: labelText) else SizedBox(width: 64, child: labelText),
+      // the label's column grows with the text, so "From" never runs into the name
+      if (stacked) Padding(padding: const EdgeInsets.only(top: 12), child: labelText) else SizedBox(width: 64 * math.max(1, MediaQuery.textScalerOf(context).scale(15) / 15), child: labelText),
       _expandIf(
         !stacked,
         Padding(
@@ -713,10 +715,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
 
   Widget _wordsBlock(Palette p, Blessing b, TextStyle wordStyle) {
     if (_writing) {
-      return Semantics(
-        liveRegion: true,
-        child: Text(Strings.writingWords, key: const Key('review-writing'), style: serif(19, 30, p.ink3, italic: true)),
-      );
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Semantics(
+          liveRegion: true,
+          child: Text(Strings.writingWords, key: const Key('review-writing'), style: serif(19, 30, p.ink3, italic: true)),
+        ),
+        if (Phone.android) ...[const SizedBox(height: 12), WritingProgress(palette: p, path: widget.audioPath)],
+      ]);
     }
     // nothing came from the recording: say so once, above the empty box. A recording whose words
     // this version cannot write on this phone (Android, for now) says so while it waits, typed or not.
@@ -729,6 +734,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (notice != null) ...[Text(notice, key: const Key('review-no-words'), style: sans(15, 22, p.ink2)), const SizedBox(height: 14)],
+        // Android, waiting for the model: the download, offered here too
+        if (Phone.android && widget.words == WordsState.later) ...[ModelOffer(palette: p, showBody: false, compact: true), const SizedBox(height: 18)],
+        // Android: words written by the phone's own model, to be checked against the recording
+        if (Phone.android && _hasAudio && b.firstText.trim().isNotEmpty) ...[
+          Text(Strings.wordsCheck, key: const Key('review-check-words'), style: sans(15, 22, p.ink2)),
+          const SizedBox(height: 14),
+        ],
         if (b.changes.isNotEmpty) ...[
           ExcludeSemantics(child: Text(Strings.spokenWords, key: const Key('review-spoken-label'), style: sans(15, 20, p.ink2))),
           const SizedBox(height: 10),

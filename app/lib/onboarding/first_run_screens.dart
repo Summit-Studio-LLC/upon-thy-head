@@ -5,6 +5,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../data/blessing.dart';
+import '../record/model_offer.dart';
 import '../record/session.dart';
 import '../strings.dart';
 import '../theme.dart';
@@ -608,6 +609,35 @@ class _Check extends CustomPainter {
 
   @override
   bool shouldRepaint(_Check old) => old.color != color;
+}
+
+// ---- 4a Android: the speech model ----
+
+/// Android, before the rehearsal: the one-time download that lets the phone write the words
+/// (docs/android-plan.md 3.5). Download starts it and the step stays to show it coming in; Later,
+/// or Continue once it has started, moves on (the download carries on while the app is open).
+class ModelAskLayer extends StatelessWidget {
+  const ModelAskLayer({super.key, required this.palette, required this.onNext});
+  final Palette palette;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return FirstRunFrame(
+      key: const Key('model-step'),
+      palette: p,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(header: true, child: Text(Strings.modelTitle, style: serif(30, 34.5, p.ink, tracking: -.012))),
+          const SizedBox(height: 10),
+          ModelOffer(palette: p, onLater: onNext),
+        ],
+      ),
+    );
+  }
 }
 
 // ---- 4b the rehearsal ----

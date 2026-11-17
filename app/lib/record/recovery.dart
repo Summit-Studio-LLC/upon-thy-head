@@ -275,6 +275,28 @@ class Recovery {
   }
 }
 
+/// Words have been written from a kept recording ([keepsRecording]). Nothing typed: they are the
+/// blessing's words. Typed meanwhile: the person's words stand, and the phone's are kept beneath
+/// them as the first transcript. Either way the blessing is `written`. True when its recording is
+/// to be erased now: its review was already finished (as it would have been at Done).
+bool takeLaterWords(Blessing b, String words) {
+  if (b.rawText.trim().isEmpty) b.rawText = words;
+  b
+    ..firstText = words
+    ..wordsStatus = WordsStatus.written;
+  return !b.draft;
+}
+
+/// The order recordings waiting for their words are written in: oldest first, by when each was
+/// given. The store keeps that to the minute, so blessings given in the same minute go by when each
+/// was saved (to the millisecond), then by id, so the order never changes between launches.
+List<Blessing> waitingOrder(Iterable<Blessing> all) => [...all]..sort((a, b) {
+    final m = (a.utc.millisecondsSinceEpoch ~/ 60000).compareTo(b.utc.millisecondsSinceEpoch ~/ 60000);
+    if (m != 0) return m;
+    final c = a.created.compareTo(b.created);
+    return c != 0 ? c : a.id.compareTo(b.id);
+  });
+
 /// The blessing id a file in the audio folder belongs to: its name up to the first dot.
 String idOfFile(String name) {
   final i = name.indexOf('.');
@@ -292,8 +314,8 @@ bool needsWords(Blessing b, {required bool audioOnPhone}) =>
     b.draft && audioOnPhone && b.wordsStatus == WordsStatus.pending && b.rawText.trim().isEmpty;
 
 /// The audio-keeping rule. A recording is erased when its review is finished (Done), except one
-/// whose words the phone has not written yet (`WordsStatus.later`: an Android recording, until
-/// docs/android-plan.md task 8). That one is kept, typed words or not, until the phone has written
+/// whose words the phone has not written yet (`WordsStatus.later`: an Android recording made before
+/// the speech model was downloaded). That one is kept, typed words or not, until the phone has written
 /// words from it; then it is erased if the review was already finished (home_screen.dart,
 /// `_finishReview` and `_writeLaterWords`). Deleting the blessing still deletes its recording.
 bool keepsRecording(Blessing b) => b.wordsStatus == WordsStatus.later;

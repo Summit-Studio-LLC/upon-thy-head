@@ -27,8 +27,8 @@ enum WordsState {
   /// The engine failed; the audio is kept.
   failed,
 
-  /// This version of the app does not write the words on this phone (Android, for now); a coming
-  /// one writes them from the recording, which is kept until it has (`WordsStatus.later`).
+  /// Android: the speech model is not on the phone yet; the words are written from the recording,
+  /// which is kept until they are (`WordsStatus.later`), as soon as it is downloaded.
   later,
 }
 

@@ -328,6 +328,27 @@ class Strings {
   static String get wordsLater => _w.wordsLater;
   static String get wordsLaterHere => _w.wordsLaterHere;
   static String get finishBodyLater => _w.finishBodyLater;
+  static String get modelTitle => _w.modelTitle;
+  static String modelBody(int mb) => _w.modelBody(mb);
+  static String get download => _w.download;
+  static String get laterButton => _w.laterButton;
+  static String get modelMetered => _w.modelMetered;
+  static String modelProgress(int got, int total) => _w.modelProgress(got, total);
+  static String get modelWaiting => _w.modelWaiting;
+  static String get modelChecking => _w.modelChecking;
+  static String get modelReady => _w.modelReady;
+  static String modelNoRoom(int mb) => _w.modelNoRoom(mb);
+  static String get modelChecksum => _w.modelChecksum;
+  static String get modelServer => _w.modelServer;
+  static String get tryAgain => _w.tryAgain;
+  static String piecesWritten(int done, int total) => _w.piecesWritten(done, total);
+  static String get writingQuiet => _w.writingQuiet;
+  static String carriedOn(int piece) => _w.carriedOn(piece);
+  static String get wordsCheck => _w.wordsCheck;
+  static String get modelSetting => _w.modelSetting;
+  static String modelOnPhone(int mb) => _w.modelOnPhone(mb);
+  static String get modelNotDownloaded => _w.modelNotDownloaded;
+  static String get remove => _w.remove;
   static String get microphoneRefusedAndroid => _w.microphoneRefusedAndroid;
   static String get microphoneSettingsAndroid => _w.microphoneSettingsAndroid;
   static String get allowMicrophone => _w.allowMicrophone;
@@ -579,6 +600,27 @@ extension WordsCatalogue on Words {
         'wordsLater': wordsLater,
         'wordsLaterHere': wordsLaterHere,
         'finishBodyLater': finishBodyLater,
+        'modelTitle': modelTitle,
+        'modelBody': modelBody(60),
+        'download': download,
+        'laterButton': laterButton,
+        'modelMetered': modelMetered,
+        'modelProgress': modelProgress(12, 60),
+        'modelWaiting': modelWaiting,
+        'modelChecking': modelChecking,
+        'modelReady': modelReady,
+        'modelNoRoom': modelNoRoom(30),
+        'modelChecksum': modelChecksum,
+        'modelServer': modelServer,
+        'tryAgain': tryAgain,
+        'piecesWritten': piecesWritten(3, 8),
+        'writingQuiet': writingQuiet,
+        'carriedOn': carriedOn(4),
+        'wordsCheck': wordsCheck,
+        'modelSetting': modelSetting,
+        'modelOnPhone': modelOnPhone(60),
+        'modelNotDownloaded': modelNotDownloaded,
+        'remove': remove,
         'microphoneRefusedAndroid': microphoneRefusedAndroid,
         'microphoneSettingsAndroid': microphoneSettingsAndroid,
         'allowMicrophone': allowMicrophone,
@@ -1000,12 +1042,38 @@ class Words {
   String get settingsForScreenLock => 'Open Settings to set a screen lock';
   String lockHintAndroid(LockMethod m) =>
       'Asks for ${m == LockMethod.fingerprint ? 'your fingerprint or screen lock' : 'your screen lock'} when you open the app. Recording never waits for it.';
-  /// After Amen, and on the review page in place of the words, while Android cannot write them.
-  String get wordsLater => 'The words will be written on this phone in a coming version of the app. The recording stays here until then.';
+  /// After Amen, and on the review page in place of the words, while the speech model is not yet on
+  /// this Android phone (the person tapped Later, or the download has not finished).
+  String get wordsLater => 'The words will be written on this phone once its one-time download is done. The recording stays here until then.';
   String get wordsLaterHere =>
-      'The words will be written on this phone in a coming version of the app. The recording is kept until then. You can also type them here.';
+      'The words will be written on this phone once its one-time download is done. The recording is kept until then. You can also type them here.';
   /// The Done question, for a recording whose words are still to come: it is not erased (the audio rule).
   String get finishBodyLater => 'The recording stays on this phone until its words are written. Then it is erased.';
+  /// Android's speech model (lib/record/words_model.dart): the first-run step, After Amen, Settings.
+  String get modelTitle => 'Writing the words down';
+  String modelBody(int mb) => 'A one-time download of $mb MB lets this phone write your blessings in words. Your voice never leaves the phone.';
+  String get download => 'Download';
+  /// The button beside Download ("Later" alone elsewhere means a later blessing).
+  String get laterButton => 'Later';
+  String get modelMetered => 'This will use mobile data.';
+  String modelProgress(int got, int total) => 'Downloading… $got of $total MB';
+  String get modelWaiting => 'Waiting for a connection. The download carries on by itself.';
+  String get modelChecking => 'Checking the download…';
+  String get modelReady => 'Ready. This phone can write your blessings in words.';
+  String modelNoRoom(int mb) => 'This phone needs $mb MB more free space for the download. Free some space, then try again.';
+  String get modelChecksum => 'The download was not complete or not right, so it was not used. Try again.';
+  String get modelServer => 'The download could not be found. Try again later.';
+  String get tryAgain => 'Try again';
+  /// While Android writes the words, piece by piece.
+  String piecesWritten(int done, int total) => '$done of $total parts written';
+  String get writingQuiet => 'Writing goes on while the app is open. If you leave, it carries on from here next time.';
+  String carriedOn(int piece) => 'Carried on from part $piece, where it stopped.';
+  /// The review page, above words written on an Android phone.
+  String get wordsCheck => 'Written on this phone. Listen back to check them: a word can be missed.';
+  String get modelSetting => 'Writing the words';
+  String modelOnPhone(int mb) => 'On this phone, $mb MB';
+  String get modelNotDownloaded => 'Not downloaded';
+  String get remove => 'Remove';
   String get microphoneRefusedAndroid => 'The microphone is not allowed for Upon Thy Head.';
   String get microphoneSettingsAndroid => 'In Settings, tap Permissions, then Microphone.';
   String get allowMicrophone => 'Allow the microphone';
@@ -1709,12 +1777,55 @@ class _Spanish implements Words {
       'Pide ${m == LockMethod.fingerprint ? 'tu huella digital o tu bloqueo de pantalla' : 'tu bloqueo de pantalla'} al abrir la app. Para grabar nunca hace falta.';
   @override
   String get wordsLater =>
-      'Las palabras se escribirán en este teléfono en una próxima versión de la app. La grabación se queda aquí hasta entonces.';
+      'Las palabras se escribirán en este teléfono cuando termine su descarga única. La grabación se queda aquí hasta entonces.';
   @override
   String get wordsLaterHere =>
-      'Las palabras se escribirán en este teléfono en una próxima versión de la app. La grabación se guarda hasta entonces. También puedes escribirlas aquí.';
+      'Las palabras se escribirán en este teléfono cuando termine su descarga única. La grabación se guarda hasta entonces. También puedes escribirlas aquí.';
   @override
   String get finishBodyLater => 'La grabación se queda en este teléfono hasta que se escriban sus palabras. Después se borra.';
+  @override
+  String get modelTitle => 'Escribir las palabras';
+  @override
+  String modelBody(int mb) =>
+      'Una descarga única de $mb MB permite que este teléfono escriba tus bendiciones en palabras. Tu voz nunca sale del teléfono.';
+  @override
+  String get download => 'Descargar';
+  @override
+  String get laterButton => 'Más tarde';
+  @override
+  String get modelMetered => 'Esto usará datos móviles.';
+  @override
+  String modelProgress(int got, int total) => 'Descargando… $got de $total MB';
+  @override
+  String get modelWaiting => 'Esperando una conexión. La descarga sigue sola.';
+  @override
+  String get modelChecking => 'Comprobando la descarga…';
+  @override
+  String get modelReady => 'Listo. Este teléfono ya puede escribir tus bendiciones en palabras.';
+  @override
+  String modelNoRoom(int mb) => 'Este teléfono necesita $mb MB más de espacio libre para la descarga. Libera espacio y vuelve a intentarlo.';
+  @override
+  String get modelChecksum => 'La descarga no llegó completa o no era correcta, así que no se usó. Vuelve a intentarlo.';
+  @override
+  String get modelServer => 'No se encontró la descarga. Vuelve a intentarlo más tarde.';
+  @override
+  String get tryAgain => 'Volver a intentar';
+  @override
+  String piecesWritten(int done, int total) => '$done de $total partes escritas';
+  @override
+  String get writingQuiet => 'Se sigue escribiendo mientras la app está abierta. Si sales, continúa desde aquí la próxima vez.';
+  @override
+  String carriedOn(int piece) => 'Continuó desde la parte $piece, donde se había quedado.';
+  @override
+  String get wordsCheck => 'Escritas en este teléfono. Escucha la grabación para revisarlas: alguna palabra puede faltar.';
+  @override
+  String get modelSetting => 'Escribir las palabras';
+  @override
+  String modelOnPhone(int mb) => 'En este teléfono, $mb MB';
+  @override
+  String get modelNotDownloaded => 'Sin descargar';
+  @override
+  String get remove => 'Quitar';
   @override
   String get microphoneRefusedAndroid => 'El micrófono no está permitido para Upon Thy Head.';
   @override

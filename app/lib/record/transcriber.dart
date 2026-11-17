@@ -66,13 +66,14 @@ class Transcript {
   /// No engine on this phone can write the language without a server; the audio is kept.
   const Transcript.unavailable() : this(text: '', unavailable: true);
 
-  /// This version of the app does not write words on this phone (Android, until
-  /// docs/android-plan.md task 8); a coming one will, from the kept recording.
+  /// Android: the words are written on this phone only once its speech model is downloaded (with
+  /// the person's consent, lib/record/words_model.dart); until then the recording is kept and its
+  /// words are written from it when the model arrives.
   const Transcript.later() : this(text: '', later: true);
 
   final String text;
 
-  /// "analyzer" (Apple's new engine) or "recognizer" (the older one, on the device).
+  /// "analyzer" (Apple's new engine) or "recognizer" (the older one, on the device); "whisper" on Android.
   final String engine;
 
   /// The locale that was used, e.g. "es-US".

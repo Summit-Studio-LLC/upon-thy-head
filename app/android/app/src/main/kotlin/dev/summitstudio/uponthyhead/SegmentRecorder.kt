@@ -89,6 +89,18 @@ class SegmentRecorder(private val context: Context) {
         return java.io.BufferedInputStream(f.inputStream(), 1 shl 16)
     }
 
+    /**
+     * Tests, in a debuggable build only: when `files/debug_feed.m4a` is there at Amen, the finished
+     * recording is replaced by a copy of it, as [feed] does for the integration tests. The scripted
+     * runs use it to give the app a long recording the app itself made earlier, without recording
+     * it again in real time (tool/android_words.py). Release builds never look for it.
+     */
+    private fun debugFed(): File? {
+        val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val f = File(context.filesDir, "debug_feed.m4a")
+        return if (debuggable && f.exists()) f.also { Log.i(TAG, "recording: replaced at Amen by ${it.name} (tests)") } else null
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(AudioManager::class.java)
     private val io = Executors.newSingleThreadExecutor()
@@ -367,7 +379,7 @@ class SegmentRecorder(private val context: Context) {
     fun stop(done: (Result<File>) -> Unit) {
         val t = halt() ?: return done(Result.failure(IllegalStateException("not recording")))
         Log.i(TAG, "recording: stopped at ${System.currentTimeMillis()}")
-        val fed = feed
+        val fed = feed ?: debugFed()
         io.execute {
             val r = runCatching {
                 val parts = partsOnDisk(t).filter { it.length() > 0 }

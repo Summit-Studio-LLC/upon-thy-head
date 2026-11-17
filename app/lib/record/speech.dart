@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../not_yet.dart';
+import 'android_words.dart';
 import 'recovery.dart';
 import 'transcriber.dart';
 
@@ -88,6 +90,8 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
 
   @override
   Future<Transcript> transcribe(String path, SpeechLanguage language) async {
+    // Android: Whisper on the phone, a piece at a time (android_words.dart, docs/android-plan.md 3.5)
+    if (Phone.android) return AndroidWords.instance.transcribe(path, language);
     try {
       final m = await _channel.invokeMethod<Map<Object?, Object?>>('transcribe', {'path': path, 'language': language.code, 'trace': debugTrace});
       if (debugTrace) {
@@ -100,9 +104,6 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
     } on PlatformException catch (e) {
       debugPrint('speech: ${e.code} ${e.message}');
       if (e.code == 'unavailable') return const Transcript.unavailable();
-      // Android, for now: the words are written from the kept recording in a coming version
-      // (SpeechChannel.kt, `transcribe`: the seam the next task fills)
-      if (e.code == 'later') return const Transcript.later();
       rethrow;
     }
   }

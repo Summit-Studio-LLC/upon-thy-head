@@ -33,8 +33,8 @@ import java.util.concurrent.Executors
  *  - `openSettings`: this app's page in Android's Settings
  *  - `start` {path}, `stop` → path, `cancel`, `recover` {path} → {"path", "seconds"} or null,
  *    `seconds` {path}: as on iPhone (SegmentRecorder, Adts)
- *  - `engine` → null, `describe`: no engine writes words on Android yet
- *  - `transcribe` {path, language}: **the seam** for writing the words from the recording, below
+ *  - `engine` → null, `describe`: the words are written through `upon_thy_head/words` (WordsChannel)
+ *  - `transcribe`: not used on Android; see below
  *  - `debugInterrupt` {began}, `debugFeed` {path}: tests only, as on iPhone
  *  - `debugState` → {"recording", "service"}: tests only
  * Events (Android → Dart): `paused` {bool}, while the system has the microphone (a call, ringing,
@@ -144,7 +144,8 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
             }
             "engine" -> result.success(null)
             "describe" -> result.success(
-                mapOf("platform" to "android", "engines" to emptyList<String>(), "words" to "later"),
+                mapOf("platform" to "android", "engines" to listOf("whisper"), "words" to "upon_thy_head/words",
+                    "library" to (WhisperNative.problem ?: "loaded")),
             )
             "start" -> {
                 if (path == null) return result.error("args", "path", null)
@@ -208,22 +209,14 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
     }
 
     /**
-     * THE SEAM: writing the words from a recorded file (docs/android-plan.md tasks 8 to 10).
-     *
-     * On Android the blessing is recorded first and its words are written afterwards from the
-     * recorded `.m4a`. Nothing writes them yet, so this answers the error code "later", which the
-     * Dart side (lib/record/speech.dart) turns into `Transcript.later`: the draft is kept with its
-     * recording, marked `WordsStatus.later`, and its recording is never erased until words come
-     * from it (home_screen.dart, `_finishReview`, `_writeLaterWords`).
-     *
-     * The next task replaces the body of this method, and nothing else: on success, answer
-     * {"text", "engine", "locale"} as iPhone does; when this phone cannot write [language], answer
-     * "unavailable"; on a failure, "failed". The Dart side already asks again at every launch and
-     * whenever the blessing's review page opens.
+     * Not used on Android. The words are written from the recorded `.m4a` after Amen through the
+     * channel `upon_thy_head/words` (WordsChannel.kt, driven by lib/record/android_words.dart, which
+     * NativeSpeech.transcribe calls on Android), a piece at a time so its place is kept. Answers
+     * "unavailable" if anything still calls it, which the Dart side reads as "not on this phone".
      */
     private fun transcribe(path: String?, language: String, result: MethodChannel.Result) {
         if (path == null) return result.error("args", "path", null)
-        result.error("later", "the words are written on Android in a coming version ($language)", null)
+        result.error("unavailable", "Android writes the words through upon_thy_head/words ($language)", null)
     }
 
     /**

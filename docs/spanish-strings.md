@@ -338,6 +338,37 @@ phone's language.
 `app/tool/spanish_prompts.sh` shows all three questions in Spanish and taps that button by name
 (screenshots in `design/sim/spanish/prompts/`).
 
+## Android: writing the words on the phone
+
+Android only (the iPhone writes the words with its own recogniser and shows none of these). The
+first-run step, After Amen, the review page and Settings.
+
+| English | Spanish | Note |
+|---|---|---|
+| Writing the words down | Escribir las palabras | The title of the download step |
+| A one-time download of 58 MB lets this phone write your blessings in words. Your voice never leaves the phone. | Una descarga única de 58 MB permite que este teléfono escriba tus bendiciones en palabras. Tu voz nunca sale del teléfono. | |
+| Download | Descargar | |
+| Later | Más tarde | Beside Download |
+| This will use mobile data. | Esto usará datos móviles. | Only on a metered connection |
+| Downloading… 12 of 58 MB | Descargando… 12 de 58 MB | |
+| Waiting for a connection. The download carries on by itself. | Esperando una conexión. La descarga sigue sola. | |
+| Checking the download… | Comprobando la descarga… | |
+| Ready. This phone can write your blessings in words. | Listo. Este teléfono ya puede escribir tus bendiciones en palabras. | |
+| This phone needs 40 MB more free space for the download. Free some space, then try again. | Este teléfono necesita 40 MB más de espacio libre para la descarga. Libera espacio y vuelve a intentarlo. | |
+| The download was not complete or not right, so it was not used. Try again. | La descarga no llegó completa o no era correcta, así que no se usó. Vuelve a intentarlo. | |
+| The download could not be found. Try again later. | No se encontró la descarga. Vuelve a intentarlo más tarde. | |
+| Try again | Volver a intentar | |
+| The words will be written on this phone once its one-time download is done. The recording stays here until then. | Las palabras se escribirán en este teléfono cuando termine su descarga única. La grabación se queda aquí hasta entonces. | After Amen, without the download |
+| The words will be written on this phone once its one-time download is done. The recording is kept until then. You can also type them here. | Las palabras se escribirán en este teléfono cuando termine su descarga única. La grabación se guarda hasta entonces. También puedes escribirlas aquí. | Review page, without the download |
+| 3 of 12 parts written | 3 de 12 partes escritas | |
+| Writing goes on while the app is open. If you leave, it carries on from here next time. | Se sigue escribiendo mientras la app está abierta. Si sales, continúa desde aquí la próxima vez. | |
+| Carried on from part 4, where it stopped. | Continuó desde la parte 4, donde se había quedado. | |
+| Written on this phone. Listen back to check them: a word can be missed. | Escritas en este teléfono. Escucha la grabación para revisarlas: alguna palabra puede faltar. | Review page, above the words |
+| Writing the words | Escribir las palabras | Settings row |
+| On this phone, 58 MB | En este teléfono, 58 MB | Settings |
+| Not downloaded | Sin descargar | Settings |
+| Remove | Quitar | Settings |
+
 ## Words used throughout
 
 bendición (blessing) · Para mí · Nueva bendición · Comenzar · Amén · Descartar · Revisar ahora ·

@@ -8,6 +8,8 @@ import '../theme.dart';
 import '../widgets/balanced_text.dart';
 import '../widgets/buttons.dart';
 import '../widgets/scrims.dart';
+import '../not_yet.dart';
+import 'model_offer.dart';
 import 'session.dart';
 
 /// After Amen: the new light alone in the sky, and what to do with the words.
@@ -21,7 +23,11 @@ class AfterLayer extends StatefulWidget {
     required this.onSave,
     this.words = WordsState.done,
     this.heard = true,
+    this.audioPath,
   });
+
+  /// The recording, while Android writes its words piece by piece ([WritingProgress]).
+  final String? audioPath;
 
   final Palette palette;
   final Blessing? blessing;
@@ -119,6 +125,16 @@ class _AfterLayerState extends State<AfterLayer> {
               child: Text(body, key: ValueKey(body), style: sans(17, 25, p.ink2)),
             ),
           ),
+          // Android: how far the writing has come, or the download that lets the words be written
+          if (Phone.android && writing) ...[
+            const SizedBox(height: 16),
+            ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: WritingProgress(palette: p, path: widget.audioPath)),
+          ],
+          if (Phone.android && widget.words == WordsState.later) ...[
+            const SizedBox(height: 20),
+            // as wide as the buttons below it
+            ModelOffer(palette: p, showBody: false, compact: true),
+          ],
           const SizedBox(height: 36),
           IgnorePointer(
             ignoring: _fresh,

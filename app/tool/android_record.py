@@ -162,6 +162,10 @@ class Run:
         check('first run: microphone and notifications allowed through the rows',
               self.d.has('Microphone\\. Required.*Allowed'))
         self.d.tap('^Continue')
+        # the speech model's one-time download (tasks 8 to 10): Later, so recordings wait for it
+        self.d.wait('^Later$|^New blessing', 30)
+        if self.d.has('^Later$'):
+            self.d.tap('^Later$')
         self.home()
 
     def step1(self):
@@ -177,7 +181,7 @@ class Run:
         self.d.wait('^Review now', 20)
         self.shot('02-after-amen')
         check('1: after Amen, the recording is kept and the words are promised', self.d.has('recording is kept') and
-              self.d.has('coming version'))
+              self.d.has('one-time download'))
         time.sleep(1)
         check('1: the service and the notification are gone after Amen', not self.service_up() and not self.notification_up())
         c = self.compare(self.pull(rid, 'step1'))
@@ -510,7 +514,7 @@ class Run:
         play = self.d.wait('^Play the recording', 20)
         time.sleep(1)
         self.shot('17-review-words-to-come')
-        check('8: the review page says the words come in a coming version', self.d.has('coming version'))
+        check('8: the review page says the words come after the one-time download', self.d.has('one-time download'))
         at0 = self.elapsed()
         check('8: the player shows the length', at0 is not None and abs(at0[1] - 30) <= 1, f'{at0}')
         self.d.sh(f'input tap {play[0]} {play[1]}')

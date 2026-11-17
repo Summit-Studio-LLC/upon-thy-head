@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- The app lock (LockChannel.kt): the system's unlock prompt. Granted at install, never asked. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- The network: making and opening links (task 13), and the speech model, downloaded only when
+         the person taps Download (ModelStore.kt). Debug builds had these from Flutter's own debug
+         manifest; release builds had neither until 2026-11-17, so a release could not make a link.
+         ACCESS_NETWORK_STATE: to say "This will use mobile data." and to wait for a connection. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="Upon Thy Head"
         android:name="${applicationName}"

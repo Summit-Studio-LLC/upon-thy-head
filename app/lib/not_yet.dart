@@ -30,11 +30,6 @@ abstract final class NotYet {
   /// recent-apps cover and approximate location are real on Android (tasks 11 and 12).
   static bool get android => _a;
 
-  /// Writing the words on the phone (tasks 8 to 10). Recording is real; an Android recording is kept
-  /// with its sound and no words, as a draft marked `WordsStatus.later`, and its recording is kept
-  /// until words are written from it. The first run's practice is skipped (it shows only the words).
-  static bool get words => _a;
-
   /// Listening back with the phone locked (task 18). The review page's player works on screen;
   /// leaving the app pauses it.
   static bool get lockedListening => _a;
