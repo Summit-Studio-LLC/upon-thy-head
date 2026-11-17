@@ -2,7 +2,7 @@
 
 One landing page for uponthyhead.app. Next.js (App Router, TypeScript), on Vercel.
 
-**Live since 2026-11-17** at https://uponthyhead.app (and `www.`): Vercel project `upon-thy-head` on the Summit Studio team, deployed from this folder with `vercel deploy --prod --scope summit-studio` (not connected to GitHub, so a push does not deploy). DNS is at Cloudflare: two unproxied CNAME records to Vercel. The app is not in a store yet, so the button reads "Coming soon to iPhone and Android" (`download` in `app/content.ts`). **The link service is off:** no storage is set up, so it answers 503 and keeps nothing. Do not add storage until the list under "Before the link goes live" in `docs/decisions-and-parked-ideas.md` is done.
+**Live since 2026-11-17** at https://uponthyhead.app (and `www.`): Vercel project `upon-thy-head` on the Summit Studio team, connected to the GitHub repository with Root Directory `website`: a push to `master` that changes anything in `website/` deploys to production, and a push that does not is skipped. `www.` redirects to the bare address. DNS is at Cloudflare: two unproxied CNAME records to Vercel. The app is not in a store yet, so the button reads "Coming soon to iPhone and Android" (`download` in `app/content.ts`). **The link service is off:** no storage is set up, so it answers 503 and keeps nothing. Do not add storage until the list under "Before the link goes live" in `docs/decisions-and-parked-ideas.md` is done.
 
 ## Run it
 
