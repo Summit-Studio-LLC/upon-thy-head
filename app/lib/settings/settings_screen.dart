@@ -6,7 +6,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../not_yet.dart';
 import '../check/checks.dart';
 import '../lock/lock.dart';
 import '../place/where.dart';
@@ -30,6 +29,7 @@ class SettingsLayer extends StatelessWidget {
     required this.onLock,
     required this.onLanguage,
     required this.onUseLocation,
+    this.onSetScreenLock,
     this.onPhoneCheck,
     this.passingCount = 0,
     this.onPassAlong,
@@ -47,6 +47,9 @@ class SettingsLayer extends StatelessWidget {
   final ValueChanged<bool> onLock;
   final ValueChanged<String?> onLanguage;
   final VoidCallback onUseLocation;
+
+  /// Android, a phone with no screen lock: opens the phone's own screen-lock settings. Null, no button.
+  final VoidCallback? onSetScreenLock;
 
   /// Opens the phone check page; only in builds made with `--dart-define=PHONE_CHECK=true`.
   final VoidCallback? onPhoneCheck;
@@ -124,10 +127,18 @@ class SettingsLayer extends StatelessWidget {
                   ]),
                   const SizedBox(height: 6),
                   Text(
-                    canLock ? Strings.lockHint(lock.method) : (NotYet.lock ? Strings.lockNotYet : Strings.noPasscode),
+                    canLock ? Strings.lockHint(lock.method) : Strings.noPasscode,
                     key: const Key('settings-lock-hint'),
                     style: hint,
                   ),
+                  // Android with no screen lock: the way to set one (back here, the lock is read again)
+                  if (!canLock && onSetScreenLock != null) ...[
+                    const SizedBox(height: 4),
+                    Transform.translate(
+                      offset: const Offset(-12, 0),
+                      child: _GoldWord(key: const Key('settings-set-screen-lock'), label: Strings.setScreenLock, palette: p, onTap: onSetScreenLock!),
+                    ),
+                  ],
                 ]),
                 hairline(),
                 // ---- language ----
@@ -174,17 +185,10 @@ class SettingsLayer extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(Strings.whereHint, style: hint),
                   const SizedBox(height: 4),
-                  // Android cannot find the place yet (not_yet.dart): said plainly, with no button
-                  if (NotYet.location)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(Strings.locationNotYet, key: const Key('settings-location-not-yet'), style: hint),
-                    )
-                  else
-                    Transform.translate(
-                      offset: const Offset(-12, 0),
-                      child: _GoldWord(key: const Key('settings-use-location'), label: Strings.useMyLocation, palette: p, onTap: onUseLocation),
-                    ),
+                  Transform.translate(
+                    offset: const Offset(-12, 0),
+                    child: _GoldWord(key: const Key('settings-use-location'), label: Strings.useMyLocation, palette: p, onTap: onUseLocation),
+                  ),
                 ]),
                 hairline(),
                 // ---- about ----

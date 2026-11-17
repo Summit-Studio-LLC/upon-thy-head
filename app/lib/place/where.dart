@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../data/settings.dart';
+import '../not_yet.dart';
 import '../sky/astro.dart';
 
 /// Used when no place has been found: location refused, restricted, or not answered by Amen
@@ -35,7 +36,7 @@ abstract class Locator {
   Future<void> openSettings();
 }
 
-/// iOS: ios/Runner/Privacy.swift (`LocationChannel`).
+/// iOS: ios/Runner/Privacy.swift (`LocationChannel`); Android: LocationChannel.kt.
 class NativeLocator implements Locator {
   static const _channel = MethodChannel('upon_thy_head/location');
   static const _lock = MethodChannel('upon_thy_head/lock');
@@ -123,6 +124,15 @@ class BlessingPlace extends ChangeNotifier {
       if (s == LocationStatus.undetermined) {
         await settings.setLocationAsked();
         s = _status = await locator.request();
+      } else if (s != LocationStatus.granted && NotYet.android) {
+        // Android asks again until it has been refused twice (and after "Only this time" has
+        // lapsed); once it will not, it answers at once without a question, and Settings is the way
+        final t = Stopwatch()..start();
+        s = _status = await locator.request();
+        if (s != LocationStatus.granted && t.elapsedMilliseconds < 400) {
+          await locator.openSettings();
+          return;
+        }
       } else if (s != LocationStatus.granted) {
         await locator.openSettings();
         return;

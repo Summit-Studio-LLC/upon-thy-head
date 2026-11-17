@@ -3,9 +3,7 @@ package dev.summitstudio.uponthyhead
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -19,7 +17,8 @@ import io.flutter.plugin.common.MethodChannel
  *
  * Built so far: recording (SpeechChannel, SegmentRecorder, RecordingService), listening back on the
  * review page (PlayerChannel), keeping the screen awake while a recording listens, the link's
- * cryptography (LinkChannel), the version, and opening this app's page in the system Settings.
+ * cryptography (LinkChannel), the app lock and the recent-apps cover (LockChannel), approximate
+ * location (LocationChannel), the version, and opening this app's page in the system Settings.
  * Everything else is a stand-in that answers safely, so nothing crashes and nothing pretends to
  * work: see [NotYet] and "Stand-ins" in docs/android-plan.md, which names the task that replaces each.
  *
@@ -43,12 +42,26 @@ class MainActivity : FlutterActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        LockChannel.prompting = false
         SpeechChannel.answered(requestCode)
+        LocationChannel.answered(requestCode)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        LockChannel.came(this)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        LockChannel.focus(this, hasFocus)
     }
 
     override fun onStop() {
         // listening back is for the screen only, for now (docs/android-plan.md task 18)
         PlayerChannel.current?.pauseForBackground()
+        // out of sight: the time is noted for the lock, and with the lock on the plain ground covers the app
+        LockChannel.left(this)
         super.onStop()
     }
 
@@ -57,6 +70,8 @@ class MainActivity : FlutterActivity() {
         // and 14 the same). Flutter reports the bars' sizes as padding, as on iPhone.
         window.setDecorFitsSystemWindows(false)
         super.onCreate(savedInstanceState)
+        // with the lock on, recent apps never shows the app (a new activity is told again)
+        LockChannel.apply(this)
         // Upright on phones; tablets turn freely, as the iPad does. (Android 16 ignores a fixed
         // orientation on large screens anyway.)
         if (resources.configuration.smallestScreenWidthDp < 600) {
@@ -92,8 +107,10 @@ class MainActivity : FlutterActivity() {
         val speech = MethodChannel(m, "upon_thy_head/speech")
         speech.setMethodCallHandler(SpeechChannel({ this }, applicationContext))
         SpeechChannel.channel = speech
-        MethodChannel(m, "upon_thy_head/lock").setMethodCallHandler(::lock)
-        MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(NotYet::location)
+        val lock = MethodChannel(m, "upon_thy_head/lock")
+        lock.setMethodCallHandler(LockChannel({ this }, applicationContext))
+        LockChannel.channel = lock
+        MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(LocationChannel({ this }, applicationContext))
         val player = MethodChannel(m, "upon_thy_head/player")
         player.setMethodCallHandler(PlayerChannel.get(this))
         PlayerChannel.get(this).channel = player
@@ -133,24 +150,6 @@ class MainActivity : FlutterActivity() {
             else -> result.notImplemented()
         }
     }
-
-    /** lib/lock/lock.dart and the first run. Only the version and Settings are real so far. */
-    private fun lock(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "version" -> {
-                val info = packageManager.getPackageInfo(packageName, 0)
-                result.success("${info.versionName} (${info.longVersionCode})")
-            }
-            "openSettings" -> {
-                startActivity(
-                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                result.success(null)
-            }
-            else -> NotYet.lock(call, result)
-        }
-    }
 }
 
 /**
@@ -162,27 +161,6 @@ class MainActivity : FlutterActivity() {
 object NotYet {
     private fun no(result: MethodChannel.Result, what: String) =
         result.error("unavailable", "$what is not built on Android yet", null)
-
-    /** The app lock and the recent-apps cover: task 11. "none" turns the lock off in the Dart side. */
-    fun lock(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "method" -> result.success("none")
-            "authenticate" -> result.success(false)
-            "biometry", "askBiometrics" -> result.success(mapOf("type" to "none", "state" to "unavailable", "passcode" to false))
-            "cover" -> result.success(null)
-            "debugCovered" -> result.success(false)
-            else -> result.notImplemented()
-        }
-    }
-
-    /** Approximate location: task 12. "restricted" makes every blessing use the Salt Lake Temple. */
-    fun location(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "status", "request" -> result.success("restricted")
-            "locate" -> result.success(null)
-            else -> result.notImplemented()
-        }
-    }
 
     /** Sharing and receiving blessings: tasks 13 and 14. */
     fun share(call: MethodCall, result: MethodChannel.Result) {

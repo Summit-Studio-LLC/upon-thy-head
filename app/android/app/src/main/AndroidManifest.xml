@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Optional: the recording's notification; recording works without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Optional: roughly where blessings are given (LocationChannel.kt). Approximate only, never
+         fine location, so Android never offers "Precise"; refused, the Salt Lake Temple is used. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- The app lock (LockChannel.kt): the system's unlock prompt. Granted at install, never asked. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
         android:label="Upon Thy Head"
         android:name="${applicationName}"

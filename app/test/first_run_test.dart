@@ -5,6 +5,7 @@ import 'package:upon_thy_head/data/blessing.dart';
 import 'package:upon_thy_head/data/settings.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:upon_thy_head/lock/lock.dart';
 import 'package:upon_thy_head/not_yet.dart';
 import 'package:upon_thy_head/onboarding/first_run.dart';
 import 'package:upon_thy_head/onboarding/first_run_screens.dart';
@@ -64,9 +65,19 @@ class FakeAsker implements FirstRunAsker {
     return bio = bioAnswer;
   }
 
-  int settingsOpened = 0;
+  int settingsOpened = 0, securityOpened = 0;
   @override
   Future<void> openSettings() async => settingsOpened++;
+  @override
+  Future<void> openSecurity() async => securityOpened++;
+
+  /// Android's one unlock from the Screen lock row.
+  bool unlockAnswer = true;
+  @override
+  Future<bool> unlockOnce(String reason) async {
+    asked.add('unlock');
+    return unlockAnswer;
+  }
 }
 
 void main() {
@@ -368,31 +379,88 @@ void main() {
       });
     }
 
-    test('Android: the microphone is asked and required, notifications asked and optional, location and lock not yet', () async {
+    test('Android: microphone required; notifications, location and the screen lock asked and optional', () async {
       NotYet.debugAndroid = true;
       addTearDown(() => NotYet.debugAndroid = false);
       for (final lang in UiLanguage.values) {
         Strings.use(lang);
-        final a = FakeAsker(speechAnswer: Permission.denied);
+        await settings.setLockOn(true);
+        final a = FakeAsker(speechAnswer: Permission.denied, bio: const Biometry(type: 'none', state: 'ok', passcode: true));
+        a.unlockAnswer = false;
         final p = perms(a);
         await p.load();
         expect(p.rows.map((r) => r.title), [Strings.microphone, Strings.notifications, Strings.location, Strings.screenLock]);
-        expect(p.rows.map((r) => r.status), [RowStatus.waiting, RowStatus.waiting, RowStatus.info, RowStatus.info]);
+        expect(p.rows.map((r) => r.status), everyElement(RowStatus.waiting));
         expect(p.rows[1].reason, Strings.notificationsWhy);
-        for (final r in p.rows.skip(2)) {
-          expect(r.line, endsWith(Strings.notYetOnThisPhone), reason: r.title);
+        expect(p.rows[3].reason, Strings.faceIdWhy);
+        for (final r in p.rows) {
+          expect(r.title, isNot(contains('Face ID')));
+          expect(r.line, isNot(contains('Face ID')));
         }
-        expect(p.stillNeeded, [PermissionKind.microphone], reason: 'notifications are optional');
+        expect(p.stillNeeded, [PermissionKind.microphone], reason: 'only the microphone is required');
         expect(p.canContinue, isFalse);
         await p.ask(PermissionKind.speech); // the Notifications row
         expect(p.rows[1].status, RowStatus.off);
-        expect(p.rows[1].reason, Strings.notificationsWhy, reason: 'kept through the answer');
-        expect(p.canContinue, isFalse);
+        // the screen lock: cancelled, the row stays unanswered; then proved by one unlock
+        await p.ask(PermissionKind.lock);
+        expect(p.rows[3].status, RowStatus.waiting, reason: 'a cancelled unlock leaves the row unanswered');
+        expect(settings.faceIdAsked, isFalse);
+        a.unlockAnswer = true;
+        await p.ask(PermissionKind.lock);
+        expect(p.rows[3].status, RowStatus.allowed);
+        expect(settings.lockOn, isTrue);
+        expect(a.asked.where((x) => x == 'unlock').length, 2);
+        expect(a.asked, isNot(contains('faceID')), reason: 'Android has no Face ID question');
+        // location: Android's own question
+        await p.ask(PermissionKind.location);
+        expect(p.rows[2].status, RowStatus.allowed);
+        expect(settings.locationAsked, isTrue);
         await p.ask(PermissionKind.microphone);
         expect(p.canContinue, isTrue, reason: 'refused notifications never hold up recording');
+        // read again (back from Settings): the answered lock row stays answered
+        await p.recheck();
+        expect(p.rows[3].status, RowStatus.allowed);
         expect(Strings.permsLede, contains(lang == UiLanguage.english ? 'Allow' : 'Permitir'));
+        await settings.setLocationAsked();
+        dir.listSync().whereType<File>().forEach((f) => f.deleteSync());
+        settings = await Settings.open('${dir.path}/settings.json');
       }
       Strings.use(UiLanguage.english);
+    });
+
+    test('Android: a strong fingerprint names the row; no screen lock says so and opens the phone\'s settings', () async {
+      NotYet.debugAndroid = true;
+      addTearDown(() => NotYet.debugAndroid = false);
+      for (final lang in UiLanguage.values) {
+        Strings.use(lang);
+        var p = perms(FakeAsker(bio: const Biometry(type: 'fingerprint', state: 'ok', passcode: true)));
+        await p.load();
+        expect(p.row(PermissionKind.lock)!.title, Strings.fingerprintOrScreenLock);
+        final a = FakeAsker(bio: const Biometry(type: 'none', state: 'noPasscode', passcode: false));
+        p = perms(a);
+        await p.load();
+        final r = p.row(PermissionKind.lock)!;
+        expect(r.title, Strings.screenLock);
+        expect(r.status, RowStatus.off, reason: 'nothing to allow: the app cannot lock');
+        expect(r.line, Strings.noPasscode);
+        expect(r.line, contains(lang == UiLanguage.english ? 'no screen lock' : 'no tiene bloqueo de pantalla'));
+        await p.ask(PermissionKind.lock);
+        expect(a.asked, isEmpty, reason: 'nothing is asked of a phone with no screen lock');
+        await p.openSettings(PermissionKind.lock);
+        expect(a.securityOpened, 1);
+        expect(a.settingsOpened, 0);
+        expect(Strings.lockHint(LockMethod.fingerprint), contains(lang == UiLanguage.english ? 'fingerprint' : 'huella'));
+        expect(Strings.lockHint(LockMethod.passcode), isNot(contains('Face ID')));
+      }
+      Strings.use(UiLanguage.english);
+    });
+
+    testWidgets('Android: the no-screen-lock row\'s Settings button says where it goes', (t) async {
+      NotYet.debugAndroid = true;
+      addTearDown(() => NotYet.debugAndroid = false);
+      await pumpRow(t, PermissionRow(PermissionKind.lock, RowStatus.off, name: Strings.screenLock, note: Strings.noPasscode), 1.0);
+      expect(t.getSemantics(find.byKey(const Key('settings-lock'))).label, 'Open Settings to set a screen lock');
+      expect(find.text(Strings.noPasscode), findsOneWidget);
     });
 
     testWidgets('refused: Off and Settings in place of Allow; allowed: the tick', (t) async {

@@ -9,7 +9,12 @@ import 'store.dart';
 /// empty store; `SEED_SAMPLES=dense` puts about 120 plain ones there instead,
 /// for testing a crowded ring. Neither is for people's phones.
 const String seedSamples = String.fromEnvironment('SEED_SAMPLES');
-const bool seedSamplesFlag = seedSamples == 'true' || seedSamples == 'dense';
+const bool seedSamplesFlag = seedSamples == 'true' || seedSamples == 'dense' || seedSamples == 'first-run';
+
+/// `SEED_SAMPLES=first-run` (test builds): the five samples, and the first run all the same, as a
+/// fresh install has it (a seeded build otherwise never sees the first run). The Android lock and
+/// location run (tool/android_lock.sh) uses it to meet the first run and then a sky with blessings.
+const bool seedWithFirstRun = seedSamples == 'first-run';
 
 /// The design prototype's five blessings. Only "Comfort before surgery" has its words.
 List<Blessing> sampleBlessings() {

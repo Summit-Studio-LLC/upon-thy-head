@@ -107,6 +107,7 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
         prefs.edit().putBoolean(p, true).apply()
         waiting.remove(code)?.invoke()
         waiting[code] = done
+        LockChannel.prompting = true
         a.requestPermissions(arrayOf(p), code)
     }
 

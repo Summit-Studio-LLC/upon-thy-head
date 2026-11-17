@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as path;
 
+import '../data/samples.dart' show seedWithFirstRun;
 import '../data/audio.dart';
 import '../data/blessing.dart';
 import '../data/settings.dart';
@@ -325,6 +326,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       anything = (await _store.list()).isNotEmpty;
     } catch (_) {}
+    // a test build seeded for the first run: met as on a fresh install
+    if (seedWithFirstRun && settings.firstRun == null) anything = false;
     if (!HomeScreen.debugSkipFirstRun) {
       if (settings.firstRun == null && anything) {
         // blessings from before the first run existed (or the seeded build): never shown
@@ -1367,7 +1370,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // a file the app was opened with can land just after the first look
     if (settings.firstRun == null && _inbox.isEmpty) await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted || _onboard != Onboard.waiting) return;
-    final start = firstRunStart(settings.firstRun, hasBlessings: _blessings.isNotEmpty, fileWaiting: _inbox.isNotEmpty);
+    final start = firstRunStart(settings.firstRun, hasBlessings: _blessings.isNotEmpty && !seedWithFirstRun, fileWaiting: _inbox.isNotEmpty);
     debugPrint('first run: ${settings.firstRun ?? 'fresh'} -> ${start.name}');
     if (_locked && start != FirstRunStart.none) {
       // a blessing was kept at a shared first launch: the lock first, then the rest
@@ -2005,6 +2008,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onLock: (on) => _lock.setChosen(on),
                         onLanguage: _setRecordingLanguage,
                         onUseLocation: () => _where?.useMyLocation(),
+                        onSetScreenLock: Phone.android ? () => unawaited(NativeLockApi.openSecurity()) : null,
                         onPhoneCheck: phoneCheck ? _openPhoneCheck : null,
                         passingCount: _passing.length,
                         onPassAlong: _openPassing,

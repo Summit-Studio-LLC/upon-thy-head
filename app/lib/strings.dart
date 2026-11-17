@@ -182,8 +182,8 @@ class Strings {
   static String get settings => _w.settings;
   static String get backFromSettings => _w.backFromSettings;
   static String get appLock => _w.appLock;
-  static String lockHint(LockMethod m) => _w.lockHint(m);
-  static String get noPasscode => _w.noPasscode;
+  static String lockHint(LockMethod m) => NotYet.android ? _w.lockHintAndroid(m) : _w.lockHint(m);
+  static String get noPasscode => NotYet.android ? _w.noScreenLock : _w.noPasscode;
   static String get recordingLanguage => _w.recordingLanguage;
   static String get recordingLanguageHint => _w.recordingLanguageHint;
   static String get sameAsPhone => Phone.android ? _w.sameAsPhoneAndroid : _w.sameAsPhone;
@@ -290,7 +290,7 @@ class Strings {
   static String get speechWhy => _w.speechWhy;
   static String get location => _w.location;
   static String get locationWhy => Phone.android ? _w.locationWhyAndroid : _w.locationWhy;
-  static String get faceIdWhy => _w.faceIdWhy;
+  static String get faceIdWhy => NotYet.android ? _w.lockWhyAndroid : _w.faceIdWhy;
   static String get requiredMark => _w.requiredMark;
   static String get optionalMark => _w.optionalMark;
   static String get allowLabel => _w.allowLabel;
@@ -322,15 +322,15 @@ class Strings {
   static String get notifications => _w.notifications;
   static String get notificationsWhy => _w.notificationsWhy;
   static String get screenLock => _w.screenLock;
-  static String get notYetOnThisPhone => _w.notYetOnThisPhone;
+  static String get fingerprintOrScreenLock => _w.fingerprintOrScreenLock;
+  static String get setScreenLock => _w.setScreenLock;
+  static String get settingsForScreenLock => _w.settingsForScreenLock;
   static String get wordsLater => _w.wordsLater;
   static String get wordsLaterHere => _w.wordsLaterHere;
   static String get finishBodyLater => _w.finishBodyLater;
   static String get microphoneRefusedAndroid => _w.microphoneRefusedAndroid;
   static String get microphoneSettingsAndroid => _w.microphoneSettingsAndroid;
   static String get allowMicrophone => _w.allowMicrophone;
-  static String get lockNotYet => _w.lockNotYet;
-  static String get locationNotYet => _w.locationNotYet;
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -571,15 +571,17 @@ extension WordsCatalogue on Words {
         'notifications': notifications,
         'notificationsWhy': notificationsWhy,
         'screenLock': screenLock,
-        'notYetOnThisPhone': notYetOnThisPhone,
+        'fingerprintOrScreenLock': fingerprintOrScreenLock,
+        'setScreenLock': setScreenLock,
+        'settingsForScreenLock': settingsForScreenLock,
+        'noScreenLock': noScreenLock,
+        'lockWhyAndroid': lockWhyAndroid,
         'wordsLater': wordsLater,
         'wordsLaterHere': wordsLaterHere,
         'finishBodyLater': finishBodyLater,
         'microphoneRefusedAndroid': microphoneRefusedAndroid,
         'microphoneSettingsAndroid': microphoneSettingsAndroid,
         'allowMicrophone': allowMicrophone,
-        'lockNotYet': lockNotYet,
-        'locationNotYet': locationNotYet,
       };
 }
 
@@ -949,7 +951,7 @@ class Words {
   String get speechWhy => 'To write the words down, on this phone.';
   String get location => 'Location';
   String get locationWhy => 'To find the sky above you, not the Salt Lake Temple\'s. Allow Once is enough.';
-  String get locationWhyAndroid => 'To find the sky above you, not the Salt Lake Temple\'s. Approximate is enough.';
+  String get locationWhyAndroid => 'To find the sky above you, not the Salt Lake Temple\'s. Only this time is enough.';
   String get faceIdWhy => 'To keep your blessings locked.';
   String get locationOff => 'The sky above the Salt Lake Temple will be used.';
   String get requiredMark => 'Required';
@@ -988,7 +990,15 @@ class Words {
   String get notifications => 'Notifications';
   String get notificationsWhy => 'So you can see that it is still recording when the phone is locked.';
   String get screenLock => 'Screen lock';
-  String get notYetOnThisPhone => 'Not available on this phone yet.';
+  /// The lock's name when the phone reports a strong fingerprint (face unlock often does not count).
+  String get fingerprintOrScreenLock => 'Fingerprint or screen lock';
+  String get lockWhyAndroid => 'To keep your blessings locked. Allow turns it on and asks once.';
+  /// A phone with no screen lock at all: the app cannot lock, and says so.
+  String get noScreenLock => 'This phone has no screen lock, so anyone can open this app. Set one to lock your blessings.';
+  String get setScreenLock => 'Set a screen lock';
+  String get settingsForScreenLock => 'Open Settings to set a screen lock';
+  String lockHintAndroid(LockMethod m) =>
+      'Asks for ${m == LockMethod.fingerprint ? 'your fingerprint or screen lock' : 'your screen lock'} when you open the app. Recording never waits for it.';
   /// After Amen, and on the review page in place of the words, while Android cannot write them.
   String get wordsLater => 'The words will be written on this phone in a coming version of the app. The recording stays here until then.';
   String get wordsLaterHere =>
@@ -998,8 +1008,6 @@ class Words {
   String get microphoneRefusedAndroid => 'The microphone is not allowed for Upon Thy Head.';
   String get microphoneSettingsAndroid => 'In Settings, tap Permissions, then Microphone.';
   String get allowMicrophone => 'Allow the microphone';
-  String get lockNotYet => 'The lock is not available on this phone yet.';
-  String get locationNotYet => 'Finding where you are is not available on this phone yet, so the Salt Lake Temple is used.';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -1612,7 +1620,7 @@ class _Spanish implements Words {
   @override
   String get locationWhy => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con «Permitir una vez» basta.';
   @override
-  String get locationWhyAndroid => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con la ubicación aproximada basta.';
+  String get locationWhyAndroid => 'Para encontrar el cielo sobre ti, no el del Templo de Salt Lake. Con «Solo esta vez» basta.';
   @override
   String get faceIdWhy => 'Para mantener tus bendiciones bloqueadas.';
   @override
@@ -1683,7 +1691,19 @@ class _Spanish implements Words {
   @override
   String get screenLock => 'Bloqueo de pantalla';
   @override
-  String get notYetOnThisPhone => 'Todavía no está disponible en este teléfono.';
+  String get fingerprintOrScreenLock => 'Huella digital o bloqueo de pantalla';
+  @override
+  String get lockWhyAndroid => 'Para mantener tus bendiciones bloqueadas. Permitir lo activa y lo pide una vez.';
+  @override
+  String get noScreenLock =>
+      'Este teléfono no tiene bloqueo de pantalla, así que cualquiera puede abrir esta app. Configura uno para bloquear tus bendiciones.';
+  @override
+  String get setScreenLock => 'Configurar un bloqueo de pantalla';
+  @override
+  String get settingsForScreenLock => 'Abrir Configuración para configurar un bloqueo de pantalla';
+  @override
+  String lockHintAndroid(LockMethod m) =>
+      'Pide ${m == LockMethod.fingerprint ? 'tu huella digital o tu bloqueo de pantalla' : 'tu bloqueo de pantalla'} al abrir la app. Para grabar nunca hace falta.';
   @override
   String get wordsLater =>
       'Las palabras se escribirán en este teléfono en una próxima versión de la app. La grabación se queda aquí hasta entonces.';
@@ -1698,10 +1718,6 @@ class _Spanish implements Words {
   String get microphoneSettingsAndroid => 'En Configuración, toca Permisos y luego Micrófono.';
   @override
   String get allowMicrophone => 'Permitir el micrófono';
-  @override
-  String get lockNotYet => 'El bloqueo todavía no está disponible en este teléfono.';
-  @override
-  String get locationNotYet => 'Todavía no se puede saber dónde estás en este teléfono, así que se usa el Templo de Salt Lake.';
 }
 
 /// A row's name inside a sentence: "Microphone" reads "microphone"; "Face ID" stays as it is.

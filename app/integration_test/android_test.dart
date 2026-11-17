@@ -242,7 +242,7 @@ void main() {
     await tester.tap(find.byKey(const Key('more')));
     await wait(2200);
     expect(stage('settings'), isTrue);
-    if (NotYet.location) expect(find.byKey(const Key('settings-location-not-yet')), findsOneWidget);
+    expect(find.byKey(const Key('settings-use-location')), findsOneWidget);
     await shot('11-settings');
     await back();
     expect(stage('settings'), isFalse, reason: 'back did not leave Settings');

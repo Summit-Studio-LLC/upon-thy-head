@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import '../data/settings.dart';
 import '../strings.dart';
 
-/// How this phone proves it is its owner. [none]: no passcode is set, so the app cannot lock.
-enum LockMethod { faceId, touchId, opticId, passcode, none }
+/// How this phone proves it is its owner. [none]: no passcode (Android: no screen lock) is set, so
+/// the app cannot lock. [fingerprint]: Android with a strong fingerprint enrolled; [passcode] on
+/// Android is the screen lock (PIN, pattern or password) alone.
+enum LockMethod { faceId, touchId, opticId, fingerprint, passcode, none }
 
 /// The time away after which the app locks again on its return.
 const lockAfter = Duration(seconds: 60);
@@ -34,7 +36,7 @@ abstract class LockApi {
   set onActive(Future<void> Function(Duration away, bool background)? f);
 }
 
-/// iOS: ios/Runner/Privacy.swift (`LockChannel`).
+/// iOS: ios/Runner/Privacy.swift (`LockChannel`); Android: LockChannel.kt.
 class NativeLockApi implements LockApi {
   NativeLockApi() {
     _channel.setMethodCallHandler((call) async {
@@ -58,6 +60,7 @@ class NativeLockApi implements LockApi {
         'faceID' => LockMethod.faceId,
         'touchID' => LockMethod.touchId,
         'opticID' => LockMethod.opticId,
+        'fingerprint' => LockMethod.fingerprint,
         'passcode' => LockMethod.passcode,
         _ => LockMethod.none,
       };
@@ -70,6 +73,9 @@ class NativeLockApi implements LockApi {
 
   @override
   Future<String> version() async => await _channel.invokeMethod<String>('version') ?? '';
+
+  /// Android: the phone's own screen-lock settings (a phone with no screen lock).
+  static Future<void> openSecurity() => _channel.invokeMethod<void>('openSecurity');
 
   /// Tests: whether the cover is up now.
   static Future<bool> debugCovered() async => await _channel.invokeMethod<bool>('debugCovered') ?? false;

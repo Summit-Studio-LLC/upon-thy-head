@@ -95,6 +95,7 @@ enum RowStatus {
   off,
 
   /// Nothing to ask on this phone (no Face ID, or no passcode): the Settings page's plain line.
+  /// (Android's lock row with no screen lock is [off] instead, with the way to set one.)
   info,
 }
 
@@ -131,7 +132,7 @@ class PermissionRow {
   /// The reason, where it is not [kind]'s own (Android's Notifications row in the speech row's place).
   final String? why;
 
-  /// For [RowStatus.info]: the line shown instead of the reason.
+  /// For [RowStatus.info], and Android's [RowStatus.off] lock row: the line shown instead of the reason.
   final String? note;
 
   String get title => name ?? switch (kind) {
@@ -153,7 +154,7 @@ class PermissionRow {
   /// The line under the name now. Refused location says which sky is used instead.
   String get line => switch (status) {
         RowStatus.off when kind == PermissionKind.location => Strings.locationOff,
-        RowStatus.info => note ?? reason,
+        RowStatus.off || RowStatus.info => note ?? reason,
         _ => reason,
       };
 
@@ -209,6 +210,16 @@ PermissionRow lockRow(Biometry b, {required bool asked}) {
   return PermissionRow(PermissionKind.lock, RowStatus.waiting, name: name);
 }
 
+/// Android's lock row (docs/android-plan.md 9): there is no system question. Named for what the
+/// phone has ("Fingerprint or screen lock" only with a strong fingerprint; face unlock often does not
+/// count on Android, so never "Face ID"). No screen lock at all: Off, saying so, with the way to the
+/// phone's own settings. [proved]: Allow has turned the lock on and one unlock went through.
+PermissionRow androidLockRow(Biometry b, {required bool proved}) {
+  final name = b.type == 'fingerprint' ? Strings.fingerprintOrScreenLock : Strings.screenLock;
+  if (!b.passcode) return PermissionRow(PermissionKind.lock, RowStatus.off, name: Strings.screenLock, note: Strings.noPasscode);
+  return PermissionRow(PermissionKind.lock, proved ? RowStatus.allowed : RowStatus.waiting, name: name);
+}
+
 /// The phone's questions, one at a time.
 abstract class FirstRunAsker {
   Future<Permission> microphone();
@@ -220,11 +231,17 @@ abstract class FirstRunAsker {
   Future<Biometry> biometry();
   Future<Biometry> askBiometrics(String reason);
 
+  /// Android: one unlock through the phone's own prompt; true when it went through.
+  Future<bool> unlockOnce(String reason);
+
   /// This app's page in the Settings app.
   Future<void> openSettings();
+
+  /// Android: the phone's own screen-lock settings.
+  Future<void> openSecurity();
 }
 
-/// iOS: SpeechChannel.swift, Privacy.swift.
+/// iOS: SpeechChannel.swift, Privacy.swift. Android: SpeechChannel.kt, LockChannel.kt, LocationChannel.kt.
 class NativeFirstRunAsker implements FirstRunAsker {
   NativeFirstRunAsker(this.locator);
   final Locator locator;
@@ -261,7 +278,11 @@ class NativeFirstRunAsker implements FirstRunAsker {
   Future<Biometry> askBiometrics(String reason) async =>
       Biometry.of(await _lock.invokeMethod<Map<Object?, Object?>>('askBiometrics', {'reason': reason}));
   @override
+  Future<bool> unlockOnce(String reason) async => await _lock.invokeMethod<bool>('authenticate', {'reason': reason}) ?? false;
+  @override
   Future<void> openSettings() => _lock.invokeMethod<void>('openSettings');
+  @override
+  Future<void> openSecurity() => NativeLockApi.openSecurity();
 }
 
 /// The permissions screen's state: the four rows, read as the screen opens. Each row's own Allow
@@ -312,21 +333,24 @@ class FirstRunPermissions extends ChangeNotifier {
       }
     }
 
-    // Android (docs/android-plan.md 9): the microphone (required) and notifications (optional) are
-    // Android's own questions; location and the screen lock cannot be asked for yet (not_yet.dart),
-    // so those rows say why they will be needed and that they are not here yet.
+    // Android (docs/android-plan.md 9): the microphone (required), notifications and approximate
+    // location (optional) are Android's own questions; the screen lock has none, so its Allow turns
+    // the lock on and proves it with one unlock.
     if (NotYet.android) {
-      PermissionRow notYet(PermissionKind k, {String? name}) {
-        final r = PermissionRow(k, RowStatus.info, name: name);
-        return PermissionRow(k, RowStatus.info, name: name, note: '${r.reason} ${Strings.notYetOnThisPhone}');
+      PermissionRow lock;
+      try {
+        lock = androidLockRow(await asker.biometry(), proved: settings.faceIdAsked && settings.lockOn);
+      } catch (e) {
+        debugPrint('first run: $e');
+        lock = PermissionRow(PermissionKind.lock, RowStatus.waiting, name: Strings.screenLock);
       }
-
       return [
         PermissionRow(PermissionKind.microphone, await safe(() async => rowOfPermission(await asker.microphone()))),
         PermissionRow(PermissionKind.speech, await safe(() async => rowOfPermission(await asker.speech())),
             name: Strings.notifications, why: Strings.notificationsWhy),
-        notYet(PermissionKind.location),
-        notYet(PermissionKind.lock, name: Strings.screenLock),
+        PermissionRow(PermissionKind.location,
+            await safe(() async => rowOfLocation(await asker.location(), asked: settings.locationAsked))),
+        lock,
       ];
     }
 
@@ -384,10 +408,11 @@ class FirstRunPermissions extends ChangeNotifier {
     announce?.call(row(k)!.semantics);
   }
 
-  /// A refused row's Settings button: this app's page in the Settings app.
-  Future<void> openSettings() async {
+  /// A refused row's Settings button: this app's page in the Settings app (Android's lock row with
+  /// no screen lock: the phone's own screen-lock settings).
+  Future<void> openSettings([PermissionKind? k]) async {
     try {
-      await asker.openSettings();
+      await (k == PermissionKind.lock && NotYet.android ? asker.openSecurity() : asker.openSettings());
     } catch (e) {
       debugPrint('first run: $e');
     }
@@ -403,6 +428,13 @@ class FirstRunPermissions extends ChangeNotifier {
         await settings.setLocationAsked();
         final s = await asker.askLocation();
         return s == LocationStatus.undetermined ? RowStatus.off : rowOfLocation(s, asked: true);
+      case PermissionKind.lock when NotYet.android:
+        // no system question: the lock is turned on and proved with one unlock; cancelled, the row
+        // stays unanswered
+        await settings.setLockOn(true);
+        if (!await asker.unlockOnce(Strings.faceIdKeepReason)) return RowStatus.waiting;
+        await settings.setFaceIdAsked();
+        return RowStatus.allowed;
       case PermissionKind.lock:
         await settings.setFaceIdAsked();
         final b = await asker.askBiometrics(Strings.faceIdKeepReason);

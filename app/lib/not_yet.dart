@@ -25,19 +25,15 @@ abstract final class NotYet {
 
   /// Android's own shape where it differs by design, not by being unfinished: Notifications in the
   /// first run in place of speech recognition (which Android does not have), the microphone asked
-  /// when Begin is pressed, and Android's wording for a refused microphone.
+  /// when Begin is pressed, Android's wording for a refused microphone, and the Screen lock row,
+  /// which has no system question (its Allow proves the lock with one unlock). The app lock, the
+  /// recent-apps cover and approximate location are real on Android (tasks 11 and 12).
   static bool get android => _a;
 
   /// Writing the words on the phone (tasks 8 to 10). Recording is real; an Android recording is kept
   /// with its sound and no words, as a draft marked `WordsStatus.later`, and its recording is kept
   /// until words are written from it. The first run's practice is skipped (it shows only the words).
   static bool get words => _a;
-
-  /// The app lock and the recent-apps cover (task 11).
-  static bool get lock => _a;
-
-  /// Approximate location (task 12): every blessing uses the Salt Lake Temple meanwhile.
-  static bool get location => _a;
 
   /// Sending a blessing (task 13): the reading page has no share button meanwhile.
   static bool get sharing => _a;

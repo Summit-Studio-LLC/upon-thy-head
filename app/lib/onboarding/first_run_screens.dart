@@ -278,7 +278,7 @@ class PermissionsLayer extends StatelessWidget {
                     palette: p,
                     row: r,
                     onAllow: () => state.ask(r.kind),
-                    onSettings: state.openSettings,
+                    onSettings: () => state.openSettings(r.kind),
                   ),
                 ),
               const SizedBox(height: 18),
@@ -513,7 +513,8 @@ class _RowControl extends StatelessWidget {
                 palette: p,
                 gold: false,
                 label: Strings.settingsButton,
-                semanticsLabel: Strings.settingsFor(row.title),
+                // (Android's lock row with no screen lock opens the phone's screen-lock settings)
+                semanticsLabel: row.kind == PermissionKind.lock && row.note != null ? Strings.settingsForScreenLock : Strings.settingsFor(row.title),
                 onTap: onSettings,
               ),
             ],
