@@ -13,6 +13,9 @@ made with SEED_SAMPLES=first-run (the five samples, and the first run all the sa
   3. away 20 s: not locked.
   6. a blessing open, then recent apps: screenshots with the lock on and with it off (turning it
      off asks first); the lock turned on again.
+  s. away 70 s with Dart slow to answer (a debug hook holds `active` back 10 s), the notification shade
+     opened and closed before it answers: the plain cover holds until the answer, which locks.
+  p. Home over Android's location question, away 70 s: locked; answering the question opens the prompt.
   9. location: a blessing recorded after "Only this time" carries the emulator's place rounded to a
      tenth of a degree; then a fresh install refusing location: the Salt Lake Temple, said so in
      Settings; then location off for the whole phone: "Use my location" comes back at once, still
@@ -269,18 +272,25 @@ class Run:
             time.sleep(3)
             self.shot('perm-recents')
             sd, mean = plain(os.path.join(self.out, 'perm-recents.png'))
-            check('p: left over the question: recent apps shows the plain card', sd < 0.02 and 0.02 < mean < 0.1,
-                  f'middle of the card: spread {sd:.3f}, brightness {mean:.3f}')
+            # Not the plain card: the question is the permission controller's own activity on top of
+            # the app's task, and Android takes its picture (docs/android-plan.md section 5, "Not met").
+            # What must hold is that nothing of a blessing is in it.
+            seen = [t for t in TITLES if t in ' | '.join(self.labels())]
+            check('p: left over the question: recent apps holds nothing of a blessing (Android\'s question over Settings)',
+                  not seen, f'found {seen}; middle of the card: spread {sd:.3f}, brightness {mean:.3f} (plain card: under 0.02)')
             self.d.key('KEYCODE_HOME')
             time.sleep(68)
             self.d.launch()
             time.sleep(2.5)
             self.shot('perm-back')
             # the question may still be over the app; answering it must not open the app either
+            answered = False
             if self.d.has('^Only this time'):
                 self.d.tap('^Only this time')
-                time.sleep(2)
+                answered = True
             up = self.prompt_up(8)
+            if answered:
+                check('p: once the question is answered, the unlock prompt opens by itself (no tap on Unlock)', up)
             if up:
                 self.d.key('KEYCODE_BACK')
                 time.sleep(1.5)
@@ -300,12 +310,12 @@ class Run:
         self.home()
 
     def steps(self):
-        """Dart slow to answer after 70 s away (debug hook: `active` held back 6 s): the cover holds."""
+        """Dart slow to answer after 70 s away (debug hook: `active` held back 10 s): the cover holds."""
         self.unlock_if_asked(2)
         self.home()
         self.d.tap('^Read this blessing')
         time.sleep(2.5)
-        self.d.sh(f"run-as {PKG} sh -c 'echo 6000 > files/slow_active'")
+        self.d.sh(f"run-as {PKG} sh -c 'echo 10000 > files/slow_active'")
         try:
             self.d.key('KEYCODE_HOME')
             time.sleep(70)
@@ -314,6 +324,16 @@ class Run:
             self.shot('slow-3s')
             sd, mean = plain(os.path.join(self.out, 'slow-3s.png'))
             check('s: Dart not yet answered 3 s after a 70 s absence: still the plain cover', sd < 0.02 and mean < 0.1,
+                  f'middle of the screen: spread {sd:.3f}, brightness {mean:.3f}')
+            # the shade pulled down and closed before Dart answers: the focus return sends a second
+            # `active` (away 0), whose own 1.5 s limit must not lift the cover the first still holds
+            self.d.sh('cmd statusbar expand-notifications')
+            time.sleep(0.8)
+            self.d.sh('cmd statusbar collapse')
+            time.sleep(2)  # the second call's 1.5 s gone; the first answer is still held back
+            self.shot('slow-after-shade')
+            sd, mean = plain(os.path.join(self.out, 'slow-after-shade.png'))
+            check('s: the shade opened and closed while the answer is held back: still the plain cover', sd < 0.02 and mean < 0.1,
                   f'middle of the screen: spread {sd:.3f}, brightness {mean:.3f}')
             up = self.prompt_up(12)
             check('s: the late answer locks, and its prompt shows', up)
@@ -382,6 +402,11 @@ class Run:
         return t
 
     def step9(self, summary):
+        # after steps p and s the app may have been ended (a permission reset) or left: bring it back
+        if not self.d.has('^New blessing'):
+            self.d.launch()
+            self.unlock_if_asked(6)
+        self.home()
         before = {r[0] for r in self.places()}
         begin = self.record()
         check('9: Begin is not held up by location', begin is not None and begin < 3, f'{begin:.2f} s' if begin else 'never started')

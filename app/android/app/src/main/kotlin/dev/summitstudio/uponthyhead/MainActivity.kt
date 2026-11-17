@@ -49,6 +49,7 @@ class MainActivity : FlutterActivity() {
         LockChannel.prompting = false
         SpeechChannel.answered(requestCode)
         LocationChannel.answered(requestCode)
+        LockChannel.questionGone(this)
     }
 
     override fun onStart() {

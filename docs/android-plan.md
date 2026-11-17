@@ -64,7 +64,7 @@ The rule: the audio never leaves the phone. On iPhone the app records the whole 
 - **Which engine answers** depends on the maker: Google's speech services on Pixels, often Samsung's own on Galaxy phones *(unconfirmed)*.
 - **Languages:** whatever the phone has downloaded. `checkRecognitionSupport` and `triggerModelDownload` (Android 13 and later) can ask for more, sometimes with a prompt to the person. **(Google)**
 
-**Verdict:** not the main path. It acts differently by maker, may quietly ignore the file and listen to the room instead, and on older phones cannot take a file at all.
+**Verdict:** not the main path. *(Measured 2026-11-17, see 3.5: from a file it wrote only the first sentence.)* It acts differently by maker, may quietly ignore the file and listen to the room instead, and on older phones cannot take a file at all.
 
 ### 3.2 ML Kit GenAI Speech Recognition (Google's on-device library)
 
@@ -74,11 +74,11 @@ From Google's page, last updated 2026-11-14: [ML Kit GenAI Speech Recognition](h
 - **Two modes:**
   - **Basic:** "the traditional on-device speech recognition model, similar to the SpeechRecognizer API". It runs on "Android devices using API level 31 and higher", so Android 12 and later.
   - **Advanced:** runs on Gemini Nano (Google's on-device AI model), with better quality. It is only on the Pixel 10 and 11 series and phones with recent top-end chips (Snapdragon SM8750 and later, Dimensity 9400-class, Exynos 2600), such as the Galaxy S26, Z Flip8 and Z Fold8. It does not work on phones with an unlocked bootloader.
-- **From a file: yes.** `AudioSource.fromFile()` transcribes "a whole pre-recorded file" and "automatically decodes" M4A, so the app's existing `.m4a` goes straight in. In this one-shot mode it "transcribes it faster than real time" and returns a final result for each stretch of speech.
+- **From a file: yes** *(measured 2026-11-17, see 3.5: only for short files; a 10-minute file failed at once, paragraphs were left out, and it needs the microphone permission even for a file)*. `AudioSource.fromFile()` transcribes "a whole pre-recorded file" and "automatically decodes" M4A, so the app's existing `.m4a` goes straight in. In this one-shot mode it "transcribes it faster than real time" and returns a final result for each stretch of speech.
 - **Languages:**
   - Advanced: `en-US` and `es-ES`.
   - Basic: `en-US`, and `es-ES` marked **beta** ("may have a slightly higher word error rate").
-  - **There is no `es-US` or `es-MX` in either list.** Google adds "Additional locales are available", without naming them. So the Spanish of a family from Mexico or Latin America would go through Spain's Spanish model, with unknown quality *(unconfirmed)*.
+  - **There is no `es-US` or `es-MX` in either list** *(measured: the Pixel 10 Pro emulator offers a Basic `es-US` download, though it never finished there; `es-MX` is not offered)*. Google adds "Additional locales are available", without naming them. So the Spanish of a family from Mexico or Latin America would go through Spain's Spanish model, with unknown quality *(unconfirmed)*.
 - **Only while the app is in front:** "inference is permitted only when the app is the top foreground application. Using the API … including using a foreground service, will result in `BACKGROUND_USE_BLOCKED`." [GenAI overview](https://developers.google.com/ml-kit/genai). Google says this of the GenAI APIs as a group. Whether it also binds Basic mode *(unconfirmed)*, assume it does. So if someone says Amen and locks the phone at once, the writing waits until they open the app again. The iPhone app already retries quietly at launch and on the review page, so the design holds.
 - **Daily limit:** each app has a usage quota, with a "per app battery use quota" (for example, daily). The size of that limit is not published. Several long blessings in a day might hit it *(unconfirmed)*.
 - **On the phone: yes.** "Input, inference, and output data is processed locally." The model is downloaded once from Google. That download needs the internet, but no audio is sent.
@@ -104,11 +104,13 @@ OpenAI's Whisper, run by **whisper.cpp** (MIT licence; it has an Android example
   - Another blog claims faster than real time for base on a Pixel 6a, with vague method.
   - Whisper on Android mostly runs on the main processor. Expect "small" to take a few minutes for a 10-minute blessing on a mid-range phone, and turbo to be too slow there *(unconfirmed)*.
 - **Spanish:** Whisper is trained on many languages and handles Latin American Spanish *(unconfirmed for this use; the iPhone research found community scores of 7–15 % word error for turbo)*.
-- **A known Whisper fault:** during long silences it can write words that were never said *(widely reported, unconfirmed here)*. For a record whose promise is "exactly as spoken", silences would have to be cut out before the file goes to Whisper.
+- **A known Whisper fault:** during long silences it can write words that were never said *(widely reported; measured 2026-11-17, see 3.5: here it mostly left speech out instead, and invented words only on a clip repeated twenty times)*. For a record whose promise is "exactly as spoken", silences would have to be cut out before the file goes to Whisper.
 - **What it avoids:** it sends no usage statistics, depends on nothing from Google, and keeps working if Google changes ML Kit.
-- **Runtime:** **sherpa-onnx** (Apache 2.0 *(unconfirmed)*) runs the same Whisper models and was much faster in the one comparison above. Try both before choosing.
+- **Runtime:** **sherpa-onnx** (Apache 2.0 *(unconfirmed)*) runs the same Whisper models and was much faster in the one comparison above. Try both before choosing. *(Dropped 2026-11-17, see 3.5: its prebuilt tools did not run, and it adds 27.5 MB of libraries.)*
 
 ### 3.4 Recommendation
+
+*(Superseded 2026-11-17 by 3.5: Whisper base is the main path, because ML Kit could not be shown working on these emulators and no phone will be used before launch.)*
 
 **Main path: ML Kit GenAI Speech Recognition, run on the recorded file after Amen.** Use Advanced mode where the phone has it, and Basic otherwise. This is the closest match to the iPhone design (a file in, words out, on the phone), needs no download for English on most phones, and is Google's own library. Hide it behind one small Kotlin class with the same `transcribe` method the iPhone has, so it can be swapped out if Google changes it.
 
@@ -126,6 +128,71 @@ Start with **small (181 MiB)**. Offer **turbo (547 MiB)** only on phones with 8 
 5. Locking the phone straight after Amen: confirm `BACKGROUND_USE_BLOCKED`, and that the retry on reopening works.
 6. Three or four long blessings in a day: does the daily quota bite?
 7. What ML Kit reports for `es-US` and `es-MX` (the "additional locales").
+
+### 3.5 Measured on this Mac's emulators (2026-11-17)
+
+Noah's ruling: no real Android phone before launch. So the engine has to be one whose behaviour these emulators can show. Everything here was run on the Pixel_10_Pro emulator (Android 17, Google Play image, arm64) and the Pixel 3a emulator (Android 14, Google APIs image), with the emulator's sound off and the audio fed from files. The host is an Apple M3 Max. Every number is **a single run**, so differences of a few words per hundred mean nothing. "Wrong per hundred" is counted the way `lib/check/spoken.dart` counts it, against the typed text.
+
+**The test audio:**
+- `en`: the project's 38-second English clip.
+- `es`: the 24-second Spanish clip.
+- `long_en`: the English clip repeated 14 times with 7 s of silence between (10.5 min).
+- `long_es`: the Spanish clip **repeated about 20 times** (10.4 min). **Whisper's worst case:** the same 24 seconds over and over invites it to repeat itself, so treat its `long_es` numbers as a stress test, not a forecast.
+- `es_varied`: a 6-minute Spanish blessing that never repeats (553 words, macOS's Paulina voice at 150 words a minute, 7 s pauses between paragraphs). The fairest long Spanish test made here, though a synthetic voice is easier than a person.
+
+**The table**
+
+| | ML Kit Basic | ML Kit Advanced | Android's recogniser | Whisper (whisper.cpp) |
+|---|---|---|---|---|
+| **Proven here** | Pixel 10 Pro: English is already on the phone. A 38 s file took 8–14 s, and four runs out of four **left out the first two of four paragraphs**, in airplane mode too. A 2-minute file lost the second paragraph of every repeat, and the first paragraph of the first. **A 10-minute file fails at once** (`UNKNOWN`), from the app's own `.m4a` and from WAV alike. Spanish (`es-ES`, `es-US`) never finished downloading in about 5 minutes. `es-MX` not offered. Pixel 3a (Android 14): unavailable for every language. | Nothing: unavailable on both emulators (it needs Gemini Nano). | Both emulators: on the phone. A system dialog downloads the language. From a file it writes **only the first stretch of speech** (one sentence), then stops. Works in airplane mode. | The whole way through: English and Spanish, 10-minute files, airplane mode, time, memory. Its fault is **leaving speech out**, not making it up (see below). |
+| **Cannot be proven without a phone** | Whether real phones drop paragraphs too, Spanish at all, which mid-range phones have it, the daily limit, the background block. | Everything. | Samsung's own engine. | Speed and heat on a mid-range phone (estimated below). |
+| **Cost to the person** | None for English on a Pixel; unknown for Spanish. | — | A system download prompt (44 MB English, 49 MB Spanish; 79 MB and 123 MB once installed). | A one-time download with consent: 58 MB (base) or 191 MB (small), plus the wait after Amen. |
+| **Cost to the build** | +1.9 MB. An alpha library. It **needs the microphone permission even to read a file** (`ERROR_TYPE_INSUFFICIENT_PERMISSION` without it). It pulls in Kotlin's 2.4 standard library; it built with the app's AGP 9.0.1 and Kotlin 2.3.20. | Same. | None. | +3.3 MB of native code (1.5 MB zipped): a C++ build in Gradle with the NDK. The app also needs a 0.9 MB silence-finding model. The download, its consent screen and a resume-later queue are app code. |
+
+**Whisper's numbers** (Pixel 10 Pro emulator, 4 threads, `whisper-cli` built from whisper.cpp of 2026-11-16 with NDK 28.2):
+
+| Model | Audio | Whole file, as is | Cut at silences, no carry-over |
+|---|---|---|---|
+| base | en | 2.7 s, 29 wrong per hundred (the first paragraph left out) | 1.9 *(Mac)* |
+| small | en | 8.2 s, 2.8 | 0.0 *(Mac)* |
+| base | es | 1.3 s, 4.2 | 4.2 *(Mac)* |
+| small | es | 4.2 s, 0.0 | 4.2 *(Mac)* |
+| base | long_en | 27 s, 38.5 | **35 s, 15.8** (Mac: 13.6) |
+| small | long_en | 96 s, 48.8 | **65 s, 21.3** (Mac: 21.4) |
+| base | long_es *(repeated clip)* | 21 s, 91.0: wrote "(Amén)" for the last 8 minutes | 24 s, 39.0 (Mac: 34.2) |
+| small | long_es *(repeated clip)* | 83 s, 32.9 | 61 s, 46.1 (Mac: 53.4) |
+| base | es_varied | 14 s, 30.4 (whole paragraphs left out) | **15 s, 4.7** (Mac: 4.5) |
+| small | es_varied | 45 s, 29.7 | **37 s, 23.3** (Mac: 10.3) |
+
+- "Cut at silences, no carry-over" is `-mc 0 --vad -vm ggml-silero-v5.1.2.bin`: whisper.cpp's own silence finder hands Whisper each stretch of speech, and nothing is carried from one stretch to the next. This is how the app would run it. "*(Mac)*" rows were run on the host with the same models (`whisper-cli -ng`, 8 threads), as a cross-check.
+- Cutting the silences out of the file instead (to 1 s each) helped only a little (base long_en 38.5 → 33.6).
+- **What goes wrong is missing words.** On these files Whisper invented words only once: the "(Amén)" loop on the repeated Spanish clip. Otherwise it left words out. Small in particular drops the first word after a pause ("Emma, I lay…" became "I lay…" in 13 of 14 repeats) and sometimes a whole sentence. Widening the silence finder's margin (`--vad-speech-pad-ms 300`) made it worse, not better.
+- **Base did better than small on every long file**, and small did better only on the short, clean clips. Small's Spanish varied from 10 to 23 per hundred between two runs of the same file. One run each is not enough to choose between them on quality. Base is the better start on size and speed anyway.
+- **Memory (peak):** base 250–345 MiB, small 505–611 MiB.
+- **Airplane mode:** base on `en` ran in airplane mode with the same result. It is a program on the phone with no network code at all.
+- **Mid-range estimate (an estimate, not a measurement).** The emulator runs arm64 code directly on the M3 Max's cores. A Galaxy A-class phone (Cortex-A78-class big cores) is about 2.5–3 times slower per core than an M3, with far less memory bandwidth, so I assume 3–5 times slower. **A 10-minute blessing: about 2–3 minutes with base, 3–5½ minutes with small.** Heat and battery are unknown.
+- **sherpa-onnx dropped:** its prebuilt Android tools did not run (`libc++_shared.so` missing). It would add 27.5 MB of libraries (22 MB of that is onnxruntime), and its Whisper base files are 159 MB, against 57 MiB for whisper.cpp's.
+
+**ML Kit and the recogniser, more detail:**
+- Pixel 10 Pro, ML Kit status: Basic `en-US` AVAILABLE, `es-ES` and `es-US` DOWNLOADABLE, `es-MX` UNAVAILABLE. Advanced: UNAVAILABLE for all four ("AICore failed … BINDING_FAILURE").
+- `download()` for Spanish returned "Model download is not completed yet and will be retried automatically", and the status stayed DOWNLOADABLE through about 5 minutes of polling, twice. Spanish files then fail with `ERROR_TYPE_INVALID_REQUEST`.
+- ML Kit on `en` (wrong per hundred 48–50, four runs): the first ~8 seconds of output time pass with sound levels reported but no words. The first words it writes are "I bless you with with pieces", the start of the third paragraph.
+- The recogniser on `en`: Pixel 3a wrote the first sentence only, 83 wrong per hundred. The Pixel 10 Pro did the same. Spanish: the first sentence plus a stray "pistola" (77 per hundred). Without a segmented session it wrote nothing. Supported languages: `es-ES` on both; `es-US` on the Pixel 10 Pro only; `es-MX` on neither.
+
+**What this corrects above:**
+- 3.1: the languages are a system download of 44–49 MB each, 79–123 MB once installed. From a file, Google's recogniser stopped after the first sentence even with a segmented session, so it is not even a fallback without the app cutting the file itself.
+- 3.2: "From a file: yes" holds only for short files: 10 minutes failed at once. It also left paragraphs out every time. It needs the microphone permission even for a file. There **is** an `es-US` Basic model offered (not `es-MX`). On the Android 14 emulator it is not offered at all.
+- 3.3: the "known fault" measured here is leaving speech out more than writing words never said. Cutting at silences with no carry-over is needed and helps a great deal. Small is not clearly better than base on long blessings. sherpa-onnx is dropped.
+- 3.4 is replaced by the recommendation below.
+
+**Recommendation.** **Whisper base (q5_1), run by whisper.cpp inside the app, cut at silences, with no carry-over**, for English and Spanish alike. It is the only engine whose whole job (a 10-minute file, both languages, airplane mode) could be shown working on these emulators. Because it is the app's own code, a real phone will behave like the emulator, only slower. ML Kit failed on the length a blessing actually is, left out paragraphs, and could not get Spanish at all here. With no phone to prove otherwise, it cannot be the main path at launch. Keep the `transcribe` method behind one small Kotlin class so ML Kit can be tried again once someone has a real phone. Offer small later only if base proves weak with real voices.
+
+**What the person would see** (wording to settle with Noah):
+- **First run,** a row on the permissions page: "**Writing the words down.** A one-time download of 58 MB lets this phone write your blessings in words. Your voice never leaves the phone." Buttons: **Download** / **Later**. Under it when not on Wi-Fi: "This will use mobile data."
+- If **Later**, or while it downloads: blessings record as now, and the review page says "**The words will be written once the download finishes.**" When it finishes, they are written then.
+- **After Amen:** "**Writing the words…** A long blessing can take a few minutes on this phone. You can leave the app; the words will be ready when you come back." (While the app is closed, the writing waits and resumes on the next launch, as on iPhone. Keeping it running in the background would need a foreground notification. That is a later choice.)
+
+**How to repeat this:** the throwaway probe app and scripts are in `~/Development/scratch-uth-speech` (outside the project). `tools/p10.sh` is the Whisper whole-file pass and the recogniser. `tools/p10b.sh` is silences and no carry-over. `tools/p10c.sh` and `p10d.sh` are ML Kit. `tools/wer.py` does the scoring. Each script boots the emulator with `-no-audio -no-snapshot-save`, uninstalls the probe and shuts the emulator down at the end.
 
 ---
 
@@ -383,6 +450,13 @@ The scripted run is `app/tool/android_lock.sh <avd> [--only 2,3,6,9]`: it builds
 - *The cover lifted before the lock was decided when Dart was slow or failed.* `tell()` lifted the cover on an error, on "not implemented", and after 1.5 s regardless. Now it lifts on Dart's answer however late. On an error, "not implemented" or the 1.5 s limit, it lifts only when the return cannot lock: not a return from the background, or away under 30 s (half of the 60 s `lockAfter`, so a clock read a little early or late, or a rule changed in Dart, can never turn a locking return into one that lifts unasked). *Proved by step s,* with a debug-only hook (`files/slow_active`, read only in debuggable builds) that holds Dart's answer back 6 s: away 70 s, 3 s after return the screen is still the plain ground (spread 0.000); the late answer then locks and its prompt shows; after the unlock the cover is gone. 3 of 3.
 - Step 9 of that run stopped at its start (the launcher was showing when it looked for the app, after step p's permission reset ended the app); it passed in the 25-of-25 runs before the fixes. In the first run after them, its two failures came from the first version of step p leaving the microphone refused, and the five steps 1, 2, 3, 6 and 7 passed 18 of 18 with the fixes in.
 
+**Three fixes and a third way the lock could fail open, 2026-11-17 (later).** Proved by one run of `tool/android_lock.sh Pixel_10_Pro` (all steps): **33 of 33 checks passed** (`app/build/android_lock/Pixel_10_Pro/summary.json`). A first attempt stopped before the app was installed: the fingerprint helper found the Play Store's sign-in page on screen just after boot. Nothing had been changed by then; the second attempt is the run counted.
+
+- *The PDF's text now copies as written.* `SharedPdf` draws with fixed cuts of the app's own Newsreader, one per size the PDF uses (8.5, 9.5, 11, 12.5 and 26 pt regular; 13.5 pt italic). They were made with fontTools' instancer from `assets/fonts/Newsreader*.ttf` at weight 400 and the optical size equal to the size, so the page is drawn as before. They live in the Android assets only (`android/app/src/main/assets/pdf_fonts/`, under the same SIL OFL as `assets/fonts/Newsreader-OFL.txt`); iPhone is unchanged. Any other size falls back to the variable font. Android's PDF writer now embeds them as TrueType with a Unicode map (`Newsreader16pt-Regular [Type0]: embedded (FontFile2), text: ToUnicode`), where before it drew Type 3 shapes. `tool/pdf_check.swift`: "the words extract in order and equal the blessing's (92 words)". Page 1 before and after: `design/sim/android/143-pdf-page-1-before.png` and `144-pdf-page-1-after.png`. The lines, line breaks and glyphs are the same; the text renders a hair darker, because it is drawn as text rather than as filled shapes. **The app grew by 395 KB** in the APK (708 KB of fonts, deflated). **Still failing one check:** the PDF has no document title. Android's `PdfDocument` has no way to set one; the old PDF had none either.
+- *The lock script's location step* now brings the app back to its sky before it starts (step p's permission reset ends the app, and step s may leave it). It passed: Begin 0.26 s; the place rounded to (40.3, −111.7); refused: the Salt Lake Temple; location off: answered in 1 ms.
+- *The unlock prompt now opens by itself after one of Android's questions.* Before, `authenticate` answered "no" at once while a question was up, so a locked return behind Android's location question waited for a tap on Unlock. Now the request is held and the prompt opens as soon as the question is answered and the app has the screen again (`LockChannel.questionGone`, from `onRequestPermissionsResult` and from the window regaining focus). The prompt never opens over the question, so two system dialogs are never up at once. Step p: "once the question is answered, the unlock prompt opens by itself (no tap on Unlock)". Step p's recent-apps check now asks only that nothing of a blessing is in the card. The plain card cannot be had there (see above, and section 14, question 24); the measurement is still printed beside it.
+- *A focus change could undo the fail-closed rule* (found by a security review). After five minutes away, `tell(300, true)` waits for Dart's answer. If the notification shade was pulled down and closed before Dart answered, the focus return sent `tell(0, false)`. That call, now the newest, could lift the cover 1.5 s later without the first answer. Now a return that may lock (from the background, 30 s or more) sets a sticky `mayLockUnanswered` flag, cleared only by Dart's success for that call or a later one (Dart handles the calls in order); while it is set, nothing lifts the cover without an answer. Step s holds the answer back 10 s (the debug hook), opens and closes the shade 4 s after the return, and 2 s later checks the screen: still the plain ground (spread 0.000). The late answer then locks, and after the unlock the cover is gone.
+
 **iPhone after this work:** `flutter analyze` clean, 309 unit tests pass. On the clean simulator, shut down and booted before each: the `home` integration test, `drafts_acceptance.sh`, `share_acceptance.sh`, `file_acceptance.sh` and `first_run_acceptance.sh <udid> all` pass. **Not run**, because the Mac's audio service is still stuck ("the recorder would not start", above): the iPhone lock, record, recovery, polish, speech, Spanish and link runs. No iPhone string was changed.
 
 ### Built 2026-11-17: sending and receiving (tasks 13 and 14)
@@ -445,7 +519,7 @@ Every iPhone channel has an Android answer in `MainActivity.kt` (`NotYet`) that 
 10. **Paragraphs from pauses.** Proved by: a recording with 3-second gaps gives paragraph breaks where iPhone does.
 11. **The app lock and recent apps. Done 2026-11-17.** Proved by: on the emulator, a fingerprint enrolled and touched from adb (`adb emu finger touch 1`) unlocks; locks after 60 s away; never locks during a recording; the recent-apps view shows plain colour. *As proved:* see **Built 2026-11-17: the lock, recent apps, location**, steps 1–8 and 10–12.
 12. **Location and the first-run screen. Done 2026-11-17.** Proved by: a fresh install walks the four rows and each system question; refusing location falls back to the Salt Lake Temple. *As proved:* the same block, steps 1, 9 and 11.
-13. **Sharing: the link, text, PDF and `.blessing`. Done 2026-11-17, except the PDF's text (below).** Proved by `tool/android_share.sh` against the website on this Mac; see **Built 2026-11-17: sending and receiving (tasks 13 and 14)**.
+13. **Sharing: the link, text, PDF and `.blessing`. Done 2026-11-17** (the PDF's text fixed later that day). Proved by `tool/android_share.sh` against the website on this Mac; see **Built 2026-11-17: sending and receiving (tasks 13 and 14)**.
 14. **Receiving a link and a `.blessing` file. Done 2026-11-17.** Proved by the same script, steps 3, 4, 5 and 8; the same block.
 15. **Real phone: speech measurements** (section 3.4, items 1–7). Proved by: a table of error rate and time per engine and language, written into this document.
 16. **Whisper as a download you agree to** (only if 15 says it is needed). Proved by: on the mid-range phone, a 10-minute Spanish blessing written within a time Noah accepts, in airplane mode.
@@ -519,7 +593,7 @@ If only one phone: the Galaxy A, because it is where the speech plan is most at 
 
 ## 14. Open questions for Noah (most important first)
 
-1. **Spanish on Android may need a download.** If measuring shows Google's built-in Spanish is not good enough on ordinary Android phones, is it acceptable that Spanish on those phones asks to download about 180–550 MB once (Wi-Fi, with consent) before the first Spanish blessing can be written? The recording would still be kept and written after the download.
+1. *(Settled by 3.5 and question 27: every Android phone downloads Whisper, for both languages.)* **Spanish on Android may need a download.** If measuring shows Google's built-in Spanish is not good enough on ordinary Android phones, is it acceptable that Spanish on those phones asks to download about 180–550 MB once (Wi-Fi, with consent) before the first Spanish blessing can be written? The recording would still be kept and written after the download.
 2. **Google's usage statistics.** Google's speech library reports app and device details and timings (never the audio or the words) to Google, and the store listing must say so. Is that acceptable? The alternative is Whisper only, at the cost of a download for everyone and slower writing. **Answered 2026-11-16: acceptable** ("That's their device… That's not on us").
 3. **May Android launch after iPhone?** The Play Store's waits add weeks whatever the build speed. **Answered 2026-11-16: no, they launch together.**
 4. **Listening back while locked on Android shows a playback notification with controls.** Android requires it. Acceptable? (Or listening back stops when the phone locks, on Android only.)
@@ -548,11 +622,18 @@ If only one phone: the Galaxy A, because it is where the speech plan is most at 
 
 **Found with tasks 13 and 14:**
 
-22. **A PDF from Android looks right, but its text copies out broken.** Selecting or copying words from the PDF gives "u pon yo r head"; searching still finds them. Android's PDF writer cannot embed Newsreader as it is (one variable font), so it draws the letters as shapes. Fixing it means adding fixed Newsreader fonts for the PDF alone (about 1 MB more in the app). Add them, or ship as is?
+22. *(Fixed 2026-11-17: fixed cuts of Newsreader for the PDF, 395 KB more in the app; the text copies as written.)* **A PDF from Android looks right, but its text copies out broken.** Selecting or copying words from the PDF gives "u pon yo r head"; searching still finds them. Android's PDF writer cannot embed Newsreader as it is (one variable font), so it draws the letters as shapes. Fixing it means adding fixed Newsreader fonts for the PDF alone (about 1 MB more in the app). Add them, or ship as is?
 23. **Tapping a `.blessing` in Files asks "Open with": Upon Thy Head, Google Wallet, Google, then Just once / Always.** Wallet also claims unknown files. Once someone taps Always it goes straight to the app. Acceptable?
 24. **Recent apps over Android's own permission question** shows that question over the screen that asked (Settings during the first run; never a blessing). The app's plain card cannot be put under Android's question. Acceptable?
 25. **Android's share sheet shows the whole link, key included,** in its preview at the top; iPhone's shows only the domain. Anyone looking at the screen while sharing could read it. Acceptable (it is the same link that is being sent)?
 26. **Until `/.well-known/assetlinks.json` is live with the release signing key, a link tapped in Messages opens the web page, not the app.** Nothing to decide; a reminder for launch.
+
+**Found with the speech measurements (3.5, 2026-11-17):**
+
+27. **Every Android phone downloads 58 MB before its first blessing can be written.** On the first run, a row says "Writing the words down. A one-time download of 58 MB lets this phone write your blessings in words. Your voice never leaves the phone", with **Download** and **Later**. (This also settles question 1: English and Spanish both use the download.) Acceptable, and is that the wording?
+28. **After Amen, "Writing the words…" for a few minutes on an ordinary phone.** It is estimated at 2–3 minutes for a 10-minute blessing (measured at 35 s on the emulator). Acceptable?
+29. **A word can go missing after a pause** (for example "Emma," at the start of a paragraph). The review page shows what was written for the person to fix, as on iPhone. Should Android's review page also say something like "Check the words; a word after a pause can be missed"?
+30. **If the app is closed while it writes,** the writing waits and finishes the next time the app opens, with no notification. Or it keeps going in the background and shows a notification, "Writing the words of a blessing", until done. Which?
 
 ## Sources (first-hand)
 

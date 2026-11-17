@@ -304,8 +304,25 @@ class SharedPdf(private val context: Context, a: Map<*, *>) {
 
     private val fonts = mutableMapOf<String, Typeface>()
 
-    /** Newsreader at the app's settings: regular weight, the optical size following the size. */
+    /**
+     * Newsreader at the app's settings: regular weight, the optical size following the size.
+     *
+     * Android's PDF writer (Skia) cannot embed a variable font: it draws its letters as Type 3
+     * shapes, so text copied out of the PDF comes apart ("u pon yo r head"). For each size the PDF
+     * uses there is a fixed cut of the app's own Newsreader at that optical size (wght 400) in the
+     * Android assets (`pdf_fonts/`, made with fontTools' instancer from `assets/fonts/Newsreader*.ttf`;
+     * the same SIL OFL as `assets/fonts/Newsreader-OFL.txt`). Those embed as real TrueType, so the
+     * page looks the same and copies as written. Any other size falls back to the variable font.
+     */
     private fun face(italic: Boolean, size: Float): Typeface {
+        val fixed = (if (italic) "pdf_fonts/NewsreaderPdf-Italic-" else "pdf_fonts/NewsreaderPdf-") +
+            (if (size == floor(size)) size.toInt().toString() else size.toString()) + ".ttf"
+        fonts[fixed]?.let { return it }
+        try {
+            return Typeface.createFromAsset(context.assets, fixed).also { fonts[fixed] = it }
+        } catch (e: Exception) {
+            // not a size with a fixed cut: the variable font below
+        }
         val asset = if (italic) "assets/fonts/Newsreader-Italic.ttf" else "assets/fonts/Newsreader.ttf"
         val opsz = min(72f, max(6f, size))
         return fonts.getOrPut("$asset $opsz") {

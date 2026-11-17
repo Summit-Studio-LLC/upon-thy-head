@@ -53,6 +53,27 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
         /** The unlock prompt or one of Android's permission questions is up: losing the screen to it
          *  is not leaving the app, and it is never covered. */
         var prompting = false
+        /** The unlock prompt itself is up (set only by [authenticate]). */
+        private var promptUp = false
+
+        /**
+         * An unlock asked for while one of Android's questions (or the share sheet) was up: held back,
+         * so two system dialogs are never up at once, and opened as soon as the question is answered
+         * and the app has the screen again ([questionGone]). The locked return asks automatically,
+         * so without this the person had to tap Unlock after answering the question.
+         */
+        private var heldBack: (() -> Unit)? = null
+
+        /** The question is gone and the window has focus: open a held-back unlock prompt. */
+        fun questionGone(a: Activity) {
+            Handler(Looper.getMainLooper()).post {
+                if (prompting || !a.hasWindowFocus()) return@post
+                val p = heldBack ?: return@post
+                heldBack = null
+                p()
+            }
+        }
+
         /** Covered on losing focus (recent apps, the notification shade), not yet out of sight. */
         private var blurred = false
         /** When the app went out of sight (elapsed realtime), or null. */
@@ -94,6 +115,7 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
                 place(a)
                 return
             }
+            questionGone(a)
             if (!blurred) return
             blurred = false
             if (leftAt == null) tell(0.0, false)
@@ -119,24 +141,36 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
         private var asked = 0
 
         /**
+         * The number of a return that may lock (from the background, away [SURELY_UNLOCKED_S] or
+         * more) that Dart has not yet answered with success, or 0. Sticky: a later call (the shade
+         * pulled down and closed while Dart is busy sends `tell(0, false)`) never clears it, so it can
+         * never lift the cover without an answer. Cleared only by a success for that call or a later
+         * one: Dart handles the channel's calls in order, so a later success means it was handled.
+         */
+        private var mayLockUnanswered = 0
+
+        /**
          * Tell Dart the app is back, and lift the cover. It fails closed: lifted on Dart's answer
          * (however late), and without one (an error, no handler, or 1.5 s gone) only when this return
-         * cannot be one that locks: not from the background, or away under [SURELY_UNLOCKED_S].
+         * cannot be one that locks: not from the background, or away under [SURELY_UNLOCKED_S], and
+         * no earlier return that may lock still waiting for its answer ([mayLockUnanswered]).
          */
         private fun tell(away: Double, background: Boolean) {
             val c = channel
-            val mayLiftUnanswered = !background || away < SURELY_UNLOCKED_S
+            val mayLock = background && away >= SURELY_UNLOCKED_S
             if (c == null) {
-                if (mayLiftUnanswered) lift()
+                if (!mayLock && mayLockUnanswered == 0) lift()
                 return
             }
             val n = ++asked
+            if (mayLock) mayLockUnanswered = n
             var answered = false
-            val unanswered = { if (!answered && n == asked && mayLiftUnanswered) lift() }
+            val unanswered = { if (!answered && n == asked && mayLockUnanswered == 0) lift() }
             val send = {
                 c.invokeMethod("active", mapOf("away" to away, "background" to background), object : MethodChannel.Result {
                     override fun success(result: Any?) {
                         answered = true
+                        if (mayLockUnanswered != 0 && n >= mayLockUnanswered) mayLockUnanswered = 0
                         if (n == asked) lift()
                     }
                     override fun error(code: String, message: String?, details: Any?) = unanswered()
@@ -226,12 +260,20 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
 
     private fun authenticate(reason: String, result: MethodChannel.Result) {
         val a = activity()
-        if (a == null || !secure() || prompting) return result.success(false)
+        if (a == null || !secure() || promptUp) return result.success(false)
+        if (prompting) {
+            // a permission question is up: ask once it is answered, never over it
+            heldBack?.let { result.success(false) } ?: run {
+                heldBack = { authenticate(reason, result) }
+            }
+            return
+        }
         var answered = false
         val answer = { ok: Boolean ->
             if (!answered) {
                 answered = true
                 prompting = false
+                promptUp = false
                 result.success(ok)
             }
         }
@@ -240,6 +282,7 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
             .build()
         prompting = true
+        promptUp = true
         try {
             prompt.authenticate(CancellationSignal(), a.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) = answer(true)
