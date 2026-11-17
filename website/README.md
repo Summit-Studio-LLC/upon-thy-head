@@ -2,7 +2,7 @@
 
 One landing page for uponthyhead.app. Next.js (App Router, TypeScript), on Vercel.
 
-**Live since 2026-11-17** at https://uponthyhead.app (and `www.`): Vercel project `upon-thy-head` on the Summit Studio team, connected to the GitHub repository with Root Directory `website`: a push to `master` that changes anything in `website/` deploys to production, and a push that does not is skipped. `www.` redirects to the bare address. DNS is at Cloudflare: two unproxied CNAME records to Vercel. The app is not in a store yet, so the button reads "Coming soon to iPhone and Android" (`download` in `app/content.ts`). **The link service is off:** no storage is set up, so it answers 503 and keeps nothing. Do not add storage until the list under "Before the link goes live" in `docs/decisions-and-parked-ideas.md` is done.
+**Live since 2026-11-17** at https://uponthyhead.app (and `www.`): Vercel project `upon-thy-head` on the Summit Studio team, connected to the GitHub repository with Root Directory `website`: a push to `master` that changes anything in `website/` deploys to production, and a push that does not is skipped. `www.` redirects to the bare address. DNS is at Cloudflare: two unproxied CNAME records to Vercel. The app is not in a store yet, so the button reads "Coming soon to iPhone and Android" (`download` in `app/content.ts`). **The link service is on** (Noah's ruling, 2026-11-17), kept in Neon Postgres; what it still lacks is listed under "Before the link goes live" in `docs/decisions-and-parked-ideas.md`.
 
 ## Run it
 
@@ -90,10 +90,17 @@ LINKS_LOCAL_DIR=.data/links node tests/browser.mjs http://localhost:4319   # Chr
 The browser test makes seven links, and one network may make ten in ten minutes, so restart the site
 between runs.
 
-On Vercel (nothing is set up yet): add Upstash Redis from the Marketplace, which sets
-`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (the older `KV_REST_API_*` names are read
-too); set `CRON_SECRET` so the daily clean-up in `vercel.json` can run; and add a Firewall rate-limit
-rule for `POST /api/b`. Without storage set up, the service answers 503 and keeps nothing.
+On Vercel (set up 2026-11-17): the locked copies are kept in Neon Postgres, the Marketplace database
+`upon-thy-head-links`, connected to production only, which sets `DATABASE_URL`. The store makes its
+two tables (`link_copies`, `link_days`) on first use. `CRON_SECRET` is set so the daily clean-up in
+`vercel.json` can run, and it matters more here than with Redis: Postgres does not erase a row when
+its time comes, so an expired copy stays (unreadable through the service) until that clean-up runs.
+A Firewall rule limits `/api/b` to 300 requests a minute per address. Without storage set up, the
+service answers 503 and keeps nothing. Upstash Redis is still supported by the code
+(`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`) and is used only if no `DATABASE_URL` is set.
+
+`TEST_DATABASE_URL=postgres://… pnpm test` also runs the whole life of a link against a real
+database, in its own tables (`linktest_*`), which it drops afterwards.
 
 `/b` with no id returns 404.
 

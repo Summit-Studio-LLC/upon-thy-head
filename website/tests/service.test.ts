@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { type Answer, type Deps, LIMITS, Limiter, create, read, stop, sweep } from "../lib/links/service.ts";
-import { FileStore, MemoryStore, type Store, UpstashStore } from "../lib/links/store.ts";
+import { neon } from "@neondatabase/serverless";
+import { FileStore, MemoryStore, PostgresStore, type Store, UpstashStore } from "../lib/links/store.ts";
 
 const DAY = 86400000;
 const START = Date.UTC(2026, 10, 16, 18, 3, 22, 500);
@@ -219,6 +220,25 @@ const stores: Record<string, (clock: { now: number }) => Promise<{ store: Store;
     return { store: new UpstashStore("https://fake.upstash.test", "secret", fake.fetcher), done: async () => {}, raw: async () => JSON.stringify([...fake.strings]) + JSON.stringify(fake.seen) };
   },
 };
+
+// The real thing, when a database is given: TEST_DATABASE_URL=postgres://… pnpm test
+// It uses its own tables (linktest_*) and drops them afterwards, so it can share a database.
+if (process.env.TEST_DATABASE_URL) {
+  stores["postgres (a real Neon database)"] = async () => {
+    const sql = neon(process.env.TEST_DATABASE_URL!);
+    const sent: string[] = [];
+    const drop = async () => {
+      await sql.query("DROP TABLE IF EXISTS linktest_copies", []);
+      await sql.query("DROP TABLE IF EXISTS linktest_days", []);
+    };
+    await drop();
+    const store = new PostgresStore(async (text, values) => {
+      sent.push(text + JSON.stringify(values));
+      return (await sql.query(text, values)) as Record<string, unknown>[];
+    }, "linktest");
+    return { store, done: drop, raw: async () => sent.join("\n") };
+  };
+}
 
 for (const [name, open] of Object.entries(stores)) {
   test(`${name} store: the whole life of a link`, async () => {

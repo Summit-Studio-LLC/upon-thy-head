@@ -11,6 +11,9 @@ importers:
       '@animate-ui/react':
         specifier: ^2.4.6
         version: 2.4.6(motion@14.14.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@neondatabase/serverless':
+        specifier: ^1.2.1
+        version: 1.2.1
       motion:
         specifier: ^14.14.0
         version: 14.14.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -225,6 +228,10 @@ packages:
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [win32]
+
+  '@neondatabase/serverless@1.2.1':
+    resolution: {integrity: sha512-PI2JjuyEFE7oZDTkV/s6WP4KEceCwnjQHClfunhysuIATtvcVTBLdA4UgHTnJo7C0mkK+OZ6U7SV1NDnYa0HgA==}
+    engines: {node: '>=19.0.0'}
 
   '@next/env@16.4.6':
     resolution: {integrity: sha512-SunBjJ6t+oBtecS3dTjdVuMhUogP5wD/vrGL5EVuQYM1iS4O5ilL51HkiJ3sPjMzRHiCChvr4dbaSJbR7F3lxA==}
@@ -548,6 +555,8 @@ snapshots:
 
   '@img/sharp-win32-x64@0.35.5':
     optional: true
+
+  '@neondatabase/serverless@1.2.1': {}
 
   '@next/env@16.4.6': {}
 
