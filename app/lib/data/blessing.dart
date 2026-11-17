@@ -50,6 +50,7 @@ class Blessing {
     this.audio = '',
     this.language = '',
     this.wordsStatus = WordsStatus.written,
+    this.sent,
     DateTime? created,
     DateTime? updated,
   })  : changes = changes ?? [],
@@ -108,6 +109,10 @@ class Blessing {
 
   /// Whether the words have been written from the recording yet.
   WordsStatus wordsStatus;
+
+  /// When a blessing being passed along was sent (a link made and handed to the share sheet, or the
+  /// file sent); null until then. Not part of what is sent.
+  DateTime? sent;
 
   /// When this record was made and last changed (UTC).
   DateTime created, updated;

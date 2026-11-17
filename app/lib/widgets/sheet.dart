@@ -122,11 +122,17 @@ class ConfirmSheet extends StatelessWidget {
     this.dangerKey,
     this.safeKey,
     this.barrier = false,
+    this.note,
+    this.noteKey,
   });
 
   final Palette palette;
   final bool on, barrier;
   final String title, body, dangerLabel, safeLabel;
+
+  /// One more line under the body, quieter (or what went wrong, said plainly).
+  final String? note;
+  final Key? noteKey;
   final VoidCallback onDanger, onSafe;
   final Key? panelKey, dangerKey, safeKey;
 
@@ -144,6 +150,10 @@ class ConfirmSheet extends StatelessWidget {
         Text(title, style: serif(22, 28, p.ink)),
         const SizedBox(height: 6),
         Text(body, style: sans(15, 22, p.ink2)),
+        if (note != null) ...[
+          const SizedBox(height: 8),
+          Semantics(liveRegion: true, child: Text(note!, key: noteKey, style: sans(14, 20, p.ink3))),
+        ],
         const SizedBox(height: 20),
         SheetButtons(
           palette: p,

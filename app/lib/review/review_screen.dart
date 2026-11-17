@@ -34,6 +34,7 @@ class ReviewLayer extends StatefulWidget {
     required this.onBack,
     required this.onFinish,
     this.onChanges,
+    this.onOwnership,
     this.audioPath,
     this.words,
     this.knownTags = const [],
@@ -64,6 +65,9 @@ class ReviewLayer extends StatefulWidget {
 
   /// The changes screen, for the polish made to the words.
   final VoidCallback? onChanges;
+
+  /// "For me" or "Passing it along" changed (already saved): the blessing joins or leaves the sky.
+  final ValueChanged<Ownership>? onOwnership;
 
   /// How long typing rests before it is saved.
   static const saveAfter = Duration(milliseconds: 400);
@@ -219,6 +223,16 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     FocusManager.instance.primaryFocus?.unfocus();
     widget.player.unload();
     _finishing = false;
+  }
+
+  /// "For me" or "Passing it along": saved at once, and the sky follows.
+  Future<void> _setOwnership(Ownership o) async {
+    final b = _b;
+    if (b == null || b.ownership == o || !widget.on) return;
+    setState(() => b.ownership = o);
+    _dirty = true;
+    await flush();
+    widget.onOwnership?.call(o);
   }
 
   void _edited(void Function() write) {
@@ -504,6 +518,12 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               _rule(p),
               _row(p, Strings.forField, Strings.forLabel, _for, _forFocus, const Key('review-for'), next: _tagFocus),
               _rule(p),
+              if (widget.onOwnership != null) ...[
+                const SizedBox(height: 14),
+                OwnershipChoice(palette: p, value: b.ownership, onChanged: _setOwnership),
+                const SizedBox(height: 14),
+                _rule(p),
+              ],
               const SizedBox(height: 14),
               _tagsBlock(p),
               const SizedBox(height: 22),
@@ -1005,5 +1025,57 @@ class _Suggestion extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// "For me | Passing it along": whose blessing this is. A blessing passed along has no light in the
+/// sky and is not counted; it waits in "To pass along" to be sent.
+class OwnershipChoice extends StatelessWidget {
+  const OwnershipChoice({super.key, required this.palette, required this.value, required this.onChanged});
+  final Palette palette;
+  final Ownership value;
+  final ValueChanged<Ownership> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    Widget part(Ownership o, String label, Key key) {
+      final on = value == o;
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: on,
+          inMutuallyExclusiveGroup: true,
+          label: label,
+          excludeSemantics: true,
+          child: GestureDetector(
+            key: key,
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(o),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              constraints: const BoxConstraints(minHeight: 40),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(color: on ? p.light : const Color(0x00000000), borderRadius: BorderRadius.circular(20)),
+              child: Text(label, textAlign: TextAlign.center, style: sans(15, 20, on ? p.ground : p.ink2, weight: on ? FontWeight.w500 : FontWeight.w400)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(key: const Key('review-whose'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(Strings.whoFor, style: sans(13, 18, p.ink3)),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(color: p.ink.withValues(alpha: .07), borderRadius: BorderRadius.circular(23)),
+        child: Row(children: [
+          part(Ownership.forMe, Strings.forMeChoice, const Key('review-for-me')),
+          part(Ownership.passingOn, Strings.passingAlong, const Key('review-passing')),
+        ]),
+      ),
+    ]);
   }
 }

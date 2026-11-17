@@ -113,7 +113,7 @@ void main() {
       expect(stage('read'), isTrue);
       expect(readTitle(), 'Comfort before surgery');
       expect(find.text('Tuesday, March 3, 2026'), findsWidgets);
-      expect(find.text('A blessing from Dad'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('read-from'))).data, 'A blessing from Dad');
       expect(find.textContaining('Emma, I lay my hands upon your head to give you'), findsOneWidget);
       expect(e.solo, greaterThan(.9), reason: 'only its light shows');
       expect(e.fov, closeTo(SkyView.read.fov, 1.5));
@@ -141,7 +141,7 @@ void main() {
       await wait(2600);
       expect(stage('read'), isTrue);
       expect(readTitle(), 'Comfort before the operation');
-      expect(find.text('A blessing from Dad and Grandpa Ruiz'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('read-from'))).data, 'A blessing from Dad and Grandpa Ruiz');
       expect((await store.get('surgery'))!.title, 'Comfort before the operation');
       await shot('04-edited');
       await tester.tap(find.byKey(const Key('read-back')));

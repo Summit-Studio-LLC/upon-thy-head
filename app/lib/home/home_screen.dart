@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -28,8 +29,13 @@ import '../record/transcriber.dart';
 import '../review/player.dart';
 import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
+import '../share/link_crypto.dart';
+import '../share/link_format.dart';
+import '../share/link_service.dart';
+import '../share/links.dart';
 import '../share/receive.dart';
 import '../share/share.dart';
+import '../share/your_links.dart';
 import '../check/check_page.dart';
 import '../check/checks.dart';
 import '../sky/astro.dart';
@@ -45,12 +51,13 @@ import '../widgets/edge_swipe.dart';
 import '../widgets/fade.dart';
 import '../widgets/icons.dart';
 import '../widgets/scrims.dart';
+import 'pass_along.dart';
 import 'ruler.dart';
 import 'sky_stats.dart';
 import 'timeline.dart';
 
 /// Which screen is over the sky.
-enum Stage { home, record, after, read, review, changes, settings }
+enum Stage { home, record, after, read, review, changes, settings, passing, links }
 
 /// Where the first run is (onboarding/first_run.dart); [none] once it is over or never shown.
 /// [waiting]: it will be shown, once the launch knows whether a blessing file opened the app.
@@ -79,8 +86,13 @@ class HomeScreen extends StatefulWidget {
     this.lock,
     this.locator,
     this.share,
+    this.links,
     this.firstRunAsker,
   });
+
+  /// Sending by link (share/links.dart); on a phone the native one against [linkService] when not
+  /// given, and none on the host (the share sheet then offers the file).
+  final Links? links;
 
   /// The first run's questions; the native ones on iOS when not given.
   final FirstRunAsker? firstRunAsker;
@@ -148,6 +160,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _swapping = false;
   Timer? _swapTimer, _demoTimer;
 
+  /// Away from the foreground, until the lock has had its say on the return (_onActive). iOS hands
+  /// over a link or file that brought the app back before it says the app is active, so without
+  /// this an arrival could open a page in the moment before the lock comes down.
+  bool _away = false;
+  Timer? _awayTimer;
+
   BlessingStore get _store => widget.store;
 
   static bool get _ios => Phone.ios;
@@ -163,7 +181,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final AppLock _lock = widget.lock ?? AppLock(api: _native ? NativeLockApi() : NoLockApi());
   late final Locator _locator = widget.locator ?? (_native ? NativeLocator() : const NoLocator());
   late final ShareApi _share = widget.share ?? (_native ? NativeShareApi() : NoShareApi());
+  late final Links? _links = widget.links ??
+      (_native ? Links(store: _store, crypto: const NativeLinkCrypto(), secrets: const NativeLinkCrypto(), service: HttpLinkService()) : null);
 
+  /// Blessings passed along ("To pass along"), oldest first: never in the sky or the count.
+  List<Blessing> _passing = [];
+
+  /// The blessing passed along that is being read or reviewed now (it has no light to focus), and
+  /// where its reading page was opened from.
+  Blessing? _aside;
+  Stage _readFrom = Stage.home;
+
+  /// Where "Your links" was opened from (Settings, or the link-made sheet on a reading page).
+  Stage _linksFrom = Stage.settings;
+  final GlobalKey<YourLinksLayerState> _linksKey = GlobalKey();
   /// "The place blessings are given" (place/where.dart), once the settings are read.
   BlessingPlace? _where;
   Settings? _settings;
@@ -353,6 +384,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     _reviewing = null;
     _changing = null;
+    _aside = null;
     _list = false;
     setState(() {});
   }
@@ -391,6 +423,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint('lock: locked after ${away.inSeconds} s away');
       _lock.lock();
     }
+    _cameBack();
     try {
       await WidgetsBinding.instance.endOfFrame.timeout(const Duration(milliseconds: 800));
     } catch (_) {}
@@ -408,7 +441,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // whatever it found, the app starts
       debugPrint('recovery: $e');
     }
+    try {
+      _passing = await _store.list(ownership: Ownership.passingOn);
+    } catch (_) {}
     return _store.list(ownership: Ownership.forMe);
+  }
+
+  Future<void> _reloadPassing() async {
+    final list = await _store.list(ownership: Ownership.passingOn);
+    if (!mounted) return;
+    // the one being read or reviewed stays the same object, so the pages see its edits
+    final a = _aside;
+    _passing = [for (final b in list) a != null && b.id == a.id ? a : b];
+    setState(() {});
   }
 
   /// Blessings saved before their words were written (closed just after Amen, or recovered):
@@ -566,8 +611,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _swapping = false;
   }
 
+  void _cameBack() {
+    _awayTimer?.cancel();
+    if (!_away || !mounted) return;
+    setState(() => _away = false);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      _awayTimer?.cancel();
+      _away = true;
+    } else if (state == AppLifecycleState.resumed && _away) {
+      // the lock says so in _onActive; where there is no lock to ask, or it never says, not for long
+      if (!_lock.active) {
+        _cameBack();
+      } else {
+        _awayTimer?.cancel();
+        _awayTimer = Timer(const Duration(seconds: 3), _cameBack);
+      }
+    }
     // the opening and the welcome wait while the app cannot be seen (a question over it, Control
     // Centre, the app switcher), and go on from where they were when it can
     _setVisible(state == AppLifecycleState.resumed);
@@ -595,6 +658,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lock.api.onActive = null;
     _swapTimer?.cancel();
     _demoTimer?.cancel();
+    _awayTimer?.cancel();
     _noticeTimer?.cancel();
     _openingTimer?.cancel();
     _perms?.dispose();
@@ -806,8 +870,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     _reviewing = b;
     _reviewFrom = from;
-    _engine.setView(SkyView.review);
-    _engine.lookAt(_engine.focus);
+    _skyFor(SkyView.review);
     setState(() => _stage = Stage.review);
   }
 
@@ -847,10 +910,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// The back chevron: a draft stays a draft; back where the page was opened from.
   void _closeReview() {
     if (_reviewFrom == Stage.read) {
-      _engine.setView(SkyView.read);
-      _engine.lookAt(_engine.focus);
+      _skyFor(SkyView.read);
       setState(() => _stage = Stage.read);
     } else {
+      _aside = null;
       _engine.setView(SkyView.home);
       _engine.lookAt(_engine.focus);
       setState(() {
@@ -869,8 +932,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _saveReview();
     await _store.eraseAudio(b);
     if (!mounted) return;
-    _engine.setView(SkyView.read);
-    _engine.lookAt(_engine.focus);
+    if (identical(b, _aside) && _reviewFrom == Stage.home) _readFrom = Stage.home;
+    _skyFor(SkyView.read);
     setState(() => _stage = Stage.read);
   }
 
@@ -906,18 +969,113 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // ---- drafts waiting ----
 
-  /// How many blessings in the sky are still drafts.
-  int get _drafts => _blessings.where((b) => b.draft).length;
+  /// How many blessings are still drafts: those in the sky and those to pass along.
+  int get _drafts => _blessings.where((b) => b.draft).length + _passing.where((b) => b.draft).length;
 
-  /// The badge: the review page of the oldest draft.
+  /// The badge: the review page of the oldest draft, of either kind.
   Future<void> _reviewOldestDraft() async {
     if (_stage != Stage.home || _recoveredSheet) return;
-    final i = _blessings.indexWhere((b) => b.draft);
-    if (i < 0) return;
+    final drafts = [..._blessings, ..._passing].where((b) => b.draft).toList()..sort((a, b) => a.utc.compareTo(b.utc));
+    if (drafts.isEmpty) return;
+    final d = drafts.first;
+    if (d.ownership == Ownership.passingOn) {
+      _aside = d;
+      _readFrom = Stage.home;
+      return _openReview(d, from: Stage.home);
+    }
+    final i = _blessings.indexOf(d);
     _engine.setFocus(i, instant: true);
     _showNow();
     await _openReview(_blessings[i], from: Stage.home);
   }
+
+  /// The sky behind a page about [b]: its own light framed, or, for one passed along (no light),
+  /// the sky dimmed as behind Settings.
+  void _skyFor(SkyView view) {
+    if (_aside != null) {
+      _engine.setView(SkyView.settings);
+    } else {
+      _engine.setView(view);
+      _engine.lookAt(_engine.focus);
+    }
+  }
+
+  // ---- passing it along ----
+
+  /// "For me" or "Passing it along" changed on the review page: the blessing joins or leaves the sky.
+  void _ownershipChanged(Ownership o) {
+    final b = _reviewing;
+    if (b == null || !mounted) return;
+    if (o == Ownership.passingOn) {
+      final i = _blessings.indexWhere((x) => x.id == b.id);
+      if (i >= 0) {
+        final list = [..._blessings]..removeAt(i);
+        _setBlessings(list, focus: math.min(i, list.length - 1));
+      }
+      _passing = [..._passing.where((x) => x.id != b.id), b]..sort((a, b) => a.utc.compareTo(b.utc));
+      _aside = b;
+      _engine.setView(SkyView.settings);
+    } else {
+      _passing = _passing.where((x) => x.id != b.id).toList();
+      final list = [..._blessings.where((x) => x.id != b.id), b]..sort((a, b) => a.utc.compareTo(b.utc));
+      _aside = null;
+      _setBlessings(list, focus: list.indexOf(b));
+      _engine.setView(_stage == Stage.read ? SkyView.read : SkyView.review);
+      _engine.lookAt(_engine.focus);
+      // its reading page, when it was opened from the list of those to pass along, now goes home
+      if (_readFrom == Stage.passing) _readFrom = Stage.home;
+    }
+    setState(() {});
+  }
+
+  void _openPassing() {
+    if (_stage != Stage.settings) return;
+    unawaited(_reloadPassing());
+    setState(() => _stage = Stage.passing);
+  }
+
+  void _closePassing() => setState(() => _stage = Stage.settings);
+
+  /// A row of "To pass along": its reading page, over the dimmed sky.
+  void _openAside(Blessing b) {
+    if (_stage != Stage.passing) return;
+    _aside = b;
+    _readFrom = Stage.passing;
+    _engine.setView(SkyView.settings);
+    setState(() => _stage = Stage.read);
+  }
+
+  /// It left the phone: when it was sent is kept ("To pass along" shows it).
+  Future<void> _sent(Blessing b) async {
+    b.sent = DateTime.now().toUtc();
+    try {
+      await _store.update(b);
+    } on StateError {
+      return;
+    }
+    if (mounted) setState(() {});
+  }
+
+  // ---- your links ----
+
+  void _openLinks({required Stage from}) {
+    if (_locked || _links == null) return;
+    _linksFrom = from;
+    if (from != Stage.read) _aside = null;
+    _engine.setView(SkyView.settings);
+    setState(() => _stage = Stage.links);
+  }
+
+  void _closeLinks() {
+    if (_linksFrom == Stage.read) {
+      _skyFor(SkyView.read);
+    } else {
+      _engine.setView(SkyView.settings);
+    }
+    setState(() => _stage = _linksFrom);
+  }
+
+  Future<int> _liveLinks(Blessing b) async => (await _links?.liveOf(b.id))?.length ?? 0;
 
   // ---- settings ----
 
@@ -967,10 +1125,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  /// What arrived: a blessing file, or a link, fetched and opened (share/links.dart). The link is
+  /// never logged (its fragment is the key).
+  Future<Arrival> _arrivalOf(IncomingFile f) async {
+    final link = f.link;
+    if (link == null) return arrivalOf(f, _store.get);
+    final parts = linkPartsOf(link, debug: kDebugMode);
+    if (parts == null) return const ArrivalUnreadable('link: not a blessing link');
+    final l = _links;
+    // a phone that cannot fetch at all (the host): as with no internet
+    if (l == null) return const ArrivalOnItsWay();
+    final a = await l.open(parts);
+    debugPrint('receive: link ${a.runtimeType}');
+    return a;
+  }
+
   /// A file may be shown now: unlocked, nothing else asking, not recording or just past Amen, and on
   /// the sky, a reading page or Settings (never over a page being edited).
   bool get _arrivalMayShow =>
       _arrivalsOpen &&
+      !_away &&
       _lock.ready &&
       !_locked &&
       !_lock.asking &&
@@ -979,7 +1153,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       !_recoveredSheet &&
       !_session.live &&
       _onboard == Onboard.none &&
-      (_stage == Stage.home || _stage == Stage.read || _stage == Stage.settings);
+      (_stage == Stage.home || (_stage == Stage.read && _aside == null) || _stage == Stage.settings || _stage == Stage.passing || _stage == Stage.links);
 
   /// Called after each frame while files wait: the next one, when it may be shown.
   void _scheduleArrival() {
@@ -997,7 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final f = _inbox.removeAt(0);
     Arrival a;
     try {
-      a = await arrivalOf(f, _store.get);
+      a = await _arrivalOf(f);
     } catch (e) {
       a = ArrivalUnreadable('$e');
     }
@@ -1064,6 +1238,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted || _locked) return;
     final i = list.indexWhere((b) => b.id == id);
     if (i < 0) return;
+    _aside = null;
+    _readFrom = Stage.home;
     _setBlessings(list, focus: i);
     _engine.setView(SkyView.read);
     _engine.lookAt(i);
@@ -1316,7 +1492,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final f = _inbox.first;
     Arrival a;
     try {
-      a = await arrivalOf(f, _store.get);
+      a = await _arrivalOf(f);
     } catch (e) {
       a = ArrivalUnreadable('$e');
     }
@@ -1405,6 +1581,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Read the blessing in focus: the page rises and the sky frames its light alone.
   void _openRead() {
     if (_blessings.isEmpty || (_stage != Stage.home)) return;
+    _aside = null;
+    _readFrom = Stage.home;
     _engine.setView(SkyView.read);
     _engine.lookAt(_engine.focus);
     setState(() {
@@ -1463,6 +1641,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _closeChanges();
       case Stage.settings:
         _closeSettings();
+      case Stage.passing:
+        _closePassing();
+      case Stage.links:
+        if (_linksKey.currentState?.closeSheet() ?? false) return;
+        _closeLinks();
     }
   }
 
@@ -1475,21 +1658,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _closeRead() {
+    if (_aside != null && _readFrom == Stage.passing) {
+      _aside = null;
+      unawaited(_reloadPassing());
+      return setState(() => _stage = Stage.passing);
+    }
+    _aside = null;
     _engine.setView(SkyView.home);
-    _engine.lookAt(_engine.focus);
+    _lookHome(_engine.focus);
     setState(() {
+      _showNow();
       _stage = Stage.home;
       _list = false;
     });
   }
 
 
-  /// Delete the blessing being read, go home, and turn to the nearest one left.
-  Future<void> _delete() async {
-    final i = _engine.focus;
+  /// Delete the blessing being read, go home, and turn to the nearest one left. One of the person's
+  /// own has its links stopped first; if they cannot be (no internet), nothing is deleted and false
+  /// is answered. One passed along was handed over: its links keep working.
+  Future<bool> _delete() async {
+    final aside = _aside;
+    if (aside != null) {
+      await _store.delete(aside.id);
+      if (!mounted) return true;
+      _aside = null;
+      _passing = _passing.where((b) => b.id != aside.id).toList();
+      if (_readFrom == Stage.passing) {
+        setState(() => _stage = Stage.passing);
+      } else {
+        _engine.setView(SkyView.home);
+        _lookHome(_engine.focus);
+        setState(() {
+          _showNow();
+          _stage = Stage.home;
+        });
+      }
+      return true;
+    }
+    if (_blessings.isEmpty) return true;
+    final i = _engine.focus.clamp(0, _blessings.length - 1);
     final gone = _blessings[i];
+    final links = _links;
+    if (links != null && (await links.liveOf(gone.id)).isNotEmpty) {
+      if (await links.stopAllOf(gone.id) != StopResult.stopped) return false;
+    }
     await _store.delete(gone.id);
-    if (!mounted) return;
+    if (!mounted) return true;
     final list = [..._blessings]..removeAt(i);
     var next = 0;
     if (list.isNotEmpty) {
@@ -1512,6 +1727,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _stage = Stage.home;
       _list = false;
     });
+    return true;
   }
 
   @override
@@ -1522,7 +1738,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     const inTime = Duration(milliseconds: 700), outTime = Duration(milliseconds: 550), delay = Duration(milliseconds: 100);
     const listTime = Duration(milliseconds: 350);
     // locked: no blessing is handed to any page, even one faded out
-    final reading = _blessings.isEmpty || _locked ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)];
+    final reading = _locked ? null : (_aside ?? (_blessings.isEmpty ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)]));
     if (_inbox.isNotEmpty) _scheduleArrival();
     return PopScope(
       canPop: _backLeavesApp,
@@ -1633,6 +1849,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onChanges: () => reading == null ? null : openChanges(reading, from: Stage.read),
                   onDelete: _delete,
                   share: _share,
+                  links: _links,
+                  onSent: _sent,
+                  onYourLinks: _links == null ? null : () => _openLinks(from: Stage.read),
+                  liveLinks: _liveLinks,
                   ),
                 ),
               ),
@@ -1662,6 +1882,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onSave: _saveReview,
                     onBack: _closeReview,
                     onFinish: _finishReview,
+                    onOwnership: _ownershipChanged,
                     onChanges: () {
                       final b = _reviewing;
                       if (b != null) openChanges(b, from: Stage.review);
@@ -1714,7 +1935,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onLanguage: _setRecordingLanguage,
                         onUseLocation: () => _where?.useMyLocation(),
                         onPhoneCheck: phoneCheck ? _openPhoneCheck : null,
+                        passingCount: _passing.length,
+                        onPassAlong: _openPassing,
+                        onYourLinks: _links == null ? null : () => _openLinks(from: Stage.settings),
                         ),
+                      ),
+              ),
+            ),
+            Positioned.fill(
+              child: Fade(
+                key: const Key('stage-passing'),
+                on: _stage == Stage.passing,
+                inDuration: inTime,
+                outDuration: outTime,
+                delay: delay,
+                child: _locked
+                    ? const SizedBox.shrink()
+                    : EdgeSwipeBack(
+                        enabled: _stage == Stage.passing,
+                        onBack: _closePassing,
+                        child: PassAlongLayer(palette: p, blessings: _passing, onBack: _closePassing, onOpen: _openAside),
+                      ),
+              ),
+            ),
+            Positioned.fill(
+              child: Fade(
+                key: const Key('stage-links'),
+                on: _stage == Stage.links,
+                inDuration: inTime,
+                outDuration: outTime,
+                delay: delay,
+                child: _locked
+                    ? const SizedBox.shrink()
+                    : EdgeSwipeBack(
+                        enabled: _stage == Stage.links,
+                        onBack: _closeLinks,
+                        child: YourLinksLayer(key: _linksKey, palette: p, on: _stage == Stage.links, links: _links, onBack: _closeLinks),
                       ),
               ),
             ),

@@ -43,6 +43,26 @@ class ArrivalUnreadable extends Arrival {
   final String why;
 }
 
+/// A link whose fragment is not a key (cut off when it was copied, or never there).
+class ArrivalNoKey extends Arrival {
+  const ArrivalNoKey();
+}
+
+/// A link that has stopped working: stopped by the sender, or past its 30 days.
+class ArrivalStopped extends Arrival {
+  const ArrivalStopped();
+}
+
+/// A link opened with no internet: "This blessing is on its way."
+class ArrivalOnItsWay extends Arrival {
+  const ArrivalOnItsWay();
+}
+
+/// A link the service could not hand over just now (too many at once, or not available).
+class ArrivalNotNow extends Arrival {
+  const ArrivalNotNow();
+}
+
 /// Read [file] strictly, and look for it among the blessings already kept ([find]).
 Future<Arrival> arrivalOf(IncomingFile file, Future<Blessing?> Function(String id) find) async {
   final bytes = file.bytes;
@@ -87,14 +107,21 @@ class ReceiveSheet extends StatelessWidget {
       ArrivalDifferent(:final record) => record,
       _ => null,
     };
-    final String heading;
-    final String? body;
+    String heading;
+    String? body;
     if (record != null) {
       heading = Strings.isUntitled(record.title) ? Strings.untitled : record.title;
       body = a is ArrivalDifferent ? Strings.alreadyDifferent : Strings.receiveAsk;
     } else {
-      heading = a is ArrivalNewer ? Strings.fileNewer : Strings.fileUnreadable;
-      body = null;
+      (heading, body) = switch (a) {
+        ArrivalNewer() => (Strings.fileNewer, null),
+        ArrivalStopped() => (Strings.linkStoppedTitle, Strings.linkStoppedBody),
+        ArrivalOnItsWay() => (Strings.onItsWay, Strings.onItsWayBody),
+        ArrivalNoKey() => (Strings.linkNoKey, Strings.linkNoKeyBody),
+        ArrivalNotNow() => (Strings.linkNotNow, Strings.linkNotNowBody),
+        ArrivalUnreadable(:final why) when why.startsWith('link') => (Strings.linkUnreadable, null),
+        _ => (Strings.fileUnreadable, null),
+      };
     }
     final from = record == null ? '' : record.from;
     PillBtn pill(Key key, String label, PillKind kind, VoidCallback onTap) =>

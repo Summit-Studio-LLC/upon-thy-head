@@ -143,8 +143,8 @@ void main() {
     test('every fixed string has Spanish, and only names stay the same', () {
       final e = en.catalogue, s = es.catalogue;
       expect(s.keys, e.keys);
-      // the same in both on purpose: a word Spanish shares, and the app's name
-      const same = {'original', 'appName'};
+      // the same in both on purpose: a word Spanish shares, the app's name, and "PDF"
+      const same = {'original', 'appName', 'pdfChip'};
       for (final k in e.keys) {
         expect(s[k], isNotEmpty, reason: k);
         if (!same.contains(k)) expect(s[k], isNot(e[k]), reason: '$k is still English: "${e[k]}"');

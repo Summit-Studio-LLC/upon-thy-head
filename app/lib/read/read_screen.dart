@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
 import '../not_yet.dart';
 import '../data/blessing.dart';
-import '../share/blessing_file.dart';
+import '../share/links.dart';
 import '../share/share.dart';
+import '../share/share_sheet.dart';
 import '../widgets/icons.dart';
 import '../sky/placement.dart';
 import '../strings.dart';
@@ -28,6 +30,10 @@ class ReadLayer extends StatefulWidget {
     required this.onDelete,
     this.onChanges,
     this.share,
+    this.links,
+    this.onSent,
+    this.onYourLinks,
+    this.liveLinks,
   });
 
   final Palette palette;
@@ -37,13 +43,28 @@ class ReadLayer extends StatefulWidget {
   final VoidCallback onBack;
   /// Edit, or Review on a draft: the review page.
   final VoidCallback onReview;
-  final VoidCallback onDelete;
+
+  /// Delete it (after the question): false when it was not deleted because its links could not be
+  /// stopped (no internet), which the question then says.
+  final Future<bool> Function() onDelete;
 
   /// "Review changes": the changes polish made, on their own screen.
   final VoidCallback? onChanges;
 
   /// The system share sheet (share/share.dart); none, no share control.
   final ShareApi? share;
+
+  /// Links are made with this; null, the file only.
+  final Links? links;
+
+  /// It left the phone and the system sheet says it was sent (not cancelled).
+  final Future<void> Function(Blessing b)? onSent;
+
+  /// "Your links", from the link-made sheet.
+  final VoidCallback? onYourLinks;
+
+  /// How many of its links still work, for the delete question.
+  final Future<int> Function(Blessing b)? liveLinks;
 
   /// Past this many points of scroll, the top goes solid behind the back button.
   static const double scrolledAt = 132;
@@ -54,7 +75,12 @@ class ReadLayer extends StatefulWidget {
 
 class ReadLayerState extends State<ReadLayer> {
   final ScrollController _scroll = ScrollController();
-  bool _scrolled = false, _deleting = false, _sharing = false;
+  bool _scrolled = false, _deleting = false, _sharing = false, _sentSheet = false;
+
+  /// The delete question's words: its links, and what went wrong.
+  int _live = 0;
+  String? _deleteNote;
+  bool _deleteBusy = false;
 
   @override
   void initState() {
@@ -72,12 +98,10 @@ class ReadLayerState extends State<ReadLayer> {
       // every visit starts at the top of the page
       if (_scroll.hasClients) _scroll.jumpTo(0);
       _scrolled = false;
-      _deleting = false;
-      _sharing = false;
+      _deleting = _sharing = _sentSheet = false;
     }
     if (!widget.on && oldWidget.on) {
-      _deleting = false;
-      _sharing = false;
+      _deleting = _sharing = _sentSheet = false;
     }
   }
 
@@ -89,9 +113,55 @@ class ReadLayerState extends State<ReadLayer> {
 
   /// Android's back: the share or delete sheet goes, if one is up. True when one went.
   bool closeSheet() {
-    if (!_sharing && !_deleting) return false;
-    setState(() => _sharing = _deleting = false);
+    if (!_sharing && !_deleting && !_sentSheet) return false;
+    // the Sent question's way out is Keep
+    setState(() => _sharing = _deleting = _sentSheet = false);
     return true;
+  }
+
+  /// Tests: open the share sheet as its button does.
+  void debugShare() => setState(() => _sharing = true);
+
+  bool get _passing => widget.blessing?.ownership == Ownership.passingOn;
+
+  Future<void> _askDelete() async {
+    final b = widget.blessing;
+    if (b == null) return;
+    var live = 0;
+    // a blessing passed along was handed over: its links are not stopped with it
+    if (!_passing) {
+      try {
+        live = await widget.liveLinks?.call(b) ?? 0;
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _live = live;
+      _deleteNote = null;
+      _deleting = true;
+    });
+  }
+
+  Future<void> _confirmDelete() async {
+    if (_deleteBusy) return;
+    _deleteBusy = true;
+    final ok = await widget.onDelete();
+    _deleteBusy = false;
+    if (!mounted) return;
+    setState(() {
+      if (ok) {
+        _deleting = _sentSheet = false;
+      } else {
+        _deleteNote = Strings.deleteStopOffline;
+      }
+    });
+  }
+
+  Future<void> _sent(Blessing b, bool completed) async {
+    if (!completed) return;
+    await widget.onSent?.call(b);
+    // one passed along: keep a copy, or let it go now
+    if (mounted && b.ownership == Ownership.passingOn && identical(b, widget.blessing)) setState(() => _sentSheet = true);
   }
 
   @override
@@ -201,28 +271,36 @@ class ReadLayerState extends State<ReadLayer> {
             ]),
           ]),
         ),
+        if (widget.share != null)
+          Positioned.fill(
+            child: ShareSheet(
+              palette: p,
+              on: _sharing && b != null && !b.draft,
+              blessing: b,
+              share: widget.share!,
+              links: widget.links,
+              onClose: () => setState(() => _sharing = false),
+              onSent: (b, done) => unawaited(_sent(b, done)),
+              onYourLinks: widget.onYourLinks,
+            ),
+          ),
+        // sent, and passed along: keep a copy here, or delete it (its link keeps working)
         Positioned.fill(
-          child: Sheet(
+          child: ConfirmSheet(
             palette: p,
-            on: _sharing && b != null && !b.draft,
+            on: _sentSheet && !_deleting,
             barrier: true,
-            label: Strings.shareTitle,
-            panelKey: const Key('share-sheet'),
-            onDismiss: () => setState(() => _sharing = false),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              Text(Strings.shareTitle, style: serif(22, 28, p.ink)),
-              const SizedBox(height: 14),
-              Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              // first: the one that keeps everything, for another iPhone with the app
-              _ShareRow(key: const Key('share-file'), label: Strings.asFile, hint: Strings.asFileHint, palette: p, onTap: () => _share(b, as: _As.file)),
-              Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              _ShareRow(key: const Key('share-text'), label: Strings.asText, hint: Strings.asTextHint, palette: p, onTap: () => _share(b, as: _As.text)),
-              Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              _ShareRow(key: const Key('share-pdf'), label: Strings.asPdf, hint: Strings.asPdfHint, palette: p, onTap: () => _share(b, as: _As.pdf)),
-              Container(height: 1, color: p.ink.withValues(alpha: .10)),
-              const SizedBox(height: 16),
-              Text(Strings.shareNote, key: const Key('share-note'), style: sans(13, 18, p.ink3)),
-            ]),
+            title: Strings.sentTitle,
+            body: Strings.sentBody,
+            note: Strings.sentDeleteNote,
+            noteKey: const Key('sent-note'),
+            dangerLabel: Strings.delete,
+            safeLabel: Strings.keep,
+            onDanger: () => unawaited(_confirmDelete()),
+            onSafe: () => setState(() => _sentSheet = false),
+            panelKey: const Key('sent-sheet'),
+            dangerKey: const Key('sent-delete'),
+            safeKey: const Key('sent-keep'),
           ),
         ),
         Positioned.fill(
@@ -231,13 +309,12 @@ class ReadLayerState extends State<ReadLayer> {
             on: _deleting,
             barrier: true,
             title: Strings.deleteTitle,
-            body: Strings.deleteBody,
+            body: _passing ? Strings.passingDeleteBody : (_live > 0 ? Strings.deleteLiveBody : Strings.deleteBody),
+            note: _deleteNote,
+            noteKey: const Key('delete-note'),
             dangerLabel: Strings.delete,
             safeLabel: Strings.keep,
-            onDanger: () {
-              setState(() => _deleting = false);
-              widget.onDelete();
-            },
+            onDanger: () => unawaited(_confirmDelete()),
             onSafe: () => setState(() => _deleting = false),
             panelKey: const Key('delete-sheet'),
             dangerKey: const Key('delete-confirm'),
@@ -246,25 +323,6 @@ class ReadLayerState extends State<ReadLayer> {
         ),
       ]);
     });
-  }
-
-  /// The app's sheet goes, and the system's share sheet opens with the one item.
-  Future<void> _share(Blessing? b, {required _As as}) async {
-    final api = widget.share;
-    if (b == null || b.draft || api == null) return;
-    setState(() => _sharing = false);
-    try {
-      if (as == _As.file) {
-        final w = Strings.wordsFor(Strings.language);
-        await api.file(blessingFileName(shareFileName(b, w)), BlessingRecord.of(b).toFileBytes(), shareTitle(b, w));
-      } else if (as == _As.pdf) {
-        await api.pdf(sharePdf(b));
-      } else {
-        await api.text(shareText(b), shareTitle(b, Strings.wordsFor(Strings.language)));
-      }
-    } catch (e) {
-      debugPrint('share: $e');
-    }
   }
 
   Widget _page(Palette p, Blessing? b) {
@@ -313,6 +371,15 @@ class ReadLayerState extends State<ReadLayer> {
             const SizedBox(height: 14),
             PillBtn(key: const Key('read-review'), label: Strings.reviewThis, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: widget.onReview),
           ],
+          // passed along: sending it is what this page is for
+          if (!b.draft && b.ownership == Ownership.passingOn && widget.share != null && !NotYet.sharing) ...[
+            const SizedBox(height: 22),
+            if (b.sent != null) ...[
+              Text(Strings.sentOn(b.sent!.toLocal()), key: const Key('read-sent'), style: sans(14, 20, p.ink2)),
+              const SizedBox(height: 10),
+            ],
+            PillBtn(key: const Key('read-send'), label: Strings.sendBlessing, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: () => setState(() => _sharing = true)),
+          ],
           const SizedBox(height: 28),
           if (words.isEmpty)
             Text(Strings.noWords, key: const Key('read-no-words'), style: serif(19, 30, p.ink3, italic: true))
@@ -360,7 +427,7 @@ class ReadLayerState extends State<ReadLayer> {
               label: Strings.deleteBlessing,
               color: p.danger,
               palette: p,
-              onTap: () => setState(() => _deleting = true),
+              onTap: () => unawaited(_askDelete()),
             ),
           ),
         ]),
@@ -368,8 +435,6 @@ class ReadLayerState extends State<ReadLayer> {
     ]);
   }
 }
-
-enum _As { file, text, pdf }
 
 /// A quiet word as a button, in [color].
 class _QuietBtn extends StatefulWidget {
@@ -405,54 +470,6 @@ class _QuietBtnState extends State<_QuietBtn> {
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(color: widget.palette.ink.withValues(alpha: _down ? .07 : 0), borderRadius: BorderRadius.circular(22)),
           child: Text(widget.label, style: sans(15, 20, widget.color)),
-        ),
-      ),
-    );
-  }
-}
-
-/// One way to share in the app's sheet: its name, and a line on what it is for.
-class _ShareRow extends StatefulWidget {
-  const _ShareRow({super.key, required this.label, required this.hint, required this.palette, required this.onTap});
-  final String label, hint;
-  final Palette palette;
-  final VoidCallback onTap;
-
-  @override
-  State<_ShareRow> createState() => _ShareRowState();
-}
-
-class _ShareRowState extends State<_ShareRow> {
-  bool _down = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.palette;
-    return Semantics(
-      button: true,
-      label: '${widget.label}. ${widget.hint}',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _down = true),
-        onTapCancel: () => setState(() => _down = false),
-        onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          color: p.ink.withValues(alpha: _down ? .05 : 0),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.label, style: sans(17, 22, p.ink)),
-                const SizedBox(height: 3),
-                Text(widget.hint, style: sans(13, 18, p.ink3)),
-              ]),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(width: 20, height: 20, child: GlyphIcon(Glyph.forward, color: p.ink3)),
-          ]),
         ),
       ),
     );

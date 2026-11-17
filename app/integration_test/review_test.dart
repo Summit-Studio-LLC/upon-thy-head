@@ -345,7 +345,8 @@ void main() {
       await wait(2600);
       expect(stage('read'), isTrue);
       expect(tester.widget<Text>(find.byKey(const Key('read-title'))).data, 'Peace before surgery');
-      expect(find.text('A blessing from Dad'), findsOneWidget);
+      // the page's own line (the closed share sheet's card, built below the screen, says it too)
+      expect(tester.widget<Text>(find.byKey(const Key('read-from'))).data, 'A blessing from Dad');
       expect(find.byKey(const Key('read-review')), findsNothing);
       expect(find.textContaining(right), findsWidgets);
       await shot('06-reading-after');
@@ -403,7 +404,7 @@ void main() {
     await done();
     await wait(1800);
     expect(stage('read'), isTrue, reason: 'Done asked, with nothing to erase');
-    expect(find.text('A blessing from Dad and Grandpa Ruiz'), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('read-from'))).data, 'A blessing from Dad and Grandpa Ruiz');
     expect((await store.get(id))!.from, 'Dad and Grandpa Ruiz');
     await tester.tap(find.byKey(const Key('read-back')));
     await wait(2600);

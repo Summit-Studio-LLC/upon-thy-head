@@ -218,6 +218,63 @@ class Strings {
   static String get fileUnreadable => _w.fileUnreadable;
   static String get ok => _w.ok;
 
+  // ---- sending by link (share/links.dart) and passing it along ----
+  static String get sendBlessing => _w.sendBlessing;
+  static String get keepNote => _w.keepNote;
+  static String get onlyWords => _w.onlyWords;
+  static String get textChip => _w.textChip;
+  static String get pdfChip => _w.pdfChip;
+  static String get shareFoot => _w.shareFoot;
+  static String get linkMaking => _w.linkMaking;
+  static String get linkMade => _w.linkMade;
+  static String get linkLine => _w.linkLine;
+  static String get linkLine2 => _w.linkLine2;
+  static String get sendLink => _w.sendLink;
+  static String get copyLink => _w.copyLink;
+  static String get linkCopied => _w.linkCopied;
+  static String get yourLinks => _w.yourLinks;
+  static String get offLine => _w.offLine;
+  static String get sendFile => _w.sendFile;
+  static String get fileNote => _w.fileNote;
+  static String get linkSlowDown => _w.linkSlowDown;
+  static String get linkFull => _w.linkFull;
+  static String get linkTooBig => _w.linkTooBig;
+  static String get linkUnavailable => _w.linkUnavailable;
+  static String get linksLede => _w.linksLede;
+  static String get linksNone => _w.linksNone;
+  static String get stop => _w.stop;
+  static String get stopQ => _w.stopQ;
+  static String get stopBody => _w.stopBody;
+  static String get stopLink => _w.stopLink;
+  static String get stopOffline => _w.stopOffline;
+  static String get stopFailed => _w.stopFailed;
+  static String get linkStoppedTitle => _w.linkStoppedTitle;
+  static String get linkStoppedBody => _w.linkStoppedBody;
+  static String get onItsWay => _w.onItsWay;
+  static String get onItsWayBody => _w.onItsWayBody;
+  static String get linkNoKey => _w.linkNoKey;
+  static String get linkNoKeyBody => _w.linkNoKeyBody;
+  static String get linkNotNow => _w.linkNotNow;
+  static String get linkNotNowBody => _w.linkNotNowBody;
+  static String get linkUnreadable => _w.linkUnreadable;
+  static String get deleteLiveBody => _w.deleteLiveBody;
+  static String get deleteStopOffline => _w.deleteStopOffline;
+  static String get forMeChoice => _w.forMeChoice;
+  static String get passingAlong => _w.passingAlong;
+  static String get toPassAlong => _w.toPassAlong;
+  static String get toPassAlongLede => _w.toPassAlongLede;
+  static String get toPassAlongNone => _w.toPassAlongNone;
+  static String get notSentYet => _w.notSentYet;
+  static String get sentTitle => _w.sentTitle;
+  static String get sentBody => _w.sentBody;
+  static String get sentDeleteNote => _w.sentDeleteNote;
+  static String get passingDeleteBody => _w.passingDeleteBody;
+  static String get whoFor => _w.whoFor;
+  static String linkSentStops(DateTime sent, DateTime stops, DateTime now) => _w.linkSentStops(sent, stops, now);
+  static String linkStoppedOn(DateTime d) => _w.linkStoppedOn(d);
+  static String linkEndedOn(DateTime d) => _w.linkEndedOn(d);
+  static String sentOn(DateTime d) => _w.sentOn(d);
+
   // ---- the first run (onboarding/) ----
   static String get appName => _w.appName;
   static String get welcome1 => _w.welcome1;
@@ -414,6 +471,57 @@ extension WordsCatalogue on Words {
         'keepMine': keepMine,
         'fileNewer': fileNewer,
         'fileUnreadable': fileUnreadable,
+        'sendBlessing': sendBlessing,
+        'keepNote': keepNote,
+        'onlyWords': onlyWords,
+        'textChip': textChip,
+        'pdfChip': pdfChip,
+        'shareFoot': shareFoot,
+        'linkMaking': linkMaking,
+        'linkMade': linkMade,
+        'linkLine': linkLine,
+        'linkLine2': linkLine2,
+        'sendLink': sendLink,
+        'copyLink': copyLink,
+        'linkCopied': linkCopied,
+        'yourLinks': yourLinks,
+        'offLine': offLine,
+        'sendFile': sendFile,
+        'fileNote': fileNote,
+        'linkSlowDown': linkSlowDown,
+        'linkFull': linkFull,
+        'linkTooBig': linkTooBig,
+        'linkUnavailable': linkUnavailable,
+        'linksLede': linksLede,
+        'linksNone': linksNone,
+        'stop': stop,
+        'stopQ': stopQ,
+        'stopBody': stopBody,
+        'stopLink': stopLink,
+        'stopOffline': stopOffline,
+        'stopFailed': stopFailed,
+        'linkStoppedTitle': linkStoppedTitle,
+        'linkStoppedBody': linkStoppedBody,
+        'onItsWay': onItsWay,
+        'onItsWayBody': onItsWayBody,
+        'linkNoKey': linkNoKey,
+        'linkNoKeyBody': linkNoKeyBody,
+        'linkNotNow': linkNotNow,
+        'linkNotNowBody': linkNotNowBody,
+        'linkUnreadable': linkUnreadable,
+        'deleteLiveBody': deleteLiveBody,
+        'deleteStopOffline': deleteStopOffline,
+        'forMeChoice': forMeChoice,
+        'passingAlong': passingAlong,
+        'toPassAlong': toPassAlong,
+        'toPassAlongLede': toPassAlongLede,
+        'toPassAlongNone': toPassAlongNone,
+        'notSentYet': notSentYet,
+        'sentTitle': sentTitle,
+        'sentBody': sentBody,
+        'sentDeleteNote': sentDeleteNote,
+        'passingDeleteBody': passingDeleteBody,
+        'whoFor': whoFor,
         'appName': appName,
         'welcome1': welcome1,
         'welcome2': welcome2,
@@ -725,7 +833,7 @@ class Words {
   String get whereHint => 'Decides which ring of sky the lights sit on. Only a rough place is kept.';
   String get useMyLocation => 'Use my location';
   String get about => 'About';
-  String get aboutBody => 'Your words stay on this iPhone. Nothing is sent anywhere.';
+  String get aboutBody => 'Your words stay on this iPhone. Nothing leaves it unless you share it.';
   String version(String v) => 'Version $v';
 
   // ---- sharing (share/share.dart) ----
@@ -756,6 +864,64 @@ class Words {
   String get fileNewer => 'This blessing was made with a newer version of Upon Thy Head. Update the app to open it.';
   String get fileUnreadable => 'This file could not be read.';
   String get ok => 'OK';
+
+  // ---- sending by link, and passing it along ----
+  String get sendBlessing => 'Send this blessing';
+  String get keepNote => 'They can keep it in Upon Thy Head.';
+  String get onlyWords => 'Only the words';
+  String get textChip => 'Text';
+  String get pdfChip => 'PDF';
+  String get shareFoot => 'This sends a link. Anyone who has it can read the blessing.';
+  String get linkMaking => 'Making the link…';
+  String get linkMade => 'Link made';
+  String get linkLine => 'Anyone with this link can read it. It stops working in 30 days.';
+  String get linkLine2 => 'It is locked on this phone before it leaves. The server keeps the locked copy, never the key.';
+  String get sendLink => 'Send the link';
+  String get copyLink => 'Copy link';
+  String get linkCopied => 'Copied';
+  String get yourLinks => 'Your links';
+  String get offLine => 'No internet, so a link cannot be made now.';
+  String get sendFile => 'Send as a file';
+  String get fileNote => 'It opens only in Upon Thy Head.';
+  String get linkSlowDown => 'Too many links were made from this network just now. Try again in a few minutes.';
+  String get linkFull => 'No more links can be made today. Try again tomorrow.';
+  String get linkTooBig => 'This blessing is too long for a link.';
+  String get linkUnavailable => 'A link cannot be made just now.';
+  String get linksLede => 'Each link stops working on its date. You can stop one sooner.';
+  String get linksNone => 'No links yet. Each one you send will be here.';
+  String get stop => 'Stop';
+  String get stopQ => 'Stop this link?';
+  String get stopBody => 'It will no longer open, and the locked copy is erased. Anyone who kept the blessing still has it.';
+  String get stopLink => 'Stop link';
+  String get stopOffline => 'No internet, so the link was not stopped. It still works.';
+  String get stopFailed => 'The link could not be stopped just now. Try again later.';
+  String get linkStoppedTitle => 'This link has stopped working.';
+  String get linkStoppedBody => 'Links last 30 days, or less if the sender stops one. Ask them to send it again.';
+  String get onItsWay => 'This blessing is on its way.';
+  String get onItsWayBody => 'Connect to the internet and open the link again.';
+  String get linkNoKey => 'This link is not complete.';
+  String get linkNoKeyBody => 'Part of it is missing. Ask for it to be sent again.';
+  String get linkNotNow => 'This blessing could not be fetched just now.';
+  String get linkNotNowBody => 'Open the link again in a little while.';
+  String get linkUnreadable => 'This link could not be opened.';
+  String get deleteLiveBody => 'Its link still works. Deleting the blessing stops the link too, and it cannot be undone.';
+  String get deleteStopOffline => 'No internet, so its link could not be stopped. Nothing was deleted.';
+  String get forMeChoice => 'For me';
+  String get passingAlong => 'Passing it along';
+  String get toPassAlong => 'To pass along';
+  String get toPassAlongLede => 'Blessings recorded for someone else. They have no light in your sky.';
+  String get toPassAlongNone => 'Nothing to pass along.';
+  String get notSentYet => 'Not sent yet';
+  String get sentTitle => 'Sent';
+  String get sentBody => 'Keep a copy on this phone, or delete it now?';
+  String get sentDeleteNote => 'Its link keeps working until it stops.';
+  String get passingDeleteBody => 'It is removed from this phone. A link already sent keeps working until it stops.';
+  String get whoFor => 'Whose blessing';
+  String linkSentStops(DateTime sent, DateTime stops, DateTime now) => '${_sameDay(sent, now) ? 'Sent today' : 'Sent ${months[sent.month - 1]} ${sent.day}'} · stops ${months[stops.month - 1]} ${stops.day}';
+  String linkStoppedOn(DateTime d) => 'Stopped ${months[d.month - 1]} ${d.day}';
+  String linkEndedOn(DateTime d) => 'Stopped working ${months[d.month - 1]} ${d.day}';
+  String sentOn(DateTime d) => 'Sent ${months[d.month - 1]} ${d.day}';
+  bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 
   // ---- the first run (onboarding/) ----
   String get appName => 'Upon Thy Head';
@@ -808,7 +974,7 @@ class Words {
 
   // ---- Android (docs/android-plan.md 9; the iPhone's strings above stay as they are) ----
   String get sameAsPhoneAndroid => 'Same as this phone';
-  String get aboutBodyAndroid => 'Your words stay on this phone. Nothing is sent anywhere.';
+  String get aboutBodyAndroid => 'Your words stay on this phone. Nothing leaves it unless you share it.';
   String get notifications => 'Notifications';
   String get notificationsWhy => 'So you can see that it is still recording when the phone is locked.';
   String get screenLock => 'Screen lock';
@@ -1229,7 +1395,7 @@ class _Spanish implements Words {
   @override
   String get about => 'Acerca de';
   @override
-  String get aboutBody => 'Tus palabras se quedan en este iPhone. No se envía nada a ningún lado.';
+  String get aboutBody => 'Tus palabras se quedan en este iPhone. Nada sale de él a menos que lo compartas.';
   @override
   String version(String v) => 'Versión $v';
 
@@ -1281,6 +1447,120 @@ class _Spanish implements Words {
   String get fileUnreadable => 'No se pudo leer este archivo.';
   @override
   String get ok => 'OK';
+
+  // ---- enviar por enlace, y para entregar ----
+  @override
+  String get sendBlessing => 'Enviar esta bendición';
+  @override
+  String get keepNote => 'Podrán guardarla en Upon Thy Head.';
+  @override
+  String get onlyWords => 'Solo las palabras';
+  @override
+  String get textChip => 'Texto';
+  @override
+  String get pdfChip => 'PDF';
+  @override
+  String get shareFoot => 'Esto envía un enlace. Quien lo tenga puede leer la bendición.';
+  @override
+  String get linkMaking => 'Creando el enlace…';
+  @override
+  String get linkMade => 'Enlace creado';
+  @override
+  String get linkLine => 'Quien tenga este enlace puede leerla. Deja de funcionar en 30 días.';
+  @override
+  String get linkLine2 => 'Se cierra en este teléfono antes de salir. El servidor guarda la copia cerrada, nunca la llave.';
+  @override
+  String get sendLink => 'Enviar el enlace';
+  @override
+  String get copyLink => 'Copiar enlace';
+  @override
+  String get linkCopied => 'Copiado';
+  @override
+  String get yourLinks => 'Tus enlaces';
+  @override
+  String get offLine => 'Sin internet no se puede crear un enlace ahora.';
+  @override
+  String get sendFile => 'Enviar como archivo';
+  @override
+  String get fileNote => 'Solo se abre en Upon Thy Head.';
+  @override
+  String get linkSlowDown => 'Se crearon demasiados enlaces desde esta red. Inténtalo de nuevo en unos minutos.';
+  @override
+  String get linkFull => 'Hoy ya no se pueden crear más enlaces. Inténtalo mañana.';
+  @override
+  String get linkTooBig => 'Esta bendición es demasiado larga para un enlace.';
+  @override
+  String get linkUnavailable => 'Ahora no se puede crear un enlace.';
+  @override
+  String get linksLede => 'Cada enlace deja de funcionar en su fecha. Puedes detenerlo antes.';
+  @override
+  String get linksNone => 'Todavía no hay enlaces. Cada uno que envíes estará aquí.';
+  @override
+  String get stop => 'Detener';
+  @override
+  String get stopQ => '¿Detener este enlace?';
+  @override
+  String get stopBody => 'Ya no se abrirá y se borra la copia cerrada. Quien ya guardó la bendición la conserva.';
+  @override
+  String get stopLink => 'Detener';
+  @override
+  String get stopOffline => 'Sin internet no se detuvo el enlace. Todavía funciona.';
+  @override
+  String get stopFailed => 'No se pudo detener el enlace ahora. Inténtalo más tarde.';
+  @override
+  String get linkStoppedTitle => 'Este enlace dejó de funcionar.';
+  @override
+  String get linkStoppedBody => 'Los enlaces duran 30 días, o menos si quien lo envió lo detiene. Pídele que lo vuelva a enviar.';
+  @override
+  String get onItsWay => 'Esta bendición va en camino.';
+  @override
+  String get onItsWayBody => 'Conéctate a internet y vuelve a abrir el enlace.';
+  @override
+  String get linkNoKey => 'Este enlace está incompleto.';
+  @override
+  String get linkNoKeyBody => 'Le falta una parte. Pide que te lo envíen de nuevo.';
+  @override
+  String get linkNotNow => 'No se pudo traer esta bendición ahora.';
+  @override
+  String get linkNotNowBody => 'Vuelve a abrir el enlace en un rato.';
+  @override
+  String get linkUnreadable => 'No se pudo abrir este enlace.';
+  @override
+  String get deleteLiveBody => 'Su enlace todavía funciona. Al eliminar la bendición también se detiene el enlace, y no se puede deshacer.';
+  @override
+  String get deleteStopOffline => 'Sin internet no se pudo detener su enlace. No se eliminó nada.';
+  @override
+  String get forMeChoice => 'Para mí';
+  @override
+  String get passingAlong => 'Para entregar';
+  @override
+  String get toPassAlong => 'Para entregar';
+  @override
+  String get toPassAlongLede => 'Bendiciones grabadas para otra persona. No tienen luz en tu cielo.';
+  @override
+  String get toPassAlongNone => 'Nada para entregar.';
+  @override
+  String get notSentYet => 'Aún no enviada';
+  @override
+  String get sentTitle => 'Enviada';
+  @override
+  String get sentBody => '¿Guardar una copia en este teléfono o eliminarla ahora?';
+  @override
+  String get sentDeleteNote => 'Su enlace sigue funcionando hasta que se detenga.';
+  @override
+  String get passingDeleteBody => 'Se quita de este teléfono. Un enlace ya enviado sigue funcionando hasta que se detenga.';
+  @override
+  String get whoFor => 'De quién es';
+  @override
+  String linkSentStops(DateTime sent, DateTime stops, DateTime now) => '${_sameDay(sent, now) ? 'Enviado hoy' : 'Enviado el ${sent.day} de ${months[sent.month - 1]}'} · hasta el ${stops.day} de ${months[stops.month - 1]}';
+  @override
+  String linkStoppedOn(DateTime d) => 'Detenido el ${d.day} de ${months[d.month - 1]}';
+  @override
+  String linkEndedOn(DateTime d) => 'Dejó de funcionar el ${d.day} de ${months[d.month - 1]}';
+  @override
+  String sentOn(DateTime d) => 'Enviada el ${d.day} de ${months[d.month - 1]}';
+  @override
+  bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 
   // ---- la primera vez ----
   @override
@@ -1377,7 +1657,7 @@ class _Spanish implements Words {
   @override
   String get sameAsPhoneAndroid => 'Igual que este teléfono';
   @override
-  String get aboutBodyAndroid => 'Tus palabras se quedan en este teléfono. No se envía nada a ningún lado.';
+  String get aboutBodyAndroid => 'Tus palabras se quedan en este teléfono. Nada sale de él a menos que lo compartas.';
   @override
   String get notifications => 'Notificaciones';
   @override

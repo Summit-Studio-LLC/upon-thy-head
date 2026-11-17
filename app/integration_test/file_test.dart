@@ -250,13 +250,17 @@ void main() {
       final b = await read(id);
       await tester.tap(find.byKey(const Key('read-share')));
       await wait(900);
-      // three choices, the file first, with its hint; the note line stays
-      final ys = [for (final k in ['share-file', 'share-text', 'share-pdf']) tester.getTopLeft(find.byKey(Key(k))).dy];
-      expect(ys[0] < ys[1] && ys[1] < ys[2], isTrue, reason: 'the order of the choices: $ys');
-      expect(find.text(Strings.asFile), findsOneWidget);
-      expect(find.text(Strings.asFileHint), findsOneWidget);
+      // the link first; the file is offered only when no link can be made (this build's service is
+      // a closed port on this Mac, tool/file_acceptance.sh, so: no internet)
+      expect(find.byKey(const Key('share-send')), findsOneWidget);
+      expect(find.byKey(const Key('share-file')), findsNothing, reason: 'the file offered before a link was tried');
       expect(find.byKey(const Key('share-note')), findsOneWidget);
-      if (shots) await shot('share-three-choices');
+      await tester.tap(find.byKey(const Key('share-send')));
+      await until(() async => find.byKey(const Key('share-file')).evaluate().isNotEmpty, what: 'no internet, and the file');
+      await wait(700);
+      expect(find.text(Strings.offLine), findsOneWidget);
+      expect(find.text(Strings.sendFile), findsOneWidget);
+      if (shots) await shot('share-no-internet-file');
       await tester.tap(find.byKey(const Key('share-file')));
       await until(NativeShareApi.debugShowing, what: 'the system share sheet');
       await wait(1500);

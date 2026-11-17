@@ -12,6 +12,10 @@ import UniformTypeIdentifiers
 ///    tmp/share/, the share sheet opened with it; answers when the sheet has closed and the file is gone
 ///  - `file` {fileName, bytes}: a `.blessing` file (lib/share/blessing_file.dart) written to
 ///    tmp/share/ and shared as the app's own document type; answers as `pdf` does
+///  - `link` {url, title}: a blessing's link (lib/share/links.dart), handed over as a URL so Messages
+///    and Mail show it as a link; never logged (it holds the key)
+///  Each answers, when its sheet has closed, whether something was done with it (true) or the sheet
+///  was cancelled (false).
 ///  - `dismiss`: close the sheet now (the app locked) and remove the file
 ///  - `clean`: remove tmp/share/ (at launch: a file left by an app killed while sharing)
 ///  - `debugShowing` → whether the sheet is up; `debugPaper` → "letter" or "a4"; `debugItems` → what
@@ -24,6 +28,8 @@ enum ShareChannel {
   static var channel: FlutterMethodChannel?
   static var sheet: UIActivityViewController?
   static var answer: FlutterResult?
+  /// Whether the last sheet's activity was carried out (not cancelled).
+  static var completed = false
 
   /// Everything made for sharing lives here, and only while the sheet is up.
   static var folder: URL { FileManager.default.temporaryDirectory.appendingPathComponent("share", isDirectory: true) }
@@ -71,6 +77,11 @@ enum ShareChannel {
         clean()
         result(FlutterError(code: "file", message: error.localizedDescription, details: nil))
       }
+    case "link":
+      guard let s = args["url"] as? String, let url = URL(string: s), url.scheme == "https" || url.scheme == "http" else {
+        return result(FlutterError(code: "link", message: "not a link", details: nil))
+      }
+      present(ShareItem(item: url, subject: args["title"] as? String ?? ""), result)
     case "receiving":
       BlessingInbox.ready(result)
     case "debugItems":
@@ -107,7 +118,9 @@ enum ShareChannel {
     let vc = UIActivityViewController(activityItems: [item], applicationActivities: nil)
     // nothing that would keep or file it on the app's behalf
     vc.excludedActivityTypes = [.addToReadingList, .assignToContact, .openInIBooks]
-    vc.completionWithItemsHandler = { [weak vc] _, _, _, _ in
+    completed = false
+    vc.completionWithItemsHandler = { [weak vc] _, done, _, _ in
+      if done { completed = true }
       // an activity that shows its own screen (Messages, Mail) calls this when it is done; the sheet
       // may still be up after a cancelled one, so only finish once it has gone, and only if no newer
       // sheet has taken its place
@@ -133,7 +146,7 @@ enum ShareChannel {
     if let s, s.presentingViewController != nil { s.dismiss(animated: false) }
     let a = answer
     answer = nil
-    a?(nil)
+    a?(false)
   }
 
   /// The sheet has closed: remove what was made for it and answer Dart.
@@ -142,7 +155,7 @@ enum ShareChannel {
     sheet = nil
     let a = answer
     answer = nil
-    a?(nil)
+    a?(completed)
   }
 
   /// What the last sheet was handed, for the tests.
@@ -150,6 +163,13 @@ enum ShareChannel {
 
   static func describe(_ item: Any) -> [String: Any] {
     guard let url = item as? URL else { return ["kind": "text"] }
+    if !url.isFileURL {
+      var d: [String: Any] = ["kind": "url", "scheme": url.scheme ?? "", "length": url.absoluteString.count]
+      #if DEBUG
+      d["url"] = url.absoluteString // tests only: the link holds its key
+      #endif
+      return d
+    }
     let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType ?? UTType(filenameExtension: url.pathExtension)
     return [
       "kind": "file",
@@ -403,20 +423,62 @@ enum BlessingInbox {
   final class SceneListener: NSObject, FlutterSceneLifeCycleDelegate {
     /// Launched by a file (the app was closed).
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions?) -> Bool {
-      let urls = (connectionOptions?.urlContexts ?? []).map(\.url).filter(\.isFileURL)
+      let contexts = (connectionOptions?.urlContexts ?? []).map(\.url)
+      let urls = contexts.filter(\.isFileURL)
       NSLog("receive: launched with %d file(s)", urls.count)
       urls.forEach(receive)
-      return !urls.isEmpty
+      // a universal link (the app was closed), or the simulator's stand-in for one
+      let links = (connectionOptions?.userActivities ?? []).compactMap(webLink) + contexts.filter(isTestLink)
+      links.forEach(receiveLink)
+      return !urls.isEmpty || !links.isEmpty
     }
 
     /// While running or in the background.
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) -> Bool {
-      let urls = URLContexts.map(\.url).filter(\.isFileURL)
+      let all = URLContexts.map(\.url)
+      let urls = all.filter(\.isFileURL)
       NSLog("receive: opened with %d file(s)", urls.count)
       urls.forEach(receive)
-      return !urls.isEmpty
+      let links = all.filter(isTestLink)
+      links.forEach(receiveLink)
+      return !urls.isEmpty || !links.isEmpty
+    }
+
+    /// A universal link while running or in the background (`scene(_:continue:)`).
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) -> Bool {
+      guard let url = webLink(userActivity) else { return false }
+      receiveLink(url)
+      return true
+    }
+
+    func webLink(_ a: NSUserActivity) -> URL? {
+      guard a.activityType == NSUserActivityTypeBrowsingWeb, let url = a.webpageURL, url.path.hasPrefix("/b/") else { return nil }
+      return url
+    }
+
+    /// The simulator cannot hand an app a universal link for a site that is not live, so debug builds
+    /// also take `uponthyhead-test://b/<id>#<key>` (registered in Info.plist), which lib/share/
+    /// link_format.dart reads the same way. Release builds ignore it.
+    func isTestLink(_ url: URL) -> Bool {
+      #if DEBUG
+      return url.scheme == "uponthyhead-test"
+      #else
+      return false
+      #endif
     }
   }
+
+  /// A blessing link: handed to Dart whole, fragment and all. Never logged: it holds the key.
+  static func receiveLink(_ url: URL) {
+    NSLog("receive: a link (fragment %@)", url.fragment == nil ? "missing" : "present")
+    let item: [String: Any] = ["link": url.absoluteString]
+    if listening, let c = ShareChannel.channel {
+      c.invokeMethod("incoming", arguments: item)
+    } else {
+      waiting.append(item)
+    }
+  }
+
 
   /// The same limit as lib/share/blessing_file.dart's blessingFileMaxBytes.
   static let maxBytes = 512 * 1024

@@ -81,7 +81,7 @@ mkdir -p "$LOCAL"
 rm -f "$LOCAL"/*.blessing
 
 # ---- the app, with the test inside ----
-timeout 600 flutter build ios --simulator --debug --target=integration_test/file_test.dart >"$TMP/build.txt" 2>&1 || { echo "build failed"; tail -20 "$TMP/build.txt"; exit 1; }
+timeout 600 flutter build ios --simulator --debug --target=integration_test/file_test.dart --dart-define=LINK_SERVICE=http://127.0.0.1:9 >"$TMP/build.txt" 2>&1 || { echo "build failed"; tail -20 "$TMP/build.txt"; exit 1; }
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
 xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
 DATA="$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)" # it moves on each install

@@ -8,7 +8,7 @@ import '../sky/astro.dart';
 import '../strings.dart';
 
 /// A blessing as one record that leaves the phone and comes back into the app on another one: the
-/// `.blessing` file (docs/blessing-file.md), and the same record inside a link (share/link.dart).
+/// `.blessing` file (docs/blessing-file.md), and the same record inside a link (share/links.dart, website/PROTOCOL.md).
 ///
 /// It carries exactly what the receiver needs to read what the sender reads, and to open the
 /// changes screen and restore the spoken words: id, title, the minute it was given and its clock

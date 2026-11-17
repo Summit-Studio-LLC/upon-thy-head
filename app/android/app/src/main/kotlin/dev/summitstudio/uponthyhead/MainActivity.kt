@@ -33,6 +33,28 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private var shareChannel: MethodChannel? = null
+    private var listening = false
+    private val waitingLinks = mutableListOf<String>()
+
+    /** A blessing link this activity was opened with (`https://uponthyhead.app/b/<id>#<key>`). */
+    private fun linkOf(i: Intent?): String? {
+        val u = i?.data ?: return null
+        if (i.action != Intent.ACTION_VIEW || u.scheme != "https" || u.host != "uponthyhead.app") return null
+        return if (u.path?.startsWith("/b/") == true) u.toString() else null
+    }
+
+    /** Handed to Dart whole, fragment and all; never logged (it holds the key). */
+    private fun receiveLink(link: String) {
+        val c = shareChannel
+        if (listening && c != null) c.invokeMethod("incoming", mapOf("link" to link)) else waitingLinks.add(link)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        linkOf(intent)?.let(::receiveLink)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val m = flutterEngine.dartExecutor.binaryMessenger
@@ -41,7 +63,20 @@ class MainActivity : FlutterActivity() {
         MethodChannel(m, "upon_thy_head/lock").setMethodCallHandler(::lock)
         MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(NotYet::location)
         MethodChannel(m, "upon_thy_head/player").setMethodCallHandler(NotYet::player)
-        MethodChannel(m, "upon_thy_head/share").setMethodCallHandler(NotYet::share)
+        MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(applicationContext))
+        val share = MethodChannel(m, "upon_thy_head/share")
+        shareChannel = share
+        share.setMethodCallHandler { call, result ->
+            // blessing links that opened the app (the files and the sending are task 13 and 14)
+            if (call.method == "receiving") {
+                listening = true
+                result.success(waitingLinks.map { mapOf("link" to it) })
+                waitingLinks.clear()
+            } else {
+                NotYet.share(call, result)
+            }
+        }
+        linkOf(intent)?.let(::receiveLink)
         MethodChannel(m, "upon_thy_head/check").setMethodCallHandler(NotYet::check)
         // upon_thy_head/language_menu/<id> is never called here: on Android the Dart side draws the
         // language menu itself (lib/record/language_menu.dart).
@@ -144,7 +179,7 @@ object NotYet {
     /** Sharing and receiving blessings: tasks 13 and 14. */
     fun share(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "text", "pdf", "file" -> no(result, "Sharing")
+            "text", "pdf", "file", "link" -> no(result, "Sharing")
             "receiving" -> result.success(emptyList<Any>())
             "dismiss", "clean" -> result.success(null)
             "debugShowing" -> result.success(false)

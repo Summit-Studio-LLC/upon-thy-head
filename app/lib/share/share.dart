@@ -92,8 +92,13 @@ abstract class ShareApi {
   Future<void> pdf(Map<String, Object> pdf);
 
   /// Write the `.blessing` file [bytes] as [fileName] in a temporary folder and open the share sheet
-  /// with it. Completes when the sheet has closed and the file is gone.
-  Future<void> file(String fileName, Uint8List bytes, String title);
+  /// with it. Completes when the sheet has closed and the file is gone: true when something was
+  /// done with it (sent, saved, copied), false when the sheet was cancelled.
+  Future<bool> file(String fileName, Uint8List bytes, String title);
+
+  /// Open the share sheet with a blessing's link, as a URL (so Messages shows it as a link), titled
+  /// [title]. Completes when the sheet has closed: true when it was sent somewhere.
+  Future<bool> link(String url, String title);
 
   /// Ready for blessing files that arrive: answers those that came before (the app was launched by
   /// one) and calls [onIncoming] with each later one.
@@ -117,8 +122,11 @@ class NativeShareApi implements ShareApi {
   Future<void> pdf(Map<String, Object> pdf) => _channel.invokeMethod<void>('pdf', pdf);
 
   @override
-  Future<void> file(String fileName, Uint8List bytes, String title) =>
-      _channel.invokeMethod<void>('file', {'fileName': fileName, 'bytes': bytes, 'title': title});
+  Future<bool> file(String fileName, Uint8List bytes, String title) async =>
+      await _channel.invokeMethod<bool>('file', {'fileName': fileName, 'bytes': bytes, 'title': title}) ?? false;
+
+  @override
+  Future<bool> link(String url, String title) async => await _channel.invokeMethod<bool>('link', {'url': url, 'title': title}) ?? false;
 
   @override
   Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming) async {
@@ -161,14 +169,18 @@ class NativeShareApi implements ShareApi {
 
 /// A blessing file as iOS handed it over: its bytes, or why there are none.
 class IncomingFile {
-  const IncomingFile({this.bytes, this.tooLarge = false});
+  const IncomingFile({this.bytes, this.tooLarge = false, this.link});
   final Uint8List? bytes;
   final bool tooLarge;
 
+  /// A blessing link (`https://uponthyhead.app/b/<id>#<key>`) that opened the app, instead of a
+  /// file. It holds the key: never logged.
+  final String? link;
+
   factory IncomingFile.from(Object? m) {
     final map = m is Map ? m : const {};
-    final b = map['bytes'];
-    return IncomingFile(bytes: b is Uint8List ? b : null, tooLarge: map['tooLarge'] == true);
+    final b = map['bytes'], l = map['link'];
+    return IncomingFile(bytes: b is Uint8List ? b : null, tooLarge: map['tooLarge'] == true, link: l is String ? l : null);
   }
 }
 
@@ -180,7 +192,21 @@ class NoShareApi implements ShareApi {
   @override
   Future<void> pdf(Map<String, Object> pdf) async => calls.add('pdf');
   @override
-  Future<void> file(String fileName, Uint8List bytes, String title) async => calls.add('file');
+  Future<bool> file(String fileName, Uint8List bytes, String title) async {
+    calls.add('file');
+    return completes;
+  }
+
+  @override
+  Future<bool> link(String url, String title) async {
+    calls.add('link');
+    links.add(url);
+    return completes;
+  }
+
+  /// What the system sheet answers (sent, or cancelled), and the links it was handed.
+  bool completes = true;
+  final List<String> links = [];
   @override
   Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming) async {
     deliver = onIncoming;

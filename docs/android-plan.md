@@ -298,8 +298,9 @@ Every iPhone channel has an Android answer in `MainActivity.kt` (`NotYet`) that 
 | Recording and speech | The recording screen opens with Begin dimmed and "Recording is not available on this phone yet."; first run's practice is skipped | Tasks 4–10 |
 | App lock and recent-apps cover | Settings shows the lock switch off with "The lock is not available on this phone yet."; **recent apps shows the sky and blessings** | Task 11 |
 | Location | Every blessing uses the Salt Lake Temple; Settings says so | Task 12 |
-| Sharing | The reading page has no share button | Task 13 |
+| Sharing | The reading page has no share button, so no link or file is sent from Android. The link's cryptography is already real (`LinkChannel.kt`: AES-256-GCM from `javax.crypto`, stop tokens wrapped by an Android Keystore key, proved against `website/protocol-vectors.json` on the emulator by `integration_test/link_test.dart`); the share channel answers `link` with not-yet | Task 13 |
 | Receiving `.blessing` files | Nothing registered | Task 14 |
+| Receiving a link | The manifest has the verified `https://uponthyhead.app/b/` filter and `MainActivity` hands the link to Dart as iPhone does, but Android only opens it in the app once the site serves `/.well-known/assetlinks.json` with the release key's fingerprint; until then the link opens the web page | When the site goes live |
 | Listening back | No player on the review page | Task 18 (and the plain player before it) |
 | The phone check page (test builds) | Answers "unavailable" | Its own task, not yet numbered |
 | The recording-language menu | Tap to cycle languages (Flutter has no menu matching iOS's) | With the recording tasks |

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
@@ -9,6 +11,9 @@ enum Glyph {
   microphone, writing, location, faceId,
   // Android's notifications row (docs/android-plan.md 9)
   bell,
+  // sending a blessing (design/share/src/app.js): the blessing (hands over a head), the words as
+  // text, a page (PDF), the blessing file, a link, copy, and no internet
+  blessing, text, pdf, file, link, copy, offline,
 }
 
 /// Vertical corrections, in grid units, so glyphs shown together sit on one line.
@@ -41,14 +46,48 @@ class _IconPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     }
 
+    void svg(String d) => canvas.drawPath(svgPath(d), paint);
+    final dot = Paint()..color = color;
     switch (icon) {
+      case Glyph.blessing:
+        // hands as four arcs over the head, with three dots for the fingertips' light
+        const r = 11.5;
+        for (final (a, b) in [(-68.0, -50.3), (-29.7, -13.0), (13.0, 29.7), (50.3, 68.0)]) {
+          // angles from straight up, clockwise
+          final s0 = (a - 90) * math.pi / 180, sweep = (b - a) * math.pi / 180;
+          canvas.drawArc(Rect.fromCircle(center: const Offset(12, 17), radius: r), s0, sweep, false, paint);
+        }
+        canvas.drawCircle(const Offset(12, 5.5), 2, dot);
+        canvas.drawCircle(const Offset(4.61, 8.19), 1.4, dot);
+        canvas.drawCircle(const Offset(19.39, 8.19), 1.4, dot);
+        canvas.drawCircle(const Offset(12, 16), 4.75, paint);
+      case Glyph.text:
+        svg('M5 6.5h14M5 10.5h14M5 14.5h14M5 18.5h8.5');
+      case Glyph.pdf:
+        svg('M7 3.5h6.5l5 5V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z');
+        svg('M13.5 3.5v5h5');
+      case Glyph.file:
+        svg('M7 3.5h6.5l5 5V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z');
+        svg('M13.5 3.5v5h5');
+        svg('M7.75 16.5Q12 11.5 16.25 16.5');
+        canvas.drawCircle(const Offset(12, 14), 1.35, dot);
+        canvas.drawCircle(const Offset(9.45, 14.9), .95, dot);
+        canvas.drawCircle(const Offset(14.55, 14.9), .95, dot);
+      case Glyph.link:
+        svg('M10.25 13.75a3.75 3.75 0 0 0 5.3 0l3-3a3.75 3.75 0 0 0-5.3-5.3l-.85.85');
+        svg('M13.75 10.25a3.75 3.75 0 0 0-5.3 0l-3 3a3.75 3.75 0 0 0 5.3 5.3l.85-.85');
+      case Glyph.copy:
+        canvas.drawRRect(RRect.fromLTRBR(9, 9, 19.5, 20.5, const Radius.circular(2)), paint);
+        svg('M15 9V5.75A1.75 1.75 0 0 0 13.25 4h-7A1.75 1.75 0 0 0 4.5 5.75v7.5A1.75 1.75 0 0 0 6.25 15H9');
+      case Glyph.offline:
+        svg('M7.25 18h9.5a3.75 3.75 0 0 0 .9-7.4A5.75 5.75 0 0 0 6.6 9.3 4.35 4.35 0 0 0 7.25 18z');
+        svg('M4 4.5l16 15');
       case Glyph.list:
         for (final y in [7.0, 12.0, 17.0]) {
           poly([9, y, 20, y]);
           canvas.drawCircle(Offset(4.5, y), 1.1, Paint()..color = color);
         }
       case Glyph.sky:
-        final dot = Paint()..color = color;
         canvas.drawCircle(const Offset(12, 12), 1.6, dot);
         for (final (x, y) in [(5.5, 7.0), (18.0, 6.0), (17.5, 17.5), (6.5, 16.5)]) {
           canvas.drawCircle(Offset(x, y), 1, dot);
@@ -199,6 +238,56 @@ class _IconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_IconPainter old) => old.icon != icon || old.color != color;
+}
+
+/// The few SVG path commands the drawn icons use (M L H V A Q Z, absolute and relative), on the
+/// same 24-unit grid.
+Path svgPath(String d) {
+  final path = Path();
+  final tokens = RegExp(r'[MmLlHhVvAaQqZz]|-?(?:\d+\.?\d*|\.\d+)').allMatches(d).map((m) => m[0]!).toList();
+  var i = 0, x = 0.0, y = 0.0, sx = 0.0, sy = 0.0;
+  var cmd = 'M';
+  double n() => double.parse(tokens[i++]);
+  bool isNum() => i < tokens.length && !RegExp(r'^[A-Za-z]$').hasMatch(tokens[i]);
+  while (i < tokens.length) {
+    if (!isNum()) cmd = tokens[i++];
+    final rel = cmd == cmd.toLowerCase();
+    switch (cmd.toUpperCase()) {
+      case 'M':
+        x = (rel ? x : 0) + n();
+        y = (rel ? y : 0) + n();
+        path.moveTo(x, y);
+        sx = x;
+        sy = y;
+        cmd = rel ? 'l' : 'L';
+      case 'L':
+        x = (rel ? x : 0) + n();
+        y = (rel ? y : 0) + n();
+        path.lineTo(x, y);
+      case 'H':
+        x = (rel ? x : 0) + n();
+        path.lineTo(x, y);
+      case 'V':
+        y = (rel ? y : 0) + n();
+        path.lineTo(x, y);
+      case 'A':
+        final rx = n(), ry = n(), rot = n(), large = n() != 0, sweep = n() != 0;
+        x = (rel ? x : 0) + n();
+        y = (rel ? y : 0) + n();
+        path.arcToPoint(Offset(x, y), radius: Radius.elliptical(rx, ry), rotation: rot, largeArc: large, clockwise: sweep);
+      case 'Q':
+        final cx = (rel ? x : 0) + n(), cy = (rel ? y : 0) + n();
+        x = (rel ? x : 0) + n();
+        y = (rel ? y : 0) + n();
+        path.quadraticBezierTo(cx, cy, x, y);
+      case 'Z':
+        path.close();
+        x = sx;
+        y = sy;
+        if (isNum()) cmd = 'L';
+    }
+  }
+  return path;
 }
 
 /// A round 44-point button with one icon. Dims to .28 when [onTap] is null.

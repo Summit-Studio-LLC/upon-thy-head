@@ -14,6 +14,7 @@ import '../record/transcriber.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
+import '../widgets/over_sky_page.dart';
 
 /// Settings, over the dimmed sky, in the reading page's family: the back chevron, a large serif
 /// title, and four quiet rows with hairlines, each explained in a line of small sans.
@@ -30,6 +31,9 @@ class SettingsLayer extends StatelessWidget {
     required this.onLanguage,
     required this.onUseLocation,
     this.onPhoneCheck,
+    this.passingCount = 0,
+    this.onPassAlong,
+    this.onYourLinks,
   });
 
   final Palette palette;
@@ -46,6 +50,11 @@ class SettingsLayer extends StatelessWidget {
 
   /// Opens the phone check page; only in builds made with `--dart-define=PHONE_CHECK=true`.
   final VoidCallback? onPhoneCheck;
+
+  /// "To pass along" (with how many) and "Your links": the blessings recorded for someone else, and
+  /// the links sent. Null, no row.
+  final int passingCount;
+  final VoidCallback? onPassAlong, onYourLinks;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +86,30 @@ class SettingsLayer extends StatelessWidget {
                 Text(Strings.settings, key: const Key('settings-title'), style: serif(34, 38, p.ink, tracking: -.012)),
                 const SizedBox(height: 28),
                 hairline(),
+                // ---- the blessings for someone else, and the links sent ----
+                if (onPassAlong != null) ...[
+                  OpenRow(
+                    key: const Key('settings-pass-along'),
+                    palette: p,
+                    semantics: '${Strings.toPassAlong}, $passingCount',
+                    onTap: onPassAlong!,
+                    child: Row(children: [
+                      Expanded(child: Text(Strings.toPassAlong, style: label)),
+                      Text('$passingCount', key: const Key('settings-pass-count'), style: sans(17, 22, p.ink2)),
+                    ]),
+                  ),
+                  hairline(),
+                ],
+                if (onYourLinks != null) ...[
+                  OpenRow(
+                    key: const Key('settings-links'),
+                    palette: p,
+                    semantics: Strings.yourLinks,
+                    onTap: onYourLinks!,
+                    child: Text(Strings.yourLinks, style: label),
+                  ),
+                  hairline(),
+                ],
                 // ---- app lock ----
                 row(key: const Key('settings-lock'), [
                   Row(children: [

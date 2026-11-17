@@ -116,7 +116,7 @@ for run in $(seq 1 8); do
   echo "== run $run, phase $next"
   setup "$next"
   rm -f "$TMP/done" "$TMP/failed" "$TMP/next" "$TMP/kill"
-  timeout "$LIMIT" flutter drive -d "$UDID" --driver=test_driver/integration_test.dart --target=integration_test/share_test.dart \
+  timeout "$LIMIT" flutter drive -d "$UDID" --driver=test_driver/integration_test.dart --target=integration_test/share_test.dart --dart-define=LINK_SERVICE=http://127.0.0.1:9 \
     --keep-app-running 2>&1 |
     while IFS= read -r line; do
       echo "$line"

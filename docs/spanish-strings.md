@@ -232,7 +232,7 @@ exact but more technical; the English avoids "transcribe" on purpose.
 | Decides which ring of sky the lights sit on. Only a rough place is kept. | Decide en qué anillo del cielo quedan las luces. Solo se guarda un lugar aproximado. | |
 | Use my location | Usar mi ubicación | |
 | About | Acerca de | |
-| Your words stay on this iPhone. Nothing is sent anywhere. | Tus palabras se quedan en este iPhone. No se envía nada a ningún lado. | |
+| Your words stay on this iPhone. Nothing leaves it unless you share it. | Tus palabras se quedan en este iPhone. Nada sale de él a menos que lo compartas. | |
 | Version 0.1.0 | Versión 0.1.0 | |
 
 ## Sharing (reading page, and the shared text and PDF)

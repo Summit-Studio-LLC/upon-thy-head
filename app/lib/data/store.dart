@@ -9,6 +9,7 @@ import '../polish/change.dart';
 import '../review/tags.dart';
 import '../sky/astro.dart';
 import 'blessing.dart';
+import 'sent_link.dart';
 
 /// Where blessings are kept. The screens use only this; no SQL leaves this file.
 abstract class BlessingStore {
@@ -37,6 +38,18 @@ abstract class BlessingStore {
   /// Erase the recording and forget it, keeping the words. The review step calls this when the
   /// person has finished reviewing.
   Future<void> eraseAudio(Blessing b);
+
+  /// Every link made on this phone, newest first. A link outlives its blessing (one passed along
+  /// and then deleted keeps working until it stops), so each keeps a copy of the title.
+  Future<List<SentLink>> links();
+
+  Future<void> addLink(SentLink link);
+
+  /// The link was stopped at [at] (here, or found gone at the service).
+  Future<void> setLinkStopped(String id, DateTime at);
+
+  /// Forget a link (one that ended a while ago).
+  Future<void> removeLink(String id);
 
   Future<void> close();
 }
@@ -163,6 +176,23 @@ class SqliteBlessingStore implements BlessingStore {
       }
       db.execute('ALTER TABLE blessings DROP COLUMN edits_json');
     },
+    // 7: links made on this phone (share/links.dart), and when a blessing being passed along was
+    // sent. A link names its blessing but does not go with it: one passed along and then deleted
+    // keeps working until it stops, and stays in "Your links". Its stop token is never here; it is
+    // in the Keychain (share/link_crypto.dart).
+    (db) {
+      db.execute('''
+        CREATE TABLE links (
+          id TEXT NOT NULL PRIMARY KEY,
+          blessing_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          sent_at_ms INTEGER NOT NULL,
+          expires_at_ms INTEGER NOT NULL,
+          stopped_at_ms INTEGER
+        ) STRICT''');
+      db.execute('CREATE INDEX links_by_blessing ON links (blessing_id)');
+      db.execute('ALTER TABLE blessings ADD COLUMN sent_at_ms INTEGER');
+    },
   ];
 
   static void _insertChanges(Database db, String id, List<Change> changes) {
@@ -209,7 +239,7 @@ class SqliteBlessingStore implements BlessingStore {
       };
 
   static const _columns = 'id, title, giver, recipient, ownership, given_utc_minute, utc_offset_minutes, '
-      'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text';
+      'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text, sent_at_ms';
 
   List<Object?> _values(Blessing b) => [
         b.id,
@@ -231,6 +261,7 @@ class SqliteBlessingStore implements BlessingStore {
         b.language,
         b.wordsStatus.code,
         b.firstText,
+        b.sent?.millisecondsSinceEpoch,
       ];
 
   Blessing _read(Row r, Map<String, List<String>> tags, Map<String, List<Change>> changes) {
@@ -253,6 +284,7 @@ class SqliteBlessingStore implements BlessingStore {
       language: r['language'] as String,
       wordsStatus: WordsStatus.fromCode(r['words_state'] as String),
       firstText: r['first_text'] as String,
+      sent: r['sent_at_ms'] == null ? null : DateTime.fromMillisecondsSinceEpoch(r['sent_at_ms'] as int, isUtc: true),
       created: DateTime.fromMillisecondsSinceEpoch(r['created_at_ms'] as int, isUtc: true),
       updated: DateTime.fromMillisecondsSinceEpoch(r['updated_at_ms'] as int, isUtc: true),
     );
@@ -323,7 +355,7 @@ class SqliteBlessingStore implements BlessingStore {
   @override
   Future<void> create(Blessing b) async {
     _tx(_db, () {
-      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(19, '?').join(', ')})', _values(b));
+      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(20, '?').join(', ')})', _values(b));
       _writeTags(b);
       _writeChanges(b);
     });
@@ -339,7 +371,8 @@ class SqliteBlessingStore implements BlessingStore {
         'latitude = ?, longitude = ?, raw_text = ?, polished_text = ?, polish_asked = ?, draft = ?, created_at_ms = ?, updated_at_ms = ?, '
         'audio = ?, language = ?, words_state = ?, '
         // the first writing is kept as it was once there is one
-        "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END "
+        "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END, "
+        'sent_at_ms = ? '
         'WHERE id = ?',
         [...v.skip(1), b.id],
       );
@@ -381,6 +414,32 @@ class SqliteBlessingStore implements BlessingStore {
     final f = File(p.join(audioDir!, name));
     if (await f.exists()) await f.delete();
   }
+
+  @override
+  Future<List<SentLink>> links() async => [
+        for (final r in _db.select('SELECT * FROM links ORDER BY sent_at_ms DESC, id'))
+          SentLink(
+            id: r['id'] as String,
+            blessingId: r['blessing_id'] as String,
+            title: r['title'] as String,
+            sent: DateTime.fromMillisecondsSinceEpoch(r['sent_at_ms'] as int, isUtc: true),
+            expires: DateTime.fromMillisecondsSinceEpoch(r['expires_at_ms'] as int, isUtc: true),
+            stopped: r['stopped_at_ms'] == null ? null : DateTime.fromMillisecondsSinceEpoch(r['stopped_at_ms'] as int, isUtc: true),
+          ),
+      ];
+
+  @override
+  Future<void> addLink(SentLink l) async => _db.execute(
+        'INSERT INTO links (id, blessing_id, title, sent_at_ms, expires_at_ms, stopped_at_ms) VALUES (?, ?, ?, ?, ?, ?)',
+        [l.id, l.blessingId, l.title, l.sent.millisecondsSinceEpoch, l.expires.millisecondsSinceEpoch, l.stopped?.millisecondsSinceEpoch],
+      );
+
+  @override
+  Future<void> setLinkStopped(String id, DateTime at) async =>
+      _db.execute('UPDATE links SET stopped_at_ms = ? WHERE id = ? AND stopped_at_ms IS NULL', [at.millisecondsSinceEpoch, id]);
+
+  @override
+  Future<void> removeLink(String id) async => _db.execute('DELETE FROM links WHERE id = ?', [id]);
 
   @override
   Future<void> close() async => _db.close();

@@ -394,6 +394,8 @@ void main() {
         await until(() => player().loaded, what: 'the recording');
         await shot('review');
         await walk('the review page');
+        // at the larger text size the "whose blessing" row pushes the player below the fold
+        await show(find.byKey(const Key('listen-play')));
         await tap('listen-play', after: 2500);
         expect(player().playing, isTrue);
         await shot('review-listening', settle: 0);
