@@ -232,6 +232,100 @@ class Run:
         check('7: lock off, away 70 s: not locked', not self.prompt_up(4) and self.d.has('Five blessings'))
         self.settings_lock(on=True)
 
+    # ---- the two ways the lock failed open (security review of 1c0f4cb) ----
+
+    def unlock_if_asked(self, seconds=4):
+        if self.prompt_up(seconds):
+            self.touch()
+            time.sleep(2)
+
+    def stepp(self):
+        """Home with Android's location question up (from Settings), recent apps, away 70 s, back: locked."""
+        self.unlock_if_asked(2)
+        self.d.sh(f'pm revoke {PKG} android.permission.ACCESS_COARSE_LOCATION')  # Android ends the app for this
+        try:
+            time.sleep(2)
+            self.d.launch()
+            self.unlock_if_asked(10)
+            self.home()
+            self.d.tap('^Settings$')
+            time.sleep(2)
+            for _ in range(4):
+                if self.d.has('^Use my location'):
+                    break
+                self.d.sh('input swipe 640 2200 640 900 300')
+                time.sleep(1)
+            self.use_my_location()
+            asked = True
+            try:
+                self.d.wait('^While using the app|^Only this time|^Don.t allow', 15)
+            except TimeoutError:
+                asked = False
+            check('p: Android\'s location question is up over Settings', asked)
+            self.shot('perm-question')
+            self.d.key('KEYCODE_HOME')
+            time.sleep(2)
+            self.d.key('KEYCODE_APP_SWITCH')
+            time.sleep(3)
+            self.shot('perm-recents')
+            sd, mean = plain(os.path.join(self.out, 'perm-recents.png'))
+            check('p: left over the question: recent apps shows the plain card', sd < 0.02 and 0.02 < mean < 0.1,
+                  f'middle of the card: spread {sd:.3f}, brightness {mean:.3f}')
+            self.d.key('KEYCODE_HOME')
+            time.sleep(68)
+            self.d.launch()
+            time.sleep(2.5)
+            self.shot('perm-back')
+            # the question may still be over the app; answering it must not open the app either
+            if self.d.has('^Only this time'):
+                self.d.tap('^Only this time')
+                time.sleep(2)
+            up = self.prompt_up(8)
+            if up:
+                self.d.key('KEYCODE_BACK')
+                time.sleep(1.5)
+            seen = self.blessing_shown()
+            check('p: away 70 s from the question: locked, nothing of a blessing showing',
+                  up and not seen and self.d.has('^Unlock'), f'prompt {up}, shown {seen}, screen {self.labels()[:6]}')
+            self.shot('perm-locked')
+            self.d.tap('^Unlock')
+            if self.prompt_up():
+                self.touch()
+            time.sleep(2)
+        finally:
+            self.d.sh(f'pm grant {PKG} android.permission.ACCESS_COARSE_LOCATION')  # ends the app again
+            time.sleep(2)
+            self.d.launch()
+            self.unlock_if_asked(10)
+        self.home()
+
+    def steps(self):
+        """Dart slow to answer after 70 s away (debug hook: `active` held back 6 s): the cover holds."""
+        self.unlock_if_asked(2)
+        self.home()
+        self.d.tap('^Read this blessing')
+        time.sleep(2.5)
+        self.d.sh(f"run-as {PKG} sh -c 'echo 6000 > files/slow_active'")
+        try:
+            self.d.key('KEYCODE_HOME')
+            time.sleep(70)
+            self.d.launch()
+            time.sleep(3)  # past the old 1.5 s lift, before Dart has been told
+            self.shot('slow-3s')
+            sd, mean = plain(os.path.join(self.out, 'slow-3s.png'))
+            check('s: Dart not yet answered 3 s after a 70 s absence: still the plain cover', sd < 0.02 and mean < 0.1,
+                  f'middle of the screen: spread {sd:.3f}, brightness {mean:.3f}')
+            up = self.prompt_up(12)
+            check('s: the late answer locks, and its prompt shows', up)
+        finally:
+            self.d.sh(f'run-as {PKG} rm -f files/slow_active')
+        if up:
+            self.touch()
+            time.sleep(2.5)
+        check('s: unlocked after the late answer: the cover is gone', bool(self.blessing_shown()), str(self.blessing_shown()))
+        self.d.key('KEYCODE_BACK')
+        time.sleep(2)
+
     # ---- 9 ----
 
     def places(self):
@@ -345,14 +439,14 @@ def main():
     p.add_argument('out')
     p.add_argument('apk')
     p.add_argument('pin')
-    p.add_argument('--only', default='1,2,3,6,9')
+    p.add_argument('--only', default='1,2,3,6,p,s,9')
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
     r = Run(a.serial, a.out, a.apk, a.pin)
     steps = a.only.split(',')
     summary = {'device': a.serial}
     r.first_run()
-    for s in ['2', '3', '6', '9']:
+    for s in ['2', '3', '6', 'p', 's', '9']:
         if s not in steps:
             continue
         try:

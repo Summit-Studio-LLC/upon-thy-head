@@ -19,6 +19,8 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
@@ -51,12 +53,58 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="uponthyhead.app" android:pathPrefix="/b/"/>
             </intent-filter>
+            <!-- A blessing file (ShareChannel.incoming), as narrowly as still catches one sent by
+                 Gmail and WhatsApp. 1: its own type, from anywhere (this app's files, an iPhone's,
+                 Files). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/vnd.uponthyhead.blessing"/>
+            </intent-filter>
+            <!-- 2: "unknown binary file" from a content address, which is how Gmail can hand over an
+                 attachment whose type it does not know, with no name to go by. The cost: "Upon Thy
+                 Head" is offered under "Open with" for other unknown binary files (never for
+                 pictures, PDFs, text or anything with a known type); the strict reader answers
+                 "This file could not be read." -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:mimeType="application/octet-stream"/>
+            </intent-filter>
+            <!-- 3: no type at all, by a name ending ".blessing" (some file managers send no type). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:host="*"/>
+                <data android:pathPattern=".*\\.blessing"/>
+                <data android:pathPattern=".*\\..*\\.blessing"/>
+                <data android:pathPattern=".*\\..*\\..*\\.blessing"/>
+            </intent-filter>
+            <!-- 4: shared into the app ("Share → Upon Thy Head"), its own type only. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/vnd.uponthyhead.blessing"/>
+            </intent-filter>
         </activity>
         <!-- Keeps a recording going with the screen locked; started only by Begin. -->
         <service
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <!-- The PDF and .blessing files the app shares, read only, by grant (BlessingFiles.kt). -->
+        <provider
+            android:name=".BlessingFiles"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

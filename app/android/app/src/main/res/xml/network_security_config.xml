@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release and profile builds: HTTPS only, everywhere. The link service is
+     https://uponthyhead.app (lib/share/link_format.dart). Debug builds replace this file
+     (src/debug/res/xml) to reach the website on this Mac. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

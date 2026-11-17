@@ -60,18 +60,23 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
         private var cover: View? = null
         private const val GROUND = 0xFF0B0907.toInt()
 
-        /** MainActivity.onStop. */
+        /**
+         * MainActivity.onStop: the activity is truly off the screen. Always counted as leaving, even
+         * with a permission question or the unlock prompt up (those only pause the activity or take
+         * its focus; they never stop it, so [prompting] is not consulted here). Otherwise Home pressed
+         * over Android's location question left the app open, uncovered, for as long as it was away.
+         */
         fun left(a: Activity) {
-            if (prompting) return
             leftAt = SystemClock.elapsedRealtime()
             place(a)
         }
 
-        /** MainActivity.onStart: tell Dart, and lift the cover once it answers (or after 1.5 s). */
+        /** MainActivity.onStart: tell Dart, and lift the cover once it answers. */
         fun came(a: Activity) {
             blurred = false
             val at = leftAt ?: return lift()
             leftAt = null
+            debugSlow = slowActive(a)
             tell((SystemClock.elapsedRealtime() - at) / 1000.0, true)
         }
 
@@ -94,16 +99,53 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             if (leftAt == null) tell(0.0, false)
         }
 
+        /**
+         * Away for less than this, a return can never lock: half of `lockAfter` (60 s,
+         * lib/lock/lock.dart), so that a clock read a little early or late here, or a rule that
+         * changes there, can never turn a return that should lock into one that lifts without asking.
+         */
+        const val SURELY_UNLOCKED_S = 30.0
+
+        /** Debug builds only: how long to hold back `active` (the file files/slow_active holds the
+         *  milliseconds; put there by tool/android_lock.py to stand for a busy Dart side). */
+        private var debugSlow = 0L
+
+        private fun slowActive(a: Activity): Long {
+            if ((a.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) return 0
+            return try { java.io.File(a.filesDir, "slow_active").readText().trim().toLong() } catch (e: Exception) { 0 }
+        }
+
+        /** Which answer to Dart's `active` was the last asked; an older one never lifts a newer cover. */
+        private var asked = 0
+
+        /**
+         * Tell Dart the app is back, and lift the cover. It fails closed: lifted on Dart's answer
+         * (however late), and without one (an error, no handler, or 1.5 s gone) only when this return
+         * cannot be one that locks: not from the background, or away under [SURELY_UNLOCKED_S].
+         */
         private fun tell(away: Double, background: Boolean) {
-            val c = channel ?: return lift()
-            var lifted = false
-            val liftOnce = { if (!lifted) { lifted = true; lift() } }
-            c.invokeMethod("active", mapOf("away" to away, "background" to background), object : MethodChannel.Result {
-                override fun success(result: Any?) = liftOnce()
-                override fun error(code: String, message: String?, details: Any?) = liftOnce()
-                override fun notImplemented() = liftOnce()
-            })
-            Handler(Looper.getMainLooper()).postDelayed({ liftOnce() }, 1500)
+            val c = channel
+            val mayLiftUnanswered = !background || away < SURELY_UNLOCKED_S
+            if (c == null) {
+                if (mayLiftUnanswered) lift()
+                return
+            }
+            val n = ++asked
+            var answered = false
+            val unanswered = { if (!answered && n == asked && mayLiftUnanswered) lift() }
+            val send = {
+                c.invokeMethod("active", mapOf("away" to away, "background" to background), object : MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        answered = true
+                        if (n == asked) lift()
+                    }
+                    override fun error(code: String, message: String?, details: Any?) = unanswered()
+                    override fun notImplemented() = unanswered()
+                })
+            }
+            val main = Handler(Looper.getMainLooper())
+            if (debugSlow > 0) main.postDelayed({ send() }, debugSlow) else send()
+            main.postDelayed({ unanswered() }, 1500)
         }
 
         /** The plain ground over everything, invisible to accessibility. */

@@ -22,10 +22,19 @@ def add(d, pin):
     print(d.sh(f'locksettings set-pin {pin}').strip())
     d.sh('am start -a android.settings.FINGERPRINT_ENROLL')
     d.wait('PIN', 20)
-    time.sleep(1)
-    d.sh(f'input text {pin}')
-    d.key('KEYCODE_ENTER')
-    d.wait('^MORE$|^More$|^I agree$|^I AGREE$', 20)
+    # just after boot the PIN field can miss the first typing: tap it and type again
+    for _ in range(3):
+        time.sleep(1.5)
+        if d.has('^PIN area$'):
+            d.tap('^PIN area$', 5)
+        d.sh(f'input text {pin}')
+        d.key('KEYCODE_ENTER')
+        try:
+            d.wait('^MORE$|^More$|^I agree$|^I AGREE$', 12)
+            break
+        except TimeoutError:
+            pass
+    d.wait('^MORE$|^More$|^I agree$|^I AGREE$', 8)
     for _ in range(8):
         if d.has('^(I agree|I AGREE|Agree)$'):
             break

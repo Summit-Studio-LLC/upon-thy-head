@@ -205,7 +205,7 @@ class Strings {
   static String get shareNote => _w.shareNote;
   static String pageOf(int n, int total) => _w.pageOf(n, total);
   static String get asFile => _w.asFile;
-  static String get asFileHint => _w.asFileHint;
+  static String get asFileHint => NotYet.android ? _w.asFileHintAndroid : _w.asFileHint;
   static String get aBlessing => _w.aBlessing;
   static String get receiveAsk => _w.receiveAsk;
   static String get receiveKeep => _w.receiveKeep;
@@ -865,6 +865,7 @@ class Words {
   // ---- the blessing file (share/blessing_file.dart, share/receive.dart) ----
   String get asFile => 'As a blessing file';
   String get asFileHint => 'Opens in Upon Thy Head on another iPhone.';
+  String get asFileHintAndroid => 'Opens in Upon Thy Head on another phone.';
   String get aBlessing => 'A blessing';
   String get receiveAsk => 'Keep it with your blessings?';
   String get receiveKeep => 'Keep';
@@ -1451,6 +1452,8 @@ class _Spanish implements Words {
   String get asFile => 'Como archivo de bendición';
   @override
   String get asFileHint => 'Se abre en Upon Thy Head en otro iPhone.';
+  @override
+  String get asFileHintAndroid => 'Se abre en Upon Thy Head en otro teléfono.';
   @override
   String get aBlessing => 'Una bendición';
   @override

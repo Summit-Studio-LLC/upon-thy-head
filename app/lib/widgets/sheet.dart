@@ -62,6 +62,10 @@ class _SheetState extends State<Sheet> {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     // Reduce Motion: it is simply there, and simply gone
     final still = MediaQuery.of(context).disableAnimations;
+    // never taller than the screen below the status bar: at the largest text sizes the content
+    // scrolls inside the panel instead of running off the top (found on Android at font 2.0 with
+    // the display size raised; the same holds for iPhone's largest sizes)
+    final room = MediaQuery.sizeOf(context).height - MediaQuery.paddingOf(context).top - 12 - 20 - 38 - inset;
     // off, it is slid below the screen and still built: out of VoiceOver's reach as well as the finger's
     final panel = ExcludeSemantics(
       excluding: !on,
@@ -79,7 +83,15 @@ class _SheetState extends State<Sheet> {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
               boxShadow: [BoxShadow(color: p.ink.withValues(alpha: .07), offset: const Offset(0, -1))],
             ),
-            child: Semantics(scopesRoute: true, explicitChildNodes: true, label: label, child: child),
+            child: Semantics(
+              scopesRoute: true,
+              explicitChildNodes: true,
+              label: label,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: room > 0 ? room : 0),
+                child: SingleChildScrollView(child: child),
+              ),
+            ),
           ),
         ),
       ),

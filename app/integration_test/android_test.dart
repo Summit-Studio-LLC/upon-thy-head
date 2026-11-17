@@ -25,7 +25,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:upon_thy_head/data/store.dart';
 import 'package:upon_thy_head/home/timeline.dart';
 import 'package:upon_thy_head/main.dart';
-import 'package:upon_thy_head/not_yet.dart';
 import 'package:upon_thy_head/record/record_screen.dart';
 import 'package:upon_thy_head/sky/sky_engine.dart';
 import 'package:upon_thy_head/sky/sky_view.dart';
@@ -172,7 +171,7 @@ void main() {
     await tester.drag(find.byKey(const Key('read-scroll')), const Offset(0, -4000));
     await wait(1400);
     expect(find.byKey(const Key('read-delete')), findsOneWidget);
-    expect(find.byKey(const Key('read-share')), NotYet.sharing ? findsNothing : findsWidgets);
+    expect(find.byKey(const Key('read-share')), findsWidgets);
     await shot('07-reading-end');
 
     // ---- back from reading: home ----

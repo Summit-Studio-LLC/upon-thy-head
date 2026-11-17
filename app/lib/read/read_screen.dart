@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
-import '../not_yet.dart';
 import '../data/blessing.dart';
 import '../share/links.dart';
 import '../share/share.dart';
@@ -258,9 +257,8 @@ class ReadLayerState extends State<ReadLayer> {
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             IconBtn(key: const Key('read-back'), icon: Glyph.older, color: p.ink, palette: p, semantics: Strings.back, onTap: widget.onBack),
             Row(mainAxisSize: MainAxisSize.min, children: [
-              // a draft has not been reviewed, so it cannot leave the phone yet; on Android, sending
-              // is not built yet (not_yet.dart), so there is no share button at all
-              if (b != null && !b.draft && widget.share != null && !NotYet.sharing)
+              // a draft has not been reviewed, so it cannot leave the phone yet
+              if (b != null && !b.draft && widget.share != null)
                 IconBtn(key: const Key('read-share'), icon: Glyph.share, color: p.ink, palette: p, semantics: Strings.share, onTap: () => setState(() => _sharing = true)),
               LightTextBtn(
                 key: const Key('read-edit'),
@@ -372,7 +370,7 @@ class ReadLayerState extends State<ReadLayer> {
             PillBtn(key: const Key('read-review'), label: Strings.reviewThis, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: widget.onReview),
           ],
           // passed along: sending it is what this page is for
-          if (!b.draft && b.ownership == Ownership.passingOn && widget.share != null && !NotYet.sharing) ...[
+          if (!b.draft && b.ownership == Ownership.passingOn && widget.share != null) ...[
             const SizedBox(height: 22),
             if (b.sent != null) ...[
               Text(Strings.sentOn(b.sent!.toLocal()), key: const Key('read-sent'), style: sans(14, 20, p.ink2)),

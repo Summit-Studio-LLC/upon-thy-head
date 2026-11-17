@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../data/blessing.dart';
+import '../not_yet.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
@@ -169,7 +170,8 @@ class ShareSheetState extends State<ShareSheet> {
   void _copy() {
     final url = _url;
     if (url == null) return;
-    unawaited(Clipboard.setData(ClipboardData(text: url)));
+    // Android: marked sensitive, so its copy preview shows dots, never the link (which holds the key)
+    unawaited(Phone.android ? NativeShareApi.copySensitive(url) : Clipboard.setData(ClipboardData(text: url)));
     _copiedTimer?.cancel();
     setState(() => _copied = true);
     SemanticsService.sendAnnouncement(View.of(context), Strings.linkCopied, TextDirection.ltr);
@@ -217,13 +219,29 @@ class ShareSheetState extends State<ShareSheet> {
         ShareStep.offline || ShareStep.trouble => _noLink(p),
       };
 
-  Widget _wordsRow(Palette p) => Row(children: [
-        Expanded(child: Text(Strings.onlyWords, style: sans(14, 19, p.ink3))),
-        const SizedBox(width: 8),
-        _Chip(key: const Key('share-text'), palette: p, icon: Glyph.text, label: Strings.textChip, onTap: () => _words(pdf: false)),
-        const SizedBox(width: 8),
-        _Chip(key: const Key('share-pdf'), palette: p, icon: Glyph.pdf, label: Strings.pdfChip, onTap: () => _words(pdf: true)),
-      ]);
+  Widget _wordsRow(Palette p) {
+    final text = _Chip(key: const Key('share-text'), palette: p, icon: Glyph.text, label: Strings.textChip, onTap: () => _words(pdf: false));
+    final pdf = _Chip(key: const Key('share-pdf'), palette: p, icon: Glyph.pdf, label: Strings.pdfChip, onTap: () => _words(pdf: true));
+    final style = sans(14, 19, p.ink3);
+    final label = Text(Strings.onlyWords, style: style);
+    // at the largest text and display sizes the label goes above the two chips (beside them it was
+    // squeezed to a letter or two a line); measured, because Android scales text non-linearly
+    return LayoutBuilder(builder: (context, c) {
+      final tp = TextPainter(
+          text: TextSpan(text: Strings.onlyWords, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context))
+        ..layout();
+      if (tp.width > c.maxWidth * .45) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          label,
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: [text, pdf]),
+        ]);
+      }
+      return Row(children: [Expanded(child: label), const SizedBox(width: 8), text, const SizedBox(width: 8), pdf]);
+    });
+  }
 
   Widget _foot(Palette p) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const SizedBox(height: 22),

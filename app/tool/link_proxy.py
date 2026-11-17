@@ -8,6 +8,7 @@ outside its own header, ever left the phone.
     tool/link_proxy.py <listen port> <website port> <log file>
 """
 import base64
+import gzip
 import http.client
 import json
 import sys
@@ -35,6 +36,10 @@ class Forward(BaseHTTPRequestHandler):
             c.close()
         except OSError:
             pass  # the website is stopped: a non-JSON 502, which the app treats as no internet
+        def plain(data, hs):  # the answer as the app reads it (the website compresses it)
+            if any(k.lower() == "content-encoding" and "gzip" in v for k, v in hs):
+                data = gzip.decompress(data)
+            return data.decode(errors="replace")
         with lock, open(LOG, "a") as f:
             f.write(json.dumps({
                 "method": self.command,
@@ -42,6 +47,9 @@ class Forward(BaseHTTPRequestHandler):
                 "headers": dict(self.headers.items()),
                 "body": base64.b64encode(body).decode(),
                 "status": status,
+                # the service's answer to a create: the id and stop token, so the script can follow
+                # each stop token through every later request
+                **({"answer": plain(answer, headers)} if self.command == "POST" else {}),
             }) + "\n")
         self.send_response(status)
         for k, v in headers:

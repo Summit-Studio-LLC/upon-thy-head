@@ -111,7 +111,8 @@ abstract class ShareApi {
   Future<void> clean();
 }
 
-/// iOS: ios/Runner/Share.swift, on `upon_thy_head/share`.
+/// iOS: ios/Runner/Share.swift; Android: android/app/src/main/kotlin/…/ShareChannel.kt; on
+/// `upon_thy_head/share`.
 class NativeShareApi implements ShareApi {
   static const _channel = MethodChannel('upon_thy_head/share');
 
@@ -155,6 +156,9 @@ class NativeShareApi implements ShareApi {
       debugPrint('share: $e');
     }
   }
+
+  /// Android: the link onto the clipboard marked sensitive (ClipDescription.EXTRA_IS_SENSITIVE).
+  static Future<void> copySensitive(String text) => _channel.invokeMethod<void>('copy', {'text': text});
 
   /// Tests: whether the system share sheet is up, and the paper this phone's region uses.
   static Future<bool> debugShowing() async => await _channel.invokeMethod<bool>('debugShowing') ?? false;

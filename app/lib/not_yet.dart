@@ -35,9 +35,6 @@ abstract final class NotYet {
   /// until words are written from it. The first run's practice is skipped (it shows only the words).
   static bool get words => _a;
 
-  /// Sending a blessing (task 13): the reading page has no share button meanwhile.
-  static bool get sharing => _a;
-
   /// Listening back with the phone locked (task 18). The review page's player works on screen;
   /// leaving the app pauses it.
   static bool get lockedListening => _a;

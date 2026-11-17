@@ -17,7 +17,8 @@ import io.flutter.plugin.common.MethodChannel
  *
  * Built so far: recording (SpeechChannel, SegmentRecorder, RecordingService), listening back on the
  * review page (PlayerChannel), keeping the screen awake while a recording listens, the link's
- * cryptography (LinkChannel), the app lock and the recent-apps cover (LockChannel), approximate
+ * cryptography (LinkChannel), sharing and receiving blessings by link, text, PDF and file
+ * (ShareChannel, BlessingFiles), the app lock and the recent-apps cover (LockChannel), approximate
  * location (LocationChannel), the version, and opening this app's page in the system Settings.
  * Everything else is a stand-in that answers safely, so nothing crashes and nothing pretends to
  * work: see [NotYet] and "Stand-ins" in docs/android-plan.md, which names the task that replaces each.
@@ -29,11 +30,14 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     companion object {
         private const val ENGINE = "main"
+        private var registered = false
+    }
 
-        /** Links waiting for the Dart side, and whether it has asked for them yet (once per engine). */
-        private var listening = false
-        private val waitingLinks = mutableListOf<String>()
-        private var shareChannel: MethodChannel? = null
+    @Deprecated("Android's share sheet is started for a result, to hear when it closes")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ShareChannel.REQUEST) ShareChannel.closed()
     }
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? = FlutterEngineCache.getInstance().get(ENGINE)
@@ -72,6 +76,13 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // with the lock on, recent apps never shows the app (a new activity is told again)
         LockChannel.apply(this)
+        if (!registered) {
+            ShareChannel.register(applicationContext)
+            registered = true
+        }
+        // the link or file this activity was opened with; not again when Android recreates it (it
+        // keeps the old intent) or when it is reopened from recent apps
+        if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) receive(intent)
         // Upright on phones; tablets turn freely, as the iPad does. (Android 16 ignores a fixed
         // orientation on large screens anyway.)
         if (resources.configuration.smallestScreenWidthDp < 600) {
@@ -86,15 +97,15 @@ class MainActivity : FlutterActivity() {
         return if (u.path?.startsWith("/b/") == true) u.toString() else null
     }
 
-    /** Handed to Dart whole, fragment and all; never logged (it holds the key). */
-    private fun receiveLink(link: String) {
-        val c = shareChannel
-        if (listening && c != null) c.invokeMethod("incoming", mapOf("link" to link)) else waitingLinks.add(link)
+    /** A blessing link (handed to Dart whole, fragment and all; never logged: it holds the key) or a
+     *  blessing file (VIEW from Files, Gmail, WhatsApp; SEND into the app) this intent carries. */
+    private fun receive(i: Intent?) {
+        ShareChannel.incoming(this, i, linkOf(i))
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        linkOf(intent)?.let(::receiveLink)
+        receive(intent)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -116,18 +127,8 @@ class MainActivity : FlutterActivity() {
         PlayerChannel.get(this).channel = player
         MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(applicationContext))
         val share = MethodChannel(m, "upon_thy_head/share")
-        shareChannel = share
-        share.setMethodCallHandler { call, result ->
-            // blessing links that opened the app (the files and the sending are task 13 and 14)
-            if (call.method == "receiving") {
-                listening = true
-                result.success(waitingLinks.map { mapOf("link" to it) })
-                waitingLinks.clear()
-            } else {
-                NotYet.share(call, result)
-            }
-        }
-        linkOf(intent)?.let(::receiveLink)
+        ShareChannel.channel = share
+        share.setMethodCallHandler { call, result -> ShareChannel.handle({ this }, applicationContext, call, result) }
         MethodChannel(m, "upon_thy_head/check").setMethodCallHandler(NotYet::check)
         // upon_thy_head/language_menu/<id> is never called here: on Android the Dart side draws the
         // language menu itself (lib/record/language_menu.dart).
@@ -161,19 +162,6 @@ class MainActivity : FlutterActivity() {
 object NotYet {
     private fun no(result: MethodChannel.Result, what: String) =
         result.error("unavailable", "$what is not built on Android yet", null)
-
-    /** Sharing and receiving blessings: tasks 13 and 14. */
-    fun share(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "text", "pdf", "file", "link" -> no(result, "Sharing")
-            "receiving" -> result.success(emptyList<Any>())
-            "dismiss", "clean" -> result.success(null)
-            "debugShowing" -> result.success(false)
-            "debugPaper" -> result.success("")
-            "debugItems", "debugReceivedLeft" -> result.success(emptyList<Any>())
-            else -> result.notImplemented()
-        }
-    }
 
     /** The phone check page (test builds only): an Android version is its own task. */
     fun check(call: MethodCall, result: MethodChannel.Result) = no(result, "The phone check")

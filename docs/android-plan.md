@@ -180,23 +180,45 @@ Ask only for `ACCESS_COARSE_LOCATION`. Android then never offers precise locatio
 
 ## 7. Sharing
 
-**Text:** the standard share sheet. Easy.
+*Rewritten 2026-11-17 for the ruling "Sharing is by link, for everyone" (decisions, 2026-11-16) and built as tasks 13 and 14. The earlier version of this section put the `.blessing` file first; the ruling makes the file the fallback for no internet only.*
 
-**PDF:** Android's `PdfDocument` draws pages with the same drawing tools as the screen and accepts a font file. Newsreader can be loaded from the Flutter assets, so the PDF matches iPhone's *(confident; Newsreader's variable weight axis needs checking)*. Port `Share.swift`'s layout code: about a day.
-- One difference: Android's share sheet does not reliably say when it has closed *(unconfirmed)*. The iPhone app deletes the shared file when the sheet closes; on Android, clean the share folder at the next launch and when the app returns to the front. This is already done at launch on iPhone (`clean`).
+**What the person sees** is the iPhone's S3 sheet, drawn by the shared Dart code (`lib/share/share_sheet.dart`): a card of the blessing, the gold **Send this blessing**, and **Only the words** with Text and PDF. The native half is `ShareChannel.kt`, answering the iPhone's `upon_thy_head/share` methods with the same keys and answers.
 
-**Sending a `.blessing` file:** written to a private folder and handed over through a `FileProvider` with the MIME type `application/vnd.uponthyhead.blessing`. Easy.
+**A link** (`website/PROTOCOL.md`): the record is locked on the phone (`LinkChannel.kt`, javax.crypto AES-256-GCM, a new key each time), only the locked copy goes to the service, the key stays after the `#`, and the stop token is kept wrapped by an Android Keystore key. Once made, the sheet shows the link with **Copy link** and **Send the link**.
+- **Send the link** opens Android's own share sheet (`Intent.createChooser`) with an `ACTION_SEND` of type `text/plain` whose text is the link alone, so Messages, WhatsApp and Gmail make it a link. The blessing's title is the sheet's heading (`EXTRA_TITLE`); there is no subject, which some messaging apps turn into an MMS.
+- **Copy link** puts it on Android's clipboard marked sensitive (`ClipDescription.EXTRA_IS_SENSITIVE`), so Android's copy preview shows dots, never the link; the clipboard then behaves as Android's own does.
+- The share sheet is started for a result, so the app hears when it closes and can close it itself when it locks; while it is up, losing focus to it is not leaving the app (no cover), as on iPhone where the sheet is part of the app.
 
-**Receiving a `.blessing` file** is the fiddly part:
-- **Filters:** the app declares filters for "open" (`VIEW`) on:
-  - its own type,
-  - `application/octet-stream` (the "unknown binary file" type),
-  - and, as a safety net, files whose name ends in `.blessing`.
-- **No type, no name:** Gmail attachments arrive as `application/octet-stream` with a content address that carries **no file name or extension** *(community reports, several years old; unconfirmed today)*. Some Samsung file managers send no type at all *(same)*.
-- **The cost:** the app may appear in the "Open with" list for any unknown file. That is acceptable only because the app reads the first bytes and refuses anything that is not `"format": "upon-thy-head/blessing"`, with the existing message "This file could not be read." It also means "Open with Upon Thy Head" could be shown for a ZIP or other binary file; the strict reader handles it.
-- **Share into the app:** add `SEND` too, so "Share → Upon Thy Head" works from WhatsApp and Gmail, whose own "open" button may not offer the app.
-- **What carries over from iPhone:** the rest (strict reading, not while locked, not during a recording, read first on first launch) is Dart and does not change.
-- **Each source must be tried on a real phone:** Quick Share's received-file notification, the Files app, Gmail, WhatsApp and Samsung My Files.
+**Only the words:** Text is the same `text/plain` hand-over. The PDF is the iPhone's document, ported from `Share.swift` to `PdfDocument` (`SharedPdf` in `ShareChannel.kt`): Letter or A4 by region, an inch of margin, Newsreader from the Flutter assets at weight 400 with the optical size following the size, old-style figures, the iPhone's measures, widows and orphans kept off, a footer from page 2. Android's PDF writer embeds the font, subset, so the text is real.
+
+**Files leave through the app's own provider** (`BlessingFiles.kt`, a read-only `ContentProvider` on one folder, `cache/share/`, not exported, readable only with the grant on the share intent): no storage permission is asked. It is AndroidX's FileProvider cut to size, with one difference that matters: a `.blessing` file reports `application/vnd.uponthyhead.blessing`, where FileProvider would say `application/octet-stream`. Files stay until the next share or the next launch (Gmail reads an attachment when the mail is sent, so removing it when the sheet closes could empty the mail).
+
+**No internet, or no service:** the iPhone's one line ("No internet, so a link cannot be made now.") and **Send as a file**: the `.blessing` file, named "<title>, <date>.blessing", typed `application/vnd.uponthyhead.blessing`. This is the only place the file is offered.
+
+**Receiving a link:** the manifest's verified filter for `https://uponthyhead.app/b/` hands the link, fragment and all, to the Dart code iPhone uses (`lib/share/links.dart`): fetched, opened with its key, the keep sheet, and every refusal. See "When the site goes live" below for what turns it on.
+
+**Receiving a `.blessing` file:** `ShareChannel.incoming` reads up to 512 KB from the `content://` (or `file://`) address on a background thread and hands the bytes to the strict Dart reader. The filters, as narrow as still catches one sent by Gmail and WhatsApp:
+1. `VIEW` of `application/vnd.uponthyhead.blessing` (this app's files and an iPhone's carry it);
+2. `VIEW` of `application/octet-stream` from a `content://` address (Gmail can hand over an attachment whose type it does not know, with no name; the Files app says octet-stream for any extension Android does not know, `.blessing` included);
+3. `VIEW` with no type at all, by a name ending `.blessing`;
+4. `SEND` of the app's own type only ("Share → Upon Thy Head").
+- **What the person sees:** "Upon Thy Head" is offered under "Open with" for unknown binary files, never for pictures, PDFs, text, archives with a known type, or anything with a type of its own; it is not in the share list for unknown files. Opening something that is not a blessing says "This file could not be read." The rest (not while locked, not during a recording, first launch) is the shared Dart code.
+
+**When the site goes live** (Android opens `https://uponthyhead.app/b/…` in the app only after it verifies the site):
+1. The release signing key's SHA-256 fingerprint: Play Console → the app → Test and release → App integrity → App signing → "App signing key certificate", SHA-256. (With Play App Signing the key that signs what people install is Google's, not the upload key, so it must be that one. Add the upload key's too while testing builds installed outside Play.)
+2. Serve `https://uponthyhead.app/.well-known/assetlinks.json` (the website's `app/.well-known/assetlinks.json/route.ts`), `Content-Type: application/json`, no redirect:
+
+        [{
+          "relation": ["delegate_permission/common.handle_all_urls"],
+          "target": {
+            "namespace": "android_app",
+            "package_name": "dev.summitstudio.uponthyhead",
+            "sha256_cert_fingerprints": ["<AA:BB:…:FF, the 32-byte fingerprint from step 1>"]
+          }
+        }]
+
+3. Check from a phone with the release build: `adb shell pm verify-app-links --re-verify dev.summitstudio.uponthyhead`, then `adb shell pm get-app-links dev.summitstudio.uponthyhead` must show `uponthyhead.app: verified`. Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://uponthyhead.app&relation=delegate_permission/common.handle_all_urls`.
+4. Then on a real phone: a link tapped in Messages, Gmail and WhatsApp opens the app, with the `#` part intact (proved here only from the moment Android hands it over: `am start -a android.intent.action.VIEW -d 'https://uponthyhead.app/b/<id>#<key>' dev.summitstudio.uponthyhead`).
 
 **Quick Share with iPhone (AirDrop):** Google's own list of Android phones that can send to and receive from an iPhone **(Google)** [Quick Share with iPhone](https://www.android.com/quick-share/with-iphone/):
 - **Pixel:** 10, 10 Pro, 10 Pro XL, 10 Pro Fold, 10a; 9, 9 Pro, 9 Pro XL, 9 Pro Fold, 9a; 8a.
@@ -355,7 +377,41 @@ The scripted run is `app/tool/android_lock.sh <avd> [--only 2,3,6,9]`: it builds
 
 **Pixel 3a, Android 14 (the AVD is `Pixel_3a_API_34_extension_level_7_arm64-v8a`), the same script:** 25 of 25: steps 1, 2, 3, 6, 7 and 9 as above; the recent-apps card plain with the lock on (`86`), the app as it is with it off (`87`), locked (`88`), first run answered (`89`); Begin 0.30–0.32 s; with location off for the phone the app answered "none (location off)" in 0 ms (its own log). Android 14's prompt has no Cancel button ("Tap to cancel authentication", or back); the app behaves the same.
 
+**Two ways the lock failed open, fixed 2026-11-17 (found by a security review of the task 11 commit).** Both in `LockChannel.kt`; `tool/android_lock.sh Pixel_10_Pro --only p,s,9` run once afterwards.
+
+- *Leaving while one of Android's permission questions was up was not counted as leaving.* `left()` (from `onStop`) skipped the clock and the cover whenever a question or the unlock prompt was up, so Home pressed over the location question left the app unlocked for as long as it was away. Now `onStop` always notes the time and places the cover; the exemption stays only in `focus()` (a question taking focus is not leaving). The unlock prompt itself never stopped the activity on either emulator (it only takes focus), so the change cannot lock a person out mid-prompt. *Proved by step p:* the location question opened from Settings, Home, 68 s away, back: behind the question, which Android still shows, the app is already the locked sky, with no blessing on screen; answering the question leaves "Locked" and **Unlock** (the prompt does not open by itself because Android's question was on top when the app asked; one tap on Unlock brings it). **Not met:** recent apps does not show the plain card at that moment. It shows Android's question over the screen that asked (here Settings: "To pass along 0", nothing of a blessing). The question is the permission controller's own activity on top of the app's task, and Android takes its picture; the app's "no screenshot" setting covers only the app's own windows. Questions are asked only from first run, Settings, and Begin, none of which shows a blessing's words. See section 14, question on recent apps.
+- *The cover lifted before the lock was decided when Dart was slow or failed.* `tell()` lifted the cover on an error, on "not implemented", and after 1.5 s regardless. Now it lifts on Dart's answer however late. On an error, "not implemented" or the 1.5 s limit, it lifts only when the return cannot lock: not a return from the background, or away under 30 s (half of the 60 s `lockAfter`, so a clock read a little early or late, or a rule changed in Dart, can never turn a locking return into one that lifts unasked). *Proved by step s,* with a debug-only hook (`files/slow_active`, read only in debuggable builds) that holds Dart's answer back 6 s: away 70 s, 3 s after return the screen is still the plain ground (spread 0.000); the late answer then locks and its prompt shows; after the unlock the cover is gone. 3 of 3.
+- Step 9 of that run stopped at its start (the launcher was showing when it looked for the app, after step p's permission reset ended the app); it passed in the 25-of-25 runs before the fixes. In the first run after them, its two failures came from the first version of step p leaving the microphone refused, and the five steps 1, 2, 3, 6 and 7 passed 18 of 18 with the fixes in.
+
 **iPhone after this work:** `flutter analyze` clean, 309 unit tests pass. On the clean simulator, shut down and booted before each: the `home` integration test, `drafts_acceptance.sh`, `share_acceptance.sh`, `file_acceptance.sh` and `first_run_acceptance.sh <udid> all` pass. **Not run**, because the Mac's audio service is still stuck ("the recorder would not start", above): the iPhone lock, record, recovery, polish, speech, Spanish and link runs. No iPhone string was changed.
+
+### Built 2026-11-17: sending and receiving (tasks 13 and 14)
+
+**What was built.** `ShareChannel.kt` answers the iPhone's `upon_thy_head/share` channel with the same methods and keys, so every rule is the Dart one iPhone uses (the S3 sheet, `lib/share/`). Links are made in Dart as on iPhone (AES-256-GCM, a new key per link, the key after `#`; `website/PROTOCOL.md`); the service address is the one constant `linkService` with the `LINK_SERVICE` build-time override.
+- **Copy link**: Android's clipboard, marked `EXTRA_IS_SENSITIVE`, so Android 13+ shows "Content copied" without the link in its preview, as it does for passwords. The app keeps no copy of its own.
+- **Send the link**: Android's share sheet (`ACTION_SEND`, `text/plain`, the link alone, the title as the sheet's heading). The app hears when the sheet closes (`startActivityForResult`) and what was chosen (the chooser's callback); "Stop" and the Sent sheet follow as on iPhone.
+- **Text and PDF**: the text through the same sheet; the PDF laid out as iPhone's (`SharedPdf`: Letter in the US and Canada, A4 elsewhere, an inch of margin, the same headings, widow and orphan rules and footer), written to `cache/share/` and handed over through the app's own read-only provider (`BlessingFiles.kt`, `content://dev.summitstudio.uponthyhead.files/share/…`, granted to the receiving app only for that share). No storage permission is asked or declared.
+- **No internet**: the one line "No internet, so a link cannot be made now." and **Send as a file**: the `.blessing` file through the same provider, named "<title>, <date>.blessing", type `application/vnd.uponthyhead.blessing`. Under it Android says "It opens only in Upon Thy Head." and, as the file row's hint, "Opens in Upon Thy Head on another phone." (`asFileHintAndroid`; iPhone's "…another iPhone." unchanged).
+- **Receiving a link**: `https://uponthyhead.app/b/…` with `autoVerify` (section 7). The fragment arrives whole. Cold, background and during a recording (the sheet waits until after Amen), behind the app lock (task 11).
+- **Receiving a file**: the narrowest filters that still catch a blessing: `VIEW` of its own type; `VIEW` of `application/octet-stream` from `content://` (Gmail and most mail apps report that for a type they do not know); `VIEW` with no type and a name ending `.blessing`; `SEND` of its own type. Not offered for pictures, PDFs, zips, or for sharing any unknown file. Read on a thread, at most 512 KB; anything else is "This file could not be read."
+- **Cleartext**: refused in release (`usesCleartextTraffic="false"` and `res/xml/network_security_config.xml`); the debug build alone (`src/debug/res/xml/`) allows `10.0.2.2`, `127.0.0.1` and `localhost`. Dart's `HttpClient` does not read Android's config, so `HttpLinkService` itself refuses any address that is not `https`, except `http` in debug builds. *Proved by* the merged release manifest (`build/app/intermediates/merged_manifest/release/…`: `android:usesCleartextTraffic="false"`, `android:networkSecurityConfig="@xml/network_security_config"`) and the merged release config (`<base-config cleartextTrafficPermitted="false" />`, no `10.0.2.2` anywhere in the release resources).
+
+**Proved by `tool/android_share.sh`** (steps 1, 3, 5, 6 and 8 unattended, plus 9, 4 and 10; every step has a limit; the website runs on 4319 with a temporary store, `tool/link_proxy.py` on 4320 writes down every request). Pixel 10 Pro, Android 17; the numbers are those of `design/sim/android/`:
+1. "Comfort before surgery": the S3 sheet (`90`), Link made (`91`), Copy (the clipboard read back equal, marked sensitive), Android's share sheet holding the one link (`92`; pair `pair-23-share-sheet.png` beside iPhone's), handed over as `text/plain` with nothing else. The link opened in Chrome on this Mac: the four paragraphs character for character (`93`).
+2. Every request the app made, read back: no key in any address, header or body; each stop token only in its own stop's `Authorization` header (12 requests: 2 creates, 1 stop, 9 fetches).
+3. The phone's data cleared so it becomes the receiver. The link: "You already have this blessing." (`103`). Deleted, then the link: the keep sheet (`101`; pair `pair-24-keep-sheet.png`), Keep, the reading page (`102`); the record as sent, field for field, its five changes, its tags, its place to a tenth of a degree (40.2, −111.7). Refusals, each with its own words: key missing (`104`), a different copy (Keep mine / Replace mine, `105`), made by a newer version (`106`), a wrong key (`107`), expired ("This link has stopped working."), no internet ("This blessing is on its way.", `108`). The contract's first vector opens.
+4. A link arriving with the app closed, in the background, and during a recording: nothing shows while recording (`109`), the keep sheet after Amen. (The phone's own lock screen: see the Pixel 3a below.)
+5. "Your links" (`97`), Stop: "Stopped November 17" (`98`); the web page then says the link has stopped (`99`); opened in the app: "This link has stopped working." (`100`).
+6. No internet: the one line and Send as a file (`110`); handed over as `application/vnd.uponthyhead.blessing` through the provider (`111`); the shell, which has no grant, is refused ("Permission Denial"); the file pulled off is a valid blessing file; the app uninstalled and reinstalled, the blessing deleted, the file tapped in Files: the keep sheet (`113`), kept with the words as sent.
+8. Android's own resolver (`cmd package query-activities`, as any app opening a file asks): the app is offered for its own type, `octet-stream` from `content://`, and a name ending `.blessing` with no type (both `file://` and `content://`); not for a picture, a PDF, a zip, or sharing an unknown file. In the Files app the emulator asks **Open with**: Upon Thy Head, Google Wallet, Google, then Just once / Always (`112`), because Wallet also takes `octet-stream`; then "You already have this blessing." (`114`). A zip renamed `Notes.zzz` opened with the app, and a `.blessing` that is not one: "This file could not be read." (`115`).
+9. Text: the share sheet holds the title, date and words. PDF: handed over as `application/pdf` through the provider; Newsreader at every size, Letter, nothing past the margins, no footer on a one-page blessing, searchable ("in the name" found) (`96`). **Fails one check:** Android's PDF writer (Skia) cannot embed a variable font, so it draws Newsreader's glyphs as Type 3 shapes. The page looks right and searches, but text copied out of it comes apart ("u pon yo r head"). The fix is static instances of Newsreader for the PDF alone (section 14).
+10. Spanish (`116`–`119`) and the largest font and display size, Spanish (`120`–`123`) and English (`124`–`127`): the S3 sheet, Link made, Your links, the keep sheet. **Found and fixed:** at the largest sizes the S3 sheet ran off the top of the screen and "Only the words" was squeezed to a letter a line. Every sheet (`lib/widgets/sheet.dart`) is now never taller than the screen and scrolls inside, and "Only the words" goes above Text and PDF when it would take more than 45% of the row. At ordinary sizes nothing moves; iPhone gets the same fix at its largest sizes.
+
+**Pixel 3a, Android 14** (steps 1, 9, 3, 6 and 4; `133`–`142`): 30 of 31, the one failure the same PDF text fault. Copy is marked sensitive and read back on Android 14 too. Step 4 there also covered **the phone's own lock screen**: a link arriving with the screen off and locked opens nothing until the phone is unlocked, then the keep sheet (`141`).
+
+**iPhone after this work:** `flutter analyze` clean, 309 unit tests pass, and on the clean simulator `share_acceptance.sh` and `file_acceptance.sh` both "ALL PHASES PASSED". Not run on iPhone: `link_acceptance.sh` and the other acceptance scripts (outside the brief's list); the sheet height and words-row change was proved on iPhone only through those two scripts (accessibility-medium text size), not at the largest sizes.
+
+Debug builds only, the app writes to Android's log what it handed over (type, kind, address, length; never the words or the link) and what it read back after Copy (length, equal, sensitive), so the script can check them.
 
 ### Stand-ins (what Android says until each task lands)
 
@@ -364,14 +420,14 @@ Every iPhone channel has an Android answer in `MainActivity.kt` (`NotYet`) that 
 | Stand-in | What the person sees | Replaced by |
 |---|---|---|
 | Writing the words | Recording is real (tasks 4–7). After Amen: "The recording is kept" and "The words will be written on this phone in a coming version of the app. The recording stays here until then."; the blessing is a draft (counted by the drafts badge, marked `WordsStatus.later`). Its review page has the player and the same line ending "You can also type them here." The recording is never erased while its words are still to come (see **The audio rule** below). The first run's practice is skipped. The welcome page still says "The words are written on this phone." (section 14, question 13) | Tasks 8–10 (the seam: `transcribe` in `SpeechChannel.kt`) |
-| Sharing | The reading page has no share button, so no link or file is sent from Android. The link's cryptography is already real (`LinkChannel.kt`: AES-256-GCM from `javax.crypto`, stop tokens wrapped by an Android Keystore key, proved against `website/protocol-vectors.json` on the emulator by `integration_test/link_test.dart`); the share channel answers `link` with not-yet | Task 13 |
-| Receiving `.blessing` files | Nothing registered | Task 14 |
-| Receiving a link | The manifest has the verified `https://uponthyhead.app/b/` filter and `MainActivity` hands the link to Dart as iPhone does, but Android only opens it in the app once the site serves `/.well-known/assetlinks.json` with the release key's fingerprint; until then the link opens the web page | When the site goes live |
+| Receiving a link from another app | The app's handling is real (task 13, from the moment Android hands it the link). A link tapped in Messages or Gmail opens the web page instead until the site serves `/.well-known/assetlinks.json` with the release key's fingerprint (section 7, "When the site goes live"); the web page reads it too | When the site goes live |
 | Listening back with the phone locked | The review page's player works on screen (play, pause, back 10 s, the scrubber); leaving the app pauses it | Task 18 |
 | The phone check page (test builds) | Answers "unavailable" | Its own task, not yet numbered |
 | The recording-language menu | Tap to cycle languages (Flutter has no menu matching iOS's) | With tasks 8–10, when the language decides which words are written |
 
-**Wording still written for iPhone** and needing an Android version when its feature lands (all in `lib/strings.dart`; iPhone's wording stays as is): `asFileHint` ("another iPhone"), the phone check's strings, the speech row's strings.
+**Wording still written for iPhone** and needing an Android version when its feature lands (all in `lib/strings.dart`; iPhone's wording stays as is): the phone check's strings, the speech row's strings.
+
+*Done with tasks 13 and 14:* `asFileHint` (Android: `asFileHintAndroid`, "Opens in Upon Thy Head on another phone." / "Se abre en Upon Thy Head en otro teléfono."; no screen shows it today, the S3 sheet having replaced the sheet that did). The rest of the sharing words already said "this phone", never "iPhone". `NotYet.sharing` is gone.
 
 *Done with tasks 11 and 12:* `noPasscode` (Android: `noScreenLock`), `faceIdWhy` (Android: `lockWhyAndroid`, "To keep your blessings locked. Allow turns it on and asks once."), the Face ID / Touch ID names (Android: `screenLock`, `fingerprintOrScreenLock`), `lockHint` (Android: `lockHintAndroid`, "Asks for your fingerprint or screen lock…" / "Asks for your screen lock…"), and `settingsFor` for the lock row (`settingsForScreenLock`, "Open Settings to set a screen lock"). `openSettings` ("Open Settings" / "Abrir Configuración") and `stillNeeded` were already right on Android: Android's Settings app is "Settings" / "Configuración" on a Pixel, and only the microphone is required there, so `stillNeeded` only ever says "Allow the microphone to go on." "Not available on this phone yet." (`notYetOnThisPhone`, `lockNotYet`, `locationNotYet`) is gone.
 
@@ -389,8 +445,8 @@ Every iPhone channel has an Android answer in `MainActivity.kt` (`NotYet`) that 
 10. **Paragraphs from pauses.** Proved by: a recording with 3-second gaps gives paragraph breaks where iPhone does.
 11. **The app lock and recent apps. Done 2026-11-17.** Proved by: on the emulator, a fingerprint enrolled and touched from adb (`adb emu finger touch 1`) unlocks; locks after 60 s away; never locks during a recording; the recent-apps view shows plain colour. *As proved:* see **Built 2026-11-17: the lock, recent apps, location**, steps 1–8 and 10–12.
 12. **Location and the first-run screen. Done 2026-11-17.** Proved by: a fresh install walks the four rows and each system question; refusing location falls back to the Salt Lake Temple. *As proved:* the same block, steps 1, 9 and 11.
-13. **Share text, PDF and `.blessing`.** Proved by: the PDF opens in Files with Newsreader embedded; a `.blessing` file opens on a second emulator.
-14. **Receiving a `.blessing` file.** Proved by: opening from Files and from a `content://` source with `application/octet-stream` works on the emulator; a non-blessing binary file gets "This file could not be read."
+13. **Sharing: the link, text, PDF and `.blessing`. Done 2026-11-17, except the PDF's text (below).** Proved by `tool/android_share.sh` against the website on this Mac; see **Built 2026-11-17: sending and receiving (tasks 13 and 14)**.
+14. **Receiving a link and a `.blessing` file. Done 2026-11-17.** Proved by the same script, steps 3, 4, 5 and 8; the same block.
 15. **Real phone: speech measurements** (section 3.4, items 1–7). Proved by: a table of error rate and time per engine and language, written into this document.
 16. **Whisper as a download you agree to** (only if 15 says it is needed). Proved by: on the mid-range phone, a 10-minute Spanish blessing written within a time Noah accepts, in airplane mode.
 17. **Real phone: receiving from Gmail, WhatsApp, Quick Share and Samsung My Files; AirDrop to and from an iPhone.** Proved by: each source opens the keep sheet.
@@ -446,6 +502,13 @@ Tasks 15–17 can start as soon as a phone arrives. Do task 15 early, because it
 15. A real location: an indoor fix through Wi-Fi and cell towers with Google's network location, how long the first fix takes after a reboot, and whether the 6 s limit is enough there. The emulator has no network location and answers through its simulated GPS.
 16. "Only this time" lapsing in real use (Android lets it lapse a short while after the app leaves the screen) and the next blessing keeping the place found.
 
+**Cannot be proven without a real phone** (tasks 13 and 14):
+17. A `.blessing` file arriving through Gmail, WhatsApp, Google Messages and Quick Share: the type and name each keeps, and whether tapping it offers Upon Thy Head. The emulator proves what Android does with each type and name (step 8: its own type, `application/octet-stream`, no type with a name ending `.blessing`), not what each app hands over. Gmail is known to report `application/octet-stream` for attachments it does not know; WhatsApp is known to rename some files.
+18. A link tapped in Messages, Gmail or WhatsApp opening the app: needs the live site's `assetlinks.json` and a Play-signed install (section 7, "When the site goes live"); `pm get-app-links` on the phone then shows `uponthyhead.app: verified`. On the emulator links were handed over as Android hands a verified link (`am start -a VIEW -d https://uponthyhead.app/b/…`).
+19. Locked when a link arrives: the link waiting behind the lock was proven for the recording screen and in task 11 (a blessing arriving waits behind the lock); a link handed over while the phone's own lock screen is up was not run.
+20. Makers' share sheets (Samsung's own, Xiaomi's): that each shows the link as the text, and that Copy in them leaves the link hidden in the clipboard preview as Android's own does.
+21. Opening the PDF in Google Drive's viewer, Samsung Notes and a printer's app: the emulator proves the file (`tool/pdf_check.swift`), not each viewer.
+
 **Which phones:** *(prices and exact models unconfirmed)*
 1. **Pixel 10** (or Pixel 10 Pro). It is on Google's list for both ML Kit Advanced speech and AirDrop with iPhone, it is Google's reference phone, and it gets updates first. Buy this one.
 2. **A mid-range Samsung Galaxy A** (A26 or A36, about $250–400): the phones most families actually own. It tests ML Kit Basic only, Whisper's speed, Samsung's My Files and One UI's battery management. Borrow one if possible.
@@ -482,6 +545,14 @@ If only one phone: the Galaxy A, because it is where the speech plan is most at 
 19. **The Settings row is called "App lock", not "Screen lock".** The method is in the line beneath ("Asks for your fingerprint or screen lock when you open the app"). The brief asked for the name "Screen lock"; "App lock" was kept because it is what the switch does (it locks this app, not the phone), and the same word is used on iPhone. Rename it?
 20. **Phones whose only unlock is the face.** On most Android phones other than recent Pixels, face unlock is rated weak, so the app's prompt offers only the PIN, pattern or password; the row says "Screen lock". Someone who always unlocks by face will type a PIN to open the app. Acceptable?
 21. **The notification shade covers the app.** With the lock on, pulling down the notification shade lays the plain ground over the app until the shade closes, as iPhone covers it for Control Center. Fine?
+
+**Found with tasks 13 and 14:**
+
+22. **A PDF from Android looks right, but its text copies out broken.** Selecting or copying words from the PDF gives "u pon yo r head"; searching still finds them. Android's PDF writer cannot embed Newsreader as it is (one variable font), so it draws the letters as shapes. Fixing it means adding fixed Newsreader fonts for the PDF alone (about 1 MB more in the app). Add them, or ship as is?
+23. **Tapping a `.blessing` in Files asks "Open with": Upon Thy Head, Google Wallet, Google, then Just once / Always.** Wallet also claims unknown files. Once someone taps Always it goes straight to the app. Acceptable?
+24. **Recent apps over Android's own permission question** shows that question over the screen that asked (Settings during the first run; never a blessing). The app's plain card cannot be put under Android's question. Acceptable?
+25. **Android's share sheet shows the whole link, key included,** in its preview at the top; iPhone's shows only the domain. Anyone looking at the screen while sharing could read it. Acceptable (it is the same link that is being sent)?
+26. **Until `/.well-known/assetlinks.json` is live with the release signing key, a link tapped in Messages opens the web page, not the app.** Nothing to decide; a reminder for launch.
 
 ## Sources (first-hand)
 

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 import 'link_format.dart';
 
 /// The link service (website/PROTOCOL.md §4): create, read and stop a locked copy. It only ever
@@ -101,6 +103,12 @@ class HttpLinkService implements LinkService {
 
   Uri _at(String path) => _base.replace(path: path);
 
+  /// Plain HTTP only in a debug build (the website on this Mac in tests). A release or profile build
+  /// given an http address never sends to it: it answers as with no internet. Dart's own HTTP client
+  /// does not follow Android's network security config, so this is the rule for the app's requests;
+  /// the manifest refuses plain HTTP for the rest of the app in release builds.
+  bool get _allowed => _base.scheme == 'https' || (kDebugMode && _base.scheme == 'http');
+
   HttpClient _client() => HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
     ..userAgent = 'UponThyHead'
@@ -108,6 +116,7 @@ class HttpLinkService implements LinkService {
 
   Future<({int status, Uint8List body, HttpHeaders headers})?> _send(String method, Uri url,
       {Uint8List? body, Map<String, String> headers = const {}}) async {
+    if (!_allowed) return null;
     final client = _client();
     try {
       return await () async {
