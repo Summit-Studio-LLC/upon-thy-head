@@ -194,6 +194,56 @@ Noah's ruling: no real Android phone before launch. So the engine has to be one 
 
 **How to repeat this:** the throwaway probe app and scripts are in `~/Development/scratch-uth-speech` (outside the project). `tools/p10.sh` is the Whisper whole-file pass and the recogniser. `tools/p10b.sh` is silences and no carry-over. `tools/p10c.sh` and `p10d.sh` are ML Kit. `tools/wer.py` does the scoring. Each script boots the emulator with `-no-audio -no-snapshot-save`, uninstalls the probe and shuts the emulator down at the end.
 
+**Added 2026-11-17 (afternoon): long files that never repeat, and a real human voice.** These use the same emulator (Pixel_10_Pro, sound off), the same `whisper-cli` binary, the same models and the same settings as "cut at silences, no carry-over" above (`-t 4 -mc 0 --vad -vm ggml-silero-v5.1.2.bin`).
+
+*The files:*
+- `libri_en`: a real human voice. LibriSpeech test-clean, speaker 1320 (an adult man reading *The Last of the Mohicans*), all 59 utterances in order, joined with 1–3 s of silence. 10.0 min, 1,483 words. The text is LibriSpeech's own transcript.
+- `bless_en`: a new English blessing that never repeats, 947 words in 31 paragraphs. The app has only one English sample with words (the 38 s "Comfort before surgery"), and the tests' long blessing (`longWords()` in `integration_test/share_test.dart`) repeats the same 12 sentences. So this file is that sample, then each of those 12 sentences once, then 17 new paragraphs in the same voice, including "thirty one" and the British spelling "neighbours". It was read by `say -r 130` to a file, with pauses of 2.3–7.3 s between paragraphs (135 s in all). The Samantha voice gives 7.9 min, Daniel (British) 8.2 min.
+- `mls_es`: a real human voice in Spanish. Multilingual LibriSpeech (from LibriVox, so public domain), test split, speaker 7678 reading Horacio Quiroga's *Cuentos de amor*: 23 segments in order, with none overlapping, joined with 1–3 s of silence. 5.8 min, 665 words. The reader's accent is not labelled.
+
+*Scoring:* the same as `tools/wer.py` and `lib/check/spoken.dart`. Case is ignored. Punctuation other than `'` becomes a space, so "thirty-one" is two words. **Numbers and spellings are not normalised**: "31" for "thirty one" counts as 1 changed plus 1 left out, and "neighbors" for "neighbours" counts as 1 changed. In the blessing that is 3 of the errors in each run.
+
+| Model | File | How | Took | Peak memory | Wrong per hundred | Left out / changed / invented | First word of a paragraph left out |
+|---|---|---|---|---|---|---|---|
+| base | libri_en (human) | cut | 46 s; 42 s on the second run | 266 MiB | **13.4** (same text on the second run) | 164 / 34 / 1 | 11 of 59 |
+| small | libri_en (human) | cut | 64 s; 68 s | 543 MiB | **15.0** (same text) | 201 / 21 / 1 | 12 of 59 |
+| base | bless_en Samantha | cut | 22 s | 257 MiB | **1.6** | 7 / 8 / 0 | 0 of 31 |
+| base | bless_en Samantha | whole file, pauses in | 20 s | 329 MiB | 16.7 | 149 / 9 / 0 | 6 of 31 |
+| small | bless_en Samantha | cut | 45 s | 522 MiB | 2.3 | 18 / 4 / 0 | 0 of 31 |
+| small | bless_en Samantha | whole file, pauses in | 56 s | 595 MiB | 14.6 | 134 / 4 / 0 | 6 of 31 |
+| base | bless_en Daniel | cut | 21 s; 21 s | 259 MiB | **2.3** (same text) | 14 / 8 / 0 | 1 of 31 |
+| base | bless_en Daniel | whole file, pauses in | 20 s | 331 MiB | 18.9 | 161 / 18 / 0 | 6 of 31 |
+| small | bless_en Daniel | cut | 43 s; 42 s | 524 MiB | 11.3 (same text) | 104 / 3 / 0 | 5 of 31 |
+| small | bless_en Daniel | whole file, pauses in | 59 s | 597 MiB | 24.2 | 225 / 4 / 0 | 10 of 31 |
+| base | mls_es (human) | cut | 17 s; 16 s | 244 MiB | **28.7** (same text) | 152 / 34 / 5 | 5 of 23 |
+| small | mls_es (human) | cut | 37 s; 39 s | 509 MiB | **12.2** (same text) | 59 / 22 / 0 | 3 of 23 |
+
+Most rows are a single run. The odd-looking rows (the human voices, and small on Daniel) were run a second time (`runs/p10f`). Each wrote exactly the same text, so Whisper is deterministic here. Its errors come from the file, not from chance.
+
+*What the errors are like (base, cut at silences):*
+- **libri_en, left out** (the first 10 runs of consecutive words): "alluvion run back uncas and bring me the"; "can these things be returned david breathing more freely as the truth" (first words after a pause); **a 49-word passage** ("the savage would receive … maintained the seat it had taken and growled"); **a 70-word passage** spanning two utterances ("uncas occupied a distant corner … this singer is as good as nothing", first word after a pause); "uncas"; "as soon as these" (after a pause); "so choose for yourself to make a rush or" (after a pause); "hold said david perceiving that with this" (after a pause); "and"; "uncas cast" (after a pause). **Changed:** chingachgook→chingachguk (twice), scaroons→skaroons, uncas→onkas, hair→air, clew→clue, uncas→uncus, size→alluvian, practised→practiced, balaam's→balum's. **Invented:** one "the" ("of the the whole party").
+- **bless_en (Samantha), left out:** "peace" (in "with, with peace"), "its", "a", "asking is not", "thirty". **Changed:** as→pieces ("with with pieces"), light→alike, neighbours→neighbors, one→31, tomorrow→tomorrow's, steal→deal, end→and, ride→write. **Invented:** none.
+- **bless_en (Daniel), left out:** "it's going to", "to", "thirty", "**i bless you with a gentle voice in**" (the start of a paragraph), "it". **Changed:** clearness→cleanness, neighbours→neighbors, names→name, **health→hell** ("I bless you with hell"), one→31, tomorrow→tomorrow's, steal→deal, **amen→our** (the last word). **Invented:** none.
+- **mls_es:** one **50-word passage** left out ("oígala porque a usted podrá serle … inconstante apasionado con depresiones"), a few single words ("mi", "y", "bah"), and names and rarer words changed (kassim→casín, joyero→oyero, noviazgo→minobiasco, sinceridad→serita, quejé→queje).
+- **The first word after a pause:** with cutting, base on the synthetic blessings dropped 0 of 31 (Samantha) and 1 of 31 (Daniel). On the human files it dropped 11 of 59 and 5 of 23, but nearly always as the first word of a longer left-out run, not on its own.
+
+*Why whole sentences go missing, and the fix (Mac only, a cross-check, not the emulator).* whisper.cpp's `--vad` does not hand Whisper one stretch of speech at a time. It finds the stretches, **joins them back together with the silences taken out, and reads the result in 30-second windows**. When a window ends mid-thought, Whisper sometimes skips ahead. That is where every long left-out passage above comes from. The test was to cut the file at the same silences (`whisper-vad-speech-segments`, padded 0.2 s each side) and hand each stretch to Whisper as its own file, with no carry-over (`tools/perseg.sh`, `whisper-cli -ng -t 8`, Homebrew whisper.cpp 1.9.5). The Mac's `--vad` figures are given alongside, so the change is measured on the same machine:
+
+| Model | File | whisper.cpp `--vad` (Mac) | Each stretch on its own (Mac) |
+|---|---|---|---|
+| base | libri_en (human) | 12.8 (154 left out) | **3.3** (3 left out, 45 changed) |
+| small | libri_en (human) | 11.0 | **2.7** |
+| base | bless_en Daniel | 2.3 | **1.3** |
+| small | bless_en Daniel | 8.4 | **1.4** |
+| base | mls_es (human) | 21.7 | **13.8** (6 left out, 74 changed, 12 invented) |
+| small | mls_es (human) | 5.4 | **6.3** |
+
+Handled this way, nothing longer than a word or two goes missing. What remains are changed words: names, old spellings, and words that sound alike. In Spanish, base is clearly weaker than small (13.8 against 6.3). This is one run each, on the Mac. The app would do the cutting itself: the silence finder, then a separate Whisper call for each stretch, with no carry-over. The emulator should give the same text, only slower; that has not been run.
+
+**What this changes in the recommendation above:** keep Whisper with no carry-over, but **the app cuts at silences itself and sends each stretch alone**, rather than using whisper.cpp's `--vad`. Base is good in English once cut that way, at about 1–3 wrong per hundred on clear reading. Small is better in Spanish with a real voice. The choice of model for Spanish should wait until per-stretch runs on the emulator and a real speaker of the language.
+
+**How these were made:** `tools/build2.py libri|mls <name>` joins the utterances. The blessing was made by `say -v Samantha|Daniel -r 130 -f audio2/bless_en_say.txt` and converted to 16 kHz mono with `ffmpeg`. `tools/p10e.sh` is the emulator pass (`RUN=p10f JOBS=… tools/p10e.sh` was the rerun). `tools/tab2.sh` makes the table, `tools/errs.py <truth> <heard> list 10` makes the error lists, and `tools/perseg.sh` is the Mac per-stretch test. Audio is in `audio2/`, downloads in `dl/`, and logs and text in `runs/p10e`, `runs/p10f` and `runs/host2`, all in `~/Development/scratch-uth-speech`.
+
 ---
 
 ## 4. Recording
