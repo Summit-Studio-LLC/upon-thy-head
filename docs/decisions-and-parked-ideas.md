@@ -150,6 +150,8 @@ Sources:
 
 ## Before the link goes live (found by the security reviews of the website, 2026-11-16)
 
+*2026-11-17: the landing page went live at uponthyhead.app at Noah's request, as a coming-soon page, with the link service deliberately off (no storage, so it answers 503). Everything below still has to be done before storage is added. Coordinator's choices on the page, open to change: the button reads "Coming soon to iPhone and Android" and is not a link; the sharing words now say a link; the picture for "The words are written" shows two real mis-heard words ("pieces", "You're heavenly father").*
+
 - Add proof that a request to make a link comes from the real app (Apple's App Attest, Google's Play Integrity). Without it the service is open to anyone on the internet, held only by rate limits and a daily budget.
 - Add a Vercel Firewall rate-limit rule on `POST /api/b` and `GET /api/b/*`, and set `CRON_SECRET`.
 - Accepted trade in the limiter (`website/lib/links/service.ts`): during a flood from very many addresses, someone opening or making a link for the first time may be told to wait. People already being counted are not affected, and a sender can always stop a link.
