@@ -64,6 +64,8 @@ export function RevealWords({ text, load = 0 }: { text: string; load?: number })
 
 /** The download link: it gives slightly under a press. */
 export function PressLink({ href, children }: { href: string; children: string }) {
+  // no address yet: the same shape, as words and not a link
+  if (!href) return <span className="download download-soon">{children}</span>;
   return (
     <Button asChild hoverScale={1.02} tapScale={0.97}>
       <a className="download" href={href}>

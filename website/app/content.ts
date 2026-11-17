@@ -2,12 +2,13 @@
 
 export const en = {
   lang: "en",
-  // The App Store page. Replace with the real address once the app has one.
-  download: { label: "Download on the App Store", url: "https://apps.apple.com/app/upon-thy-head" },
+  // The App Store page. While `url` is empty the app is not in a store yet: the button is plain
+  // words, not a link. When it is, put the address here and set the label to "Download on the App Store".
+  download: { label: "Coming soon to iPhone and Android", url: "" },
   meta: {
     title: "Upon Thy Head",
     description:
-      "A written record of the blessings given to you. The words stay on your phone. Free on iPhone.",
+      "A written record of the blessings given to you. The words stay on your phone. Free, and coming soon to iPhone and Android.",
   },
   hero: {
     name: "Upon Thy Head",
@@ -76,7 +77,7 @@ export const en = {
       },
       {
         title: "Your blessings are locked.",
-        body: "They open with Face ID.",
+        body: "They open with Face ID, or with your fingerprint or screen lock.",
       },
       {
         title: "It is free.",
@@ -86,12 +87,12 @@ export const en = {
   },
   share: {
     heading: "Yours to share",
-    body: "Share a blessing as text, as a PDF, or as a file that opens in the app on another iPhone.",
+    body: "Send a blessing as a link that opens in the app on another phone, or share only the words as text or a PDF.",
     note: "Once it leaves this phone, it is no longer private to it.",
   },
   close: {
     heading: "Upon Thy Head",
-    note: "Free on iPhone. No ads. No account.",
+    note: "Free. No ads. No account.",
     iconLabel: "App icon",
   },
   footer: {
@@ -123,7 +124,7 @@ export const en = {
     },
     sharing: {
       label: "Sharing",
-      alt: "The choices for sharing a blessing: text, PDF, or a file for another iPhone.",
+      alt: "The choices for sharing a blessing: a link, or only the words as text or a PDF.",
     },
   },
 } as const;
