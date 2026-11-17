@@ -77,8 +77,9 @@ bool recordScreenMayAsk(String? saved) => saved != FirstRun.done;
 enum PermissionKind { microphone, speech, location, lock }
 
 /// The microphone and speech recognition must be answered (allowed or refused) before Continue;
-/// location and the lock may be left (the owner's ruling, 2026-11-16).
-bool isRequired(PermissionKind k) => k == PermissionKind.microphone || k == PermissionKind.speech;
+/// location and the lock may be left (the owner's ruling, 2026-11-16). On Android the second row is
+/// Notifications, which is optional: recording works without it (docs/android-plan.md section 9).
+bool isRequired(PermissionKind k) => k == PermissionKind.microphone || (k == PermissionKind.speech && !NotYet.android);
 
 enum RowStatus {
   /// Not yet asked: the row's Allow button.
@@ -120,12 +121,15 @@ class Biometry {
 
 /// One row: what it is called, its status, and the line under its name.
 class PermissionRow {
-  const PermissionRow(this.kind, this.status, {this.name, this.note});
+  const PermissionRow(this.kind, this.status, {this.name, this.note, this.why});
   final PermissionKind kind;
   final RowStatus status;
 
   /// The lock row is named for what the phone has ("Touch ID"); the others by [kind].
   final String? name;
+
+  /// The reason, where it is not [kind]'s own (Android's Notifications row in the speech row's place).
+  final String? why;
 
   /// For [RowStatus.info]: the line shown instead of the reason.
   final String? note;
@@ -137,7 +141,7 @@ class PermissionRow {
         PermissionKind.lock => 'Face ID',
       };
 
-  String get reason => switch (kind) {
+  String get reason => why ?? switch (kind) {
         PermissionKind.microphone => Strings.microphoneWhy,
         PermissionKind.speech => Strings.speechWhy,
         PermissionKind.location => Strings.locationWhy,
@@ -168,7 +172,7 @@ class PermissionRow {
     return <String>[title, mark, line, ?state].map(bare).join('. ');
   }
 
-  PermissionRow withStatus(RowStatus s) => PermissionRow(kind, s, name: name, note: note);
+  PermissionRow withStatus(RowStatus s) => PermissionRow(kind, s, name: name, note: note, why: why);
 }
 
 RowStatus rowOfPermission(Permission p) => switch (p) {
@@ -240,10 +244,13 @@ class NativeFirstRunAsker implements FirstRunAsker {
   Future<Permission> microphone() async => _p((await _perms('permissions'))?['microphone']);
   @override
   Future<Permission> askMicrophone() async => _p((await _perms('requestMicrophone'))?['microphone']);
+  // Android has no speech permission: its second row is Notifications (SpeechChannel.kt)
   @override
-  Future<Permission> speech() async => _p((await _perms('permissions'))?['speech']);
+  Future<Permission> speech() async => _p((await _perms('permissions'))?[NotYet.android ? 'notifications' : 'speech']);
   @override
-  Future<Permission> askSpeech() async => _p((await _perms('requestSpeech'))?['speech']);
+  Future<Permission> askSpeech() async => NotYet.android
+      ? _p((await _perms('requestNotifications'))?['notifications'])
+      : _p((await _perms('requestSpeech'))?['speech']);
   @override
   Future<LocationStatus> location() => locator.status();
   @override
@@ -295,22 +302,6 @@ class FirstRunPermissions extends ChangeNotifier {
   bool get canContinue => loaded && _asking == null && stillNeeded.isEmpty;
 
   Future<List<PermissionRow>> _read() async {
-    // Android (docs/android-plan.md 9): microphone, notifications, location and the screen lock,
-    // none of which it can ask for yet (not_yet.dart). Each row says why it will be needed and
-    // that it is not here yet; none is waiting, so Continue is open.
-    if (NotYet.recording) {
-      PermissionRow notYet(PermissionKind k, {String? name, String? why}) {
-        final r = PermissionRow(k, RowStatus.info, name: name);
-        return PermissionRow(k, RowStatus.info, name: name, note: '${why ?? r.reason} ${Strings.notYetOnThisPhone}');
-      }
-
-      return [
-        notYet(PermissionKind.microphone),
-        notYet(PermissionKind.speech, name: Strings.notifications, why: Strings.notificationsWhy),
-        notYet(PermissionKind.location),
-        notYet(PermissionKind.lock, name: Strings.screenLock),
-      ];
-    }
     final out = <PermissionRow>[];
     Future<RowStatus> safe(Future<RowStatus> Function() f) async {
       try {
@@ -319,6 +310,24 @@ class FirstRunPermissions extends ChangeNotifier {
         debugPrint('first run: $e');
         return RowStatus.info;
       }
+    }
+
+    // Android (docs/android-plan.md 9): the microphone (required) and notifications (optional) are
+    // Android's own questions; location and the screen lock cannot be asked for yet (not_yet.dart),
+    // so those rows say why they will be needed and that they are not here yet.
+    if (NotYet.android) {
+      PermissionRow notYet(PermissionKind k, {String? name}) {
+        final r = PermissionRow(k, RowStatus.info, name: name);
+        return PermissionRow(k, RowStatus.info, name: name, note: '${r.reason} ${Strings.notYetOnThisPhone}');
+      }
+
+      return [
+        PermissionRow(PermissionKind.microphone, await safe(() async => rowOfPermission(await asker.microphone()))),
+        PermissionRow(PermissionKind.speech, await safe(() async => rowOfPermission(await asker.speech())),
+            name: Strings.notifications, why: Strings.notificationsWhy),
+        notYet(PermissionKind.location),
+        notYet(PermissionKind.lock, name: Strings.screenLock),
+      ];
     }
 
     out.add(PermissionRow(PermissionKind.microphone, await safe(() async => rowOfPermission(await asker.microphone()))));

@@ -20,7 +20,12 @@ enum WordsStatus {
   unavailable('unavailable'),
 
   /// The engine failed; the audio is kept.
-  failed('failed');
+  failed('failed'),
+
+  /// Recorded on a phone that writes the words from the recording in a coming version of the app
+  /// (Android, until docs/android-plan.md task 8): the audio is kept, even after review is finished,
+  /// until the phone has written words from it. The words may be typed meanwhile.
+  later('later');
 
   const WordsStatus(this.code);
 

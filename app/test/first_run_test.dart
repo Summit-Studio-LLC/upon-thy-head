@@ -368,20 +368,29 @@ void main() {
       });
     }
 
-    test('Android, for now: four rows saying what is not built yet, nothing to allow, Continue open', () async {
+    test('Android: the microphone is asked and required, notifications asked and optional, location and lock not yet', () async {
       NotYet.debugAndroid = true;
       addTearDown(() => NotYet.debugAndroid = false);
       for (final lang in UiLanguage.values) {
         Strings.use(lang);
-        final p = perms(FakeAsker());
+        final a = FakeAsker(speechAnswer: Permission.denied);
+        final p = perms(a);
         await p.load();
         expect(p.rows.map((r) => r.title), [Strings.microphone, Strings.notifications, Strings.location, Strings.screenLock]);
-        for (final r in p.rows) {
-          expect(r.status, RowStatus.info, reason: r.title);
+        expect(p.rows.map((r) => r.status), [RowStatus.waiting, RowStatus.waiting, RowStatus.info, RowStatus.info]);
+        expect(p.rows[1].reason, Strings.notificationsWhy);
+        for (final r in p.rows.skip(2)) {
           expect(r.line, endsWith(Strings.notYetOnThisPhone), reason: r.title);
         }
-        expect(p.canContinue, isTrue);
-        expect(Strings.permsLede, isNot(contains(lang == UiLanguage.english ? 'Allow' : 'Permitir')));
+        expect(p.stillNeeded, [PermissionKind.microphone], reason: 'notifications are optional');
+        expect(p.canContinue, isFalse);
+        await p.ask(PermissionKind.speech); // the Notifications row
+        expect(p.rows[1].status, RowStatus.off);
+        expect(p.rows[1].reason, Strings.notificationsWhy, reason: 'kept through the answer');
+        expect(p.canContinue, isFalse);
+        await p.ask(PermissionKind.microphone);
+        expect(p.canContinue, isTrue, reason: 'refused notifications never hold up recording');
+        expect(Strings.permsLede, contains(lang == UiLanguage.english ? 'Allow' : 'Permitir'));
       }
       Strings.use(UiLanguage.english);
     });

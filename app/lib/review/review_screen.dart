@@ -428,7 +428,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                   children: [
                     Text(Strings.finishTitle, style: serif(22, 28, p.ink)),
                     const SizedBox(height: 6),
-                    Text(Strings.finishBody, style: sans(15, 22, p.ink2)),
+                    // the audio rule: a recording whose words are still to come is kept (recovery.dart)
+                    Text(widget.words == WordsState.later ? Strings.finishBodyLater : Strings.finishBody, style: sans(15, 22, p.ink2)),
                     const SizedBox(height: 20),
                     SheetButtons(
                       palette: p,
@@ -717,10 +718,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
         child: Text(Strings.writingWords, key: const Key('review-writing'), style: serif(19, 30, p.ink3, italic: true)),
       );
     }
-    // nothing came from the recording: say so once, above the empty box
-    final notice = _hasAudio && b.firstText.trim().isEmpty
-        ? (widget.words == WordsState.done ? Strings.noWordsHeardHere : Strings.wordsNotWrittenHere)
-        : null;
+    // nothing came from the recording: say so once, above the empty box. A recording whose words
+    // this version cannot write on this phone (Android, for now) says so while it waits, typed or not.
+    final notice = widget.words == WordsState.later
+        ? Strings.wordsLaterHere
+        : _hasAudio && b.firstText.trim().isEmpty
+            ? (widget.words == WordsState.done ? Strings.noWordsHeardHere : Strings.wordsNotWrittenHere)
+            : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

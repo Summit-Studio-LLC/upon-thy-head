@@ -116,6 +116,14 @@ class HoldRingState extends State<HoldRing> with TickerProviderStateMixin {
     if (mounted) setState(() {});
   }
 
+  /// The ring's word stays inside the ring at any text size, as Begin's does: it grows with the
+  /// text size until it fills the ring, then stops. The ring keeps its size, so the place to hold
+  /// and the countdown drawn around it never move. Its label (Semantics above) is read whole.
+  static Widget _word(Text t) => SizedBox(
+        width: HoldRing.size - 12, // 76: "Descartar" at the usual size is about 73, so iPhone is unchanged
+        child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: t)),
+      );
+
   @override
   Widget build(BuildContext context) {
     final p = widget.palette;
@@ -150,13 +158,13 @@ class HoldRingState extends State<HoldRing> with TickerProviderStateMixin {
               opacity: widget.amen ? 0 : 1,
               duration: const Duration(milliseconds: 800),
               curve: easeOut,
-              child: Text(Strings.discard, key: const Key('lb-discard'), style: serif(19, 19, color)),
+              child: _word(Text(Strings.discard, key: const Key('lb-discard'), style: serif(19, 19, color))),
             ),
             AnimatedOpacity(
               opacity: widget.amen ? 1 : 0,
               duration: const Duration(milliseconds: 800),
               curve: easeOut,
-              child: Text(Strings.amen, key: const Key('lb-amen'), style: serif(21, 21, color)),
+              child: _word(Text(Strings.amen, key: const Key('lb-amen'), style: serif(21, 21, color))),
             ),
           ]),
         ),

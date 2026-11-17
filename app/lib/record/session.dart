@@ -26,6 +26,10 @@ enum WordsState {
 
   /// The engine failed; the audio is kept.
   failed,
+
+  /// This version of the app does not write the words on this phone (Android, for now); a coming
+  /// one writes them from the recording, which is kept until it has (`WordsStatus.later`).
+  later,
 }
 
 /// One visit to the recording screen: the draft blessing, whether it is
@@ -112,6 +116,12 @@ class RecordSession extends ChangeNotifier {
     var now = await recorder.permissions();
     if (ask && now.anyUndetermined && !now.anyDenied) now = await recorder.requestPermissions();
     _permissions = now;
+    notifyListeners();
+  }
+
+  /// Android: the microphone was refused once and the phone will still ask: ask it again now.
+  Future<void> askAgain() async {
+    _permissions = await recorder.requestPermissions();
     notifyListeners();
   }
 
@@ -220,7 +230,7 @@ class RecordSession extends ChangeNotifier {
       final t = await transcriber.transcribe(path, language);
       transcript = t;
       words = t.text;
-      _settle(t.unavailable ? WordsState.unavailable : WordsState.done);
+      _settle(t.later ? WordsState.later : t.unavailable ? WordsState.unavailable : WordsState.done);
     } catch (e) {
       debugPrint('speech: $e');
       _settle(WordsState.failed);

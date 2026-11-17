@@ -283,7 +283,7 @@ class Strings {
   static String get welcomeFree => _w.welcomeFree;
   static String get continueLabel => _w.continueLabel;
   static String get permsTitle => _w.permsTitle;
-  static String get permsLede => NotYet.recording ? _w.permsLedeNotYet : _w.permsLede;
+  static String get permsLede => NotYet.android ? _w.permsLedeAndroid : _w.permsLede;
   static String get microphone => _w.microphone;
   static String get microphoneWhy => _w.microphoneWhy;
   static String get speechRecognition => _w.speechRecognition;
@@ -323,7 +323,12 @@ class Strings {
   static String get notificationsWhy => _w.notificationsWhy;
   static String get screenLock => _w.screenLock;
   static String get notYetOnThisPhone => _w.notYetOnThisPhone;
-  static String get recordingNotYet => _w.recordingNotYet;
+  static String get wordsLater => _w.wordsLater;
+  static String get wordsLaterHere => _w.wordsLaterHere;
+  static String get finishBodyLater => _w.finishBodyLater;
+  static String get microphoneRefusedAndroid => _w.microphoneRefusedAndroid;
+  static String get microphoneSettingsAndroid => _w.microphoneSettingsAndroid;
+  static String get allowMicrophone => _w.allowMicrophone;
   static String get lockNotYet => _w.lockNotYet;
   static String get locationNotYet => _w.locationNotYet;
 }
@@ -530,7 +535,7 @@ extension WordsCatalogue on Words {
         'continueLabel': continueLabel,
         'permsTitle': permsTitle,
         'permsLede': permsLede,
-        'permsLedeNotYet': permsLedeNotYet,
+        'permsLedeAndroid': permsLedeAndroid,
         'microphone': microphone,
         'microphoneWhy': microphoneWhy,
         'speechRecognition': speechRecognition,
@@ -567,7 +572,12 @@ extension WordsCatalogue on Words {
         'notificationsWhy': notificationsWhy,
         'screenLock': screenLock,
         'notYetOnThisPhone': notYetOnThisPhone,
-        'recordingNotYet': recordingNotYet,
+        'wordsLater': wordsLater,
+        'wordsLaterHere': wordsLaterHere,
+        'finishBodyLater': finishBodyLater,
+        'microphoneRefusedAndroid': microphoneRefusedAndroid,
+        'microphoneSettingsAndroid': microphoneSettingsAndroid,
+        'allowMicrophone': allowMicrophone,
         'lockNotYet': lockNotYet,
         'locationNotYet': locationNotYet,
       };
@@ -932,7 +942,7 @@ class Words {
   String get continueLabel => 'Continue';
   String get permsTitle => 'A few things first';
   String get permsLede => 'Tap Allow beside each, and the phone will ask.';
-  String get permsLedeNotYet => 'This is what the app will ask for. None of it can be turned on here yet.';
+  String get permsLedeAndroid => 'Tap Allow, and the phone will ask.';
   String get microphone => 'Microphone';
   String get microphoneWhy => 'To hear the blessing as it is given.';
   String get speechRecognition => 'Speech recognition';
@@ -979,7 +989,15 @@ class Words {
   String get notificationsWhy => 'So you can see that it is still recording when the phone is locked.';
   String get screenLock => 'Screen lock';
   String get notYetOnThisPhone => 'Not available on this phone yet.';
-  String get recordingNotYet => 'Recording is not available on this phone yet.';
+  /// After Amen, and on the review page in place of the words, while Android cannot write them.
+  String get wordsLater => 'The words will be written on this phone in a coming version of the app. The recording stays here until then.';
+  String get wordsLaterHere =>
+      'The words will be written on this phone in a coming version of the app. The recording is kept until then. You can also type them here.';
+  /// The Done question, for a recording whose words are still to come: it is not erased (the audio rule).
+  String get finishBodyLater => 'The recording stays on this phone until its words are written. Then it is erased.';
+  String get microphoneRefusedAndroid => 'The microphone is not allowed for Upon Thy Head.';
+  String get microphoneSettingsAndroid => 'In Settings, tap Permissions, then Microphone.';
+  String get allowMicrophone => 'Allow the microphone';
   String get lockNotYet => 'The lock is not available on this phone yet.';
   String get locationNotYet => 'Finding where you are is not available on this phone yet, so the Salt Lake Temple is used.';
 }
@@ -1580,7 +1598,7 @@ class _Spanish implements Words {
   @override
   String get permsLede => 'Toca Permitir junto a cada una y el teléfono te preguntará.';
   @override
-  String get permsLedeNotYet => 'Esto es lo que la app te pedirá. Todavía no se puede activar nada aquí.';
+  String get permsLedeAndroid => 'Toca Permitir y el teléfono te preguntará.';
   @override
   String get microphone => 'Micrófono';
   @override
@@ -1667,7 +1685,19 @@ class _Spanish implements Words {
   @override
   String get notYetOnThisPhone => 'Todavía no está disponible en este teléfono.';
   @override
-  String get recordingNotYet => 'Todavía no se puede grabar en este teléfono.';
+  String get wordsLater =>
+      'Las palabras se escribirán en este teléfono en una próxima versión de la app. La grabación se queda aquí hasta entonces.';
+  @override
+  String get wordsLaterHere =>
+      'Las palabras se escribirán en este teléfono en una próxima versión de la app. La grabación se guarda hasta entonces. También puedes escribirlas aquí.';
+  @override
+  String get finishBodyLater => 'La grabación se queda en este teléfono hasta que se escriban sus palabras. Después se borra.';
+  @override
+  String get microphoneRefusedAndroid => 'El micrófono no está permitido para Upon Thy Head.';
+  @override
+  String get microphoneSettingsAndroid => 'En Configuración, toca Permisos y luego Micrófono.';
+  @override
+  String get allowMicrophone => 'Permitir el micrófono';
   @override
   String get lockNotYet => 'El bloqueo todavía no está disponible en este teléfono.';
   @override

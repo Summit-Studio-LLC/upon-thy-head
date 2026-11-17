@@ -69,17 +69,35 @@ class _AfterLayerState extends State<AfterLayer> {
     final writing = widget.words == WordsState.writing || widget.words == WordsState.none;
     final (title, body) = switch (widget.words) {
       WordsState.unavailable => (Strings.recordingKept, Strings.wordsNotWrittenYet),
+      WordsState.later => (Strings.recordingKept, Strings.wordsLater),
       WordsState.failed => (Strings.recordingKept, Strings.wordsNotWritten),
       WordsState.done when !widget.heard => (Strings.noWordsHeard, Strings.recordingKeptBody),
       _ => (Strings.wordsKept, Strings.recordingKeptBody),
     };
     return Stack(children: [
       Positioned(left: 0, right: 0, bottom: 0, height: 440, child: BottomScrim(palette: p)),
+      // From the bottom up. At the largest text and display sizes (Spanish is the longest) it is
+      // taller than the screen: it then stops under the status bar and scrolls, the buttons in view.
       Positioned(
         left: 24,
         right: 24,
+        top: MediaQuery.viewPaddingOf(context).top + 16,
         bottom: 50,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        child: Column(mainAxisAlignment: MainAxisAlignment.end, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Flexible(
+            child: SingleChildScrollView(
+              key: const Key('after-scroll'),
+              reverse: true,
+              child: _content(p, b, writing, title, body),
+            ),
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _content(Palette p, Blessing? b, bool writing, String title, String body) =>
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(b == null ? '' : Strings.dayAndTime(b.local), key: const Key('after-meta'), style: sans(13, 18, p.ink2, tracking: .005)),
           const SizedBox(height: 8),
           // the title settles once the words are written; until then a quiet line in its place
@@ -122,8 +140,5 @@ class _AfterLayerState extends State<AfterLayer> {
               ),
             ]),
           ),
-        ]),
-      ),
-    ]);
-  }
+        ]);
 }

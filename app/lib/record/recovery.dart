@@ -290,3 +290,14 @@ bool couldTryWordsAgain(Blessing b, {required bool audioOnPhone}) =>
 
 bool needsWords(Blessing b, {required bool audioOnPhone}) =>
     b.draft && audioOnPhone && b.wordsStatus == WordsStatus.pending && b.rawText.trim().isEmpty;
+
+/// The audio-keeping rule. A recording is erased when its review is finished (Done), except one
+/// whose words the phone has not written yet (`WordsStatus.later`: an Android recording, until
+/// docs/android-plan.md task 8). That one is kept, typed words or not, until the phone has written
+/// words from it; then it is erased if the review was already finished (home_screen.dart,
+/// `_finishReview` and `_writeLaterWords`). Deleting the blessing still deletes its recording.
+bool keepsRecording(Blessing b) => b.wordsStatus == WordsStatus.later;
+
+/// A recording kept for its words, still on the phone: given to the phone again at every launch and
+/// whenever its review page opens, draft or finished, typed or not.
+bool wordsDueFromRecording(Blessing b, {required bool audioOnPhone}) => audioOnPhone && b.wordsStatus == WordsStatus.later;

@@ -407,6 +407,11 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
       } catch {
         return done(.failure(error))
       }
+      // Nothing to join (the recorder never started, or every part is empty): say so. Handing
+      // AVAssetExportSession an empty composition crashes inside it, seen on the simulator.
+      guard at.seconds > 0 else {
+        return done(.failure(NSError(domain: "record", code: 6, userInfo: [NSLocalizedDescriptionKey: "nothing was recorded"])))
+      }
       exportComposition(comp, into: out, preset: preset, done)
     }
   }

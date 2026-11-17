@@ -253,13 +253,9 @@ void main() {
     await wait(2400);
     expect(stage('record'), isTrue);
     final session = tester.widget<RecordLayer>(find.byType(RecordLayer)).session;
-    if (NotYet.recording) {
-      expect(find.byKey(const Key('not-yet')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('begin')), warnIfMissed: false);
-      await wait(800);
-      expect(session.live, isFalse, reason: 'Begin started something on a phone that cannot record');
-      await shot('12-record-not-yet');
-    }
+    // nothing is begun here: recording itself is proven by integration_test/android_record_test.dart
+    expect(session.live, isFalse);
+    await shot('12-record');
     await back();
     expect(stage('record'), isFalse, reason: 'back did not close the recording screen');
     expect(stage('home'), isTrue);

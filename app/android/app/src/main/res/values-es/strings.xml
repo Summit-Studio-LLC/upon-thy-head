@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Las pocas palabras que Android muestra por la app (las demás están en lib/strings.dart). -->
+<resources>
+    <string name="recording_title">Grabando una bendición</string>
+    <string name="recording_paused">En pausa</string>
+    <string name="recording_channel">Grabación</string>
+    <string name="recording_channel_about">Aparece mientras se graba una bendición.</string>
+</resources>

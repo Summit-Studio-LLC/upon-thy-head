@@ -11,6 +11,7 @@
 		<string>en</string>
 		<string>es</string>
 	</array>
+	<!-- Debug builds only: the "Test link scheme" build phase takes it out of every other build. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -188,6 +188,27 @@ void main() {
     expect(needsWords(b(draft: false), audioOnPhone: true), isFalse);
   });
 
+  test('the audio rule: a recording whose words are still to come is never let go', () {
+    Blessing b({bool draft = true, String words = '', WordsStatus status = WordsStatus.later}) =>
+        note('x').toBlessing(audio: 'x.m4a', now: now)
+          ..draft = draft
+          ..rawText = words
+          ..wordsStatus = status;
+    // Android today: the words come in a coming version, so Done keeps the recording, typed or not
+    expect(keepsRecording(b()), isTrue);
+    expect(keepsRecording(b(words: 'typed by hand')), isTrue);
+    expect(keepsRecording(b(draft: false, words: 'typed by hand')), isTrue, reason: 'finished, still kept');
+    // and it is offered to the phone again, draft or finished, typed or not, while it is here
+    expect(wordsDueFromRecording(b(), audioOnPhone: true), isTrue);
+    expect(wordsDueFromRecording(b(draft: false, words: 'typed'), audioOnPhone: true), isTrue);
+    expect(wordsDueFromRecording(b(), audioOnPhone: false), isFalse, reason: 'nothing to write from');
+    // once words are written from it (or on iPhone, where they always are), Done lets it go
+    for (final s in [WordsStatus.written, WordsStatus.pending, WordsStatus.unavailable, WordsStatus.failed]) {
+      expect(keepsRecording(b(status: s)), isFalse, reason: '$s');
+      expect(wordsDueFromRecording(b(status: s), audioOnPhone: true), isFalse, reason: '$s');
+    }
+  });
+
   test('the sheet says when, in the words the owner chose', () {
     final at = DateTime(2026, 11, 15, 21, 41);
     expect(Strings.recoveredTitle(1), 'A recording was kept');

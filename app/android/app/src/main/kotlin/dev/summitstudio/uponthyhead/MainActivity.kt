@@ -1,5 +1,6 @@
 package dev.summitstudio.uponthyhead
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
@@ -8,6 +9,7 @@ import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -15,12 +17,41 @@ import io.flutter.plugin.common.MethodChannel
  * The Android app: the Flutter view, edge to edge, and the native side of every channel the Dart
  * code calls (the iPhone's are the Swift files in ios/Runner).
  *
- * Built so far: keeping the screen awake while a recording listens, the version, and opening this
- * app's page in the system Settings. Everything else is a stand-in that answers safely, so nothing
- * crashes and nothing pretends to work: see [NotYet] and "Stand-ins" in docs/android-plan.md, which
- * names the task that replaces each.
+ * Built so far: recording (SpeechChannel, SegmentRecorder, RecordingService), listening back on the
+ * review page (PlayerChannel), keeping the screen awake while a recording listens, the link's
+ * cryptography (LinkChannel), the version, and opening this app's page in the system Settings.
+ * Everything else is a stand-in that answers safely, so nothing crashes and nothing pretends to
+ * work: see [NotYet] and "Stand-ins" in docs/android-plan.md, which names the task that replaces each.
+ *
+ * One Flutter engine for the whole process: the first activity makes it (with the flags it was
+ * started with) and it is kept, so a new activity (Android's "Don't keep activities", or the system
+ * reclaiming a hidden screen) finds the recording screen exactly as it was, still listening.
  */
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val ENGINE = "main"
+
+        /** Links waiting for the Dart side, and whether it has asked for them yet (once per engine). */
+        private var listening = false
+        private val waitingLinks = mutableListOf<String>()
+        private var shareChannel: MethodChannel? = null
+    }
+
+    override fun provideFlutterEngine(context: Context): FlutterEngine? = FlutterEngineCache.getInstance().get(ENGINE)
+
+    override fun shouldDestroyEngineWithHost(): Boolean = false
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        SpeechChannel.answered(requestCode)
+    }
+
+    override fun onStop() {
+        // listening back is for the screen only, for now (docs/android-plan.md task 18)
+        PlayerChannel.current?.pauseForBackground()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Drawn under the status and navigation bars (Android 15 and later insist; this makes 13
         // and 14 the same). Flutter reports the bars' sizes as padding, as on iPhone.
@@ -32,10 +63,6 @@ class MainActivity : FlutterActivity() {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
-
-    private var shareChannel: MethodChannel? = null
-    private var listening = false
-    private val waitingLinks = mutableListOf<String>()
 
     /** A blessing link this activity was opened with (`https://uponthyhead.app/b/<id>#<key>`). */
     private fun linkOf(i: Intent?): String? {
@@ -56,13 +83,20 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
+        val cache = FlutterEngineCache.getInstance()
+        // a kept engine has its plugins already
+        if (cache.get(ENGINE) !== flutterEngine) super.configureFlutterEngine(flutterEngine)
+        cache.put(ENGINE, flutterEngine)
         val m = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(m, "upon_thy_head/keep_awake").setMethodCallHandler(::keepAwake)
-        MethodChannel(m, "upon_thy_head/speech").setMethodCallHandler(NotYet::speech)
+        val speech = MethodChannel(m, "upon_thy_head/speech")
+        speech.setMethodCallHandler(SpeechChannel({ this }, applicationContext))
+        SpeechChannel.channel = speech
         MethodChannel(m, "upon_thy_head/lock").setMethodCallHandler(::lock)
         MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(NotYet::location)
-        MethodChannel(m, "upon_thy_head/player").setMethodCallHandler(NotYet::player)
+        val player = MethodChannel(m, "upon_thy_head/player")
+        player.setMethodCallHandler(PlayerChannel.get(this))
+        PlayerChannel.get(this).channel = player
         MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(applicationContext))
         val share = MethodChannel(m, "upon_thy_head/share")
         shareChannel = share
@@ -129,21 +163,6 @@ object NotYet {
     private fun no(result: MethodChannel.Result, what: String) =
         result.error("unavailable", "$what is not built on Android yet", null)
 
-    /** Recording and speech: docs/android-plan.md tasks 4 to 10. */
-    fun speech(call: MethodCall, result: MethodChannel.Result) {
-        val none = mapOf("microphone" to "unavailable", "speech" to "unavailable")
-        when (call.method) {
-            "permissions", "requestPermissions", "requestMicrophone", "requestSpeech" -> result.success(none)
-            "start", "stop", "transcribe" -> no(result, "Recording and speech")
-            "cancel", "openSettings", "debugFeed", "debugInterrupt" -> result.success(null)
-            "recover" -> result.success(null)
-            "seconds" -> result.success(0.0)
-            "engine" -> result.success(null)
-            "describe" -> result.success(mapOf("platform" to "android", "engines" to emptyList<String>()))
-            else -> result.notImplemented()
-        }
-    }
-
     /** The app lock and the recent-apps cover: task 11. "none" turns the lock off in the Dart side. */
     fun lock(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -161,17 +180,6 @@ object NotYet {
         when (call.method) {
             "status", "request" -> result.success("restricted")
             "locate" -> result.success(null)
-            else -> result.notImplemented()
-        }
-    }
-
-    /** Listening back on the review page: task 18 (and the plain player before it). */
-    fun player(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "load" -> no(result, "Playback")
-            "play" -> result.success(false)
-            "pause", "seek", "unload" -> result.success(null)
-            "position" -> result.success(mapOf("position" to 0.0, "duration" to 0.0, "playing" to false))
             else -> result.notImplemented()
         }
     }

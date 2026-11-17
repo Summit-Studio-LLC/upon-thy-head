@@ -190,6 +190,7 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				C0FFEE0000000000000000C1 /* Phone check audio */,
+				C0FFEE0000000000000000C2 /* Test link scheme */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 			);
@@ -286,6 +287,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# Only for --dart-define=PHONE_CHECK=true: the prepared recordings for the phone check page.\n# A normal build removes any copy an earlier check build left behind.\ndest=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/phone_check\"\nrm -rf \"$dest\"\nfor d in $(echo \"${DART_DEFINES:-}\" | tr ',' ' '); do\n  if [ \"$(echo \"$d\" | /usr/bin/base64 -D 2>/dev/null)\" = \"PHONE_CHECK=true\" ]; then\n    mkdir -p \"$dest\"\n    cp \"${SRCROOT}/../integration_test/audio/en.m4a\" \"${SRCROOT}/../integration_test/audio/es.m4a\" \"$dest/\"\n    echo \"phone check: test audio bundled\"\n  fi\ndone\n";
+		};
+		C0FFEE0000000000000000C2 /* Test link scheme */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Test link scheme";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# uponthyhead-test:// (Info.plist) is for the simulator's link runs (tool/link_acceptance.sh) only.\n# Every build but Debug (Release, Profile) leaves it out of the app's Info.plist.\nplist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nif [ \"${CONFIGURATION}\" != \"Debug\" ]; then\n  /usr/libexec/PlistBuddy -c \"Delete :CFBundleURLTypes\" \"$plist\" 2>/dev/null || true\n  echo \"test link scheme: removed ($CONFIGURATION)\"\nfi\n";
 		};
 		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
 			isa = PBXShellScriptBuildPhase;

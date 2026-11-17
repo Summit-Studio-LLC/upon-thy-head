@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Recording a blessing (SpeechChannel.kt), with the screen locked too (RecordingService.kt). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Optional: the recording's notification; recording works without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Upon Thy Head"
         android:name="${applicationName}"
@@ -40,6 +47,11 @@
                 <data android:scheme="https" android:host="uponthyhead.app" android:pathPrefix="/b/"/>
             </intent-filter>
         </activity>
+        <!-- Keeps a recording going with the screen locked; started only by Begin. -->
+        <service
+            android:name=".RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

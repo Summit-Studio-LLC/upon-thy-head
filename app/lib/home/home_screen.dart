@@ -468,6 +468,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     for (final stored in all) {
       final path = _audioOf(stored);
       if (path == null) continue;
+      if (wordsDueFromRecording(stored, audioOnPhone: true)) {
+        await _writeLaterWords(stored);
+        continue;
+      }
       if (couldTryWordsAgain(stored, audioOnPhone: true)) {
         await _tryWordsAgain(stored);
         continue;
@@ -481,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       try {
         await RecordSession.debugHoldWords();
         final t = await _transcriber.transcribe(path, SpeechLanguage.fromCode(b.language));
-        state = t.unavailable ? WordsState.unavailable : WordsState.done;
+        state = t.later ? WordsState.later : t.unavailable ? WordsState.unavailable : WordsState.done;
         if (state == WordsState.done && b.rawText.trim().isEmpty) {
           b
             ..rawText = t.text
@@ -519,7 +523,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       } catch (e) {
         return debugPrint('words: again ${b.id}: $e');
       }
-      if (t.unavailable) return debugPrint('words: ${b.id} still cannot be written here');
+      if (t.unavailable || t.later) return debugPrint('words: ${b.id} still cannot be written here');
       // typed in meanwhile: the person's words stand
       if (b.rawText.trim().isNotEmpty) return;
       b
@@ -541,10 +545,58 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// THE SEAM, Dart side: a recording kept for its words (`WordsStatus.later`, see [keepsRecording])
+  /// is given to the phone again, at every launch and whenever its review page opens. Until the
+  /// next task fills `transcribe` in android/.../SpeechChannel.kt, Android answers "later" and
+  /// nothing changes. When words come:
+  ///  - nothing typed: they are the blessing's words, as after any Amen;
+  ///  - words typed meanwhile: the person's words stand, and the phone's are kept beneath them as
+  ///    the first transcript (`firstText`), as the iPhone keeps its own;
+  ///  - the blessing is `written`, and if its review was already finished, its recording is erased
+  ///    now, as it would have been at Done.
+  /// A failure, or a phone that cannot write the language, leaves it `later`: tried again next time.
+  Future<void> _writeLaterWords(Blessing stored) async {
+    final path = _audioOf(stored);
+    if (path == null || !wordsDueFromRecording(stored, audioOnPhone: true) || !_retrying.add(stored.id)) return;
+    try {
+      final b = [..._blessings, ..._passing].firstWhere((x) => x.id == stored.id, orElse: () => stored);
+      final Transcript t;
+      try {
+        t = await _transcriber.transcribe(path, SpeechLanguage.fromCode(b.language));
+      } catch (e) {
+        return debugPrint('words: later ${b.id}: $e');
+      }
+      if (t.later || t.unavailable) return;
+      final typed = b.rawText.trim().isNotEmpty;
+      if (typed) {
+        b.firstText = t.text;
+      } else {
+        b
+          ..rawText = t.text
+          ..firstText = t.text;
+      }
+      b.wordsStatus = WordsStatus.written;
+      try {
+        await _store.update(b);
+        if (!b.draft) await _store.eraseAudio(b);
+        debugPrint('words: wrote ${b.id} from its kept recording (${t.text.length} characters, typed: $typed)');
+      } on StateError {
+        return; // deleted meanwhile
+      }
+      if (!mounted) return;
+      final reviewing = identical(_reviewing, b) && _stage == Stage.review;
+      setState(() => _writing[b.id] = WordsState.done);
+      if (reviewing && !typed) _reviewKey.currentState?.wordsArrived();
+    } finally {
+      _retrying.remove(stored.id);
+    }
+  }
+
   static WordsStatus _statusOf(WordsState s) => switch (s) {
         WordsState.done => WordsStatus.written,
         WordsState.unavailable => WordsStatus.unavailable,
         WordsState.failed => WordsStatus.failed,
+        WordsState.later => WordsStatus.later,
         WordsState.none || WordsState.writing => WordsStatus.pending,
       };
 
@@ -713,7 +765,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // after the first run, the recording screen never puts a system question: its refused line
     // and Open Settings are the way back
     final ask = recordScreenMayAsk(settings.firstRun);
-    if (identical(s, _session) && !s.live) await s.checkPermissions(ask: ask);
+    // Android asks when Begin is pressed instead (_begin), so its question answers a press
+    if (identical(s, _session) && !s.live) await s.checkPermissions(ask: ask && !NotYet.android);
     // then, the first time ever, where blessings are given (after the microphone and speech
     // questions, never once Begin is pressed; Begin never waits for it)
     bool ready() => identical(s, _session) && !s.live && _stage == Stage.record;
@@ -729,6 +782,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _begin() {
     if (!_session.canBegin) {
+      // Android: the microphone not asked yet (the first run's row was never reached): Android's
+      // question now, and the recording begins as soon as it is allowed
+      if (NotYet.android && _session.permissions?.microphone == Permission.undetermined) {
+        unawaited(_askThenBegin(_session));
+        return;
+      }
       _session.checkPermissions(ask: recordScreenMayAsk(_settings?.firstRun));
       return;
     }
@@ -752,6 +811,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _engine.show?.start(_engine, draft.ra, draft.dec, SkyView.record, _engine.size);
     draft.language = _session.language.code;
     _session.begin();
+  }
+
+  Future<void> _askThenBegin(RecordSession s) async {
+    await s.checkPermissions(ask: true);
+    if (identical(s, _session) && s.canBegin && !s.live && _stage == Stage.record) _begin();
   }
 
   /// The draft goes at the end of the line, the place for "now", and is the light in focus.
@@ -866,6 +930,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// The review page for [b] (in the sky, in focus) over the dimmed sky.
   Future<void> _openReview(Blessing b, {required Stage from}) async {
     unawaited(_tryWordsAgain(b));
+    unawaited(_writeLaterWords(b));
     _knownTags = await _store.allTags();
     if (!mounted) return;
     _reviewing = b;
@@ -891,6 +956,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       WordsStatus.written => WordsState.done,
       WordsStatus.unavailable => WordsState.unavailable,
       WordsStatus.failed => WordsState.failed,
+      WordsStatus.later => WordsState.later,
       // still to be written this launch when its audio is here
       WordsStatus.pending => _audioOf(b) != null && b.rawText.trim().isEmpty ? WordsState.writing : WordsState.failed,
     };
@@ -925,12 +991,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Done (and Finish, when there was a recording): no longer a draft, the recording erased from
   /// the phone, and the blessing's reading page.
+  ///
+  /// Except a recording whose words the phone has not written yet (`WordsStatus.later`: Android,
+  /// for now): it is kept, typed words or not, until the phone writes the words from it
+  /// ([_writeLaterWords]), and erased then (keepsRecording, recovery.dart).
   Future<void> _finishReview() async {
     final b = _reviewing;
     if (b == null) return;
     b.draft = false;
     await _saveReview();
-    await _store.eraseAudio(b);
+    if (!keepsRecording(b)) await _store.eraseAudio(b);
     if (!mounted) return;
     if (identical(b, _aside) && _reviewFrom == Stage.home) _readFrom = Stage.home;
     _skyFor(SkyView.read);
@@ -1405,7 +1475,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       mic = await _asker.microphone();
     } catch (_) {}
     if (!mounted) return;
-    if (mic != Permission.granted) return _finishFirstRun();
+    // Android cannot write words yet (not_yet.dart), and the practice shows only the words
+    if (mic != Permission.granted || NotYet.words) return _finishFirstRun();
     _engine.setView(SkyView.dim);
     _go(Onboard.rehearsal, slide: slide);
   }
@@ -1990,6 +2061,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onAmen: _amen,
                   onLanguage: _setLanguage,
                   onOpenSettings: _recorder.openSettings,
+                  onAskAgain: () => _session.askAgain(),
                   active: _stage == Stage.record,
                   practice: _session.practice,
                 ),

@@ -23,8 +23,15 @@ abstract final class NotYet {
   static bool debugAndroid = false;
   static bool get _a => Phone.android || debugAndroid;
 
-  /// Recording, and writing the words (tasks 4 to 10): Begin stays dimmed with a plain line.
-  static bool get recording => _a;
+  /// Android's own shape where it differs by design, not by being unfinished: Notifications in the
+  /// first run in place of speech recognition (which Android does not have), the microphone asked
+  /// when Begin is pressed, and Android's wording for a refused microphone.
+  static bool get android => _a;
+
+  /// Writing the words on the phone (tasks 8 to 10). Recording is real; an Android recording is kept
+  /// with its sound and no words, as a draft marked `WordsStatus.later`, and its recording is kept
+  /// until words are written from it. The first run's practice is skipped (it shows only the words).
+  static bool get words => _a;
 
   /// The app lock and the recent-apps cover (task 11).
   static bool get lock => _a;
@@ -35,6 +42,7 @@ abstract final class NotYet {
   /// Sending a blessing (task 13): the reading page has no share button meanwhile.
   static bool get sharing => _a;
 
-  /// Listening back on the review page (task 18 and the plain player before it).
-  static bool get playback => _a;
+  /// Listening back with the phone locked (task 18). The review page's player works on screen;
+  /// leaving the app pauses it.
+  static bool get lockedListening => _a;
 }

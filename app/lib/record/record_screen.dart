@@ -30,6 +30,7 @@ class RecordLayer extends StatefulWidget {
     required this.onAmen,
     required this.onLanguage,
     required this.onOpenSettings,
+    this.onAskAgain,
     this.active = true,
     this.practice = false,
   });
@@ -50,6 +51,9 @@ class RecordLayer extends StatefulWidget {
 
   /// "Open Settings", when a permission was refused.
   final VoidCallback onOpenSettings;
+
+  /// Android: "Allow the microphone", when it was refused and the phone will still ask.
+  final VoidCallback? onAskAgain;
 
   /// Close before Begin, or Discard from the sheet: back to the sky.
   final VoidCallback onClose;
@@ -132,28 +136,29 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
           const SizedBox(height: 40),
       ]);
 
-  /// Under a dimmed Begin on a phone that cannot record yet: only that, said plainly.
-  Widget _notYet(Palette p) => Text(Strings.recordingNotYet, key: const Key('not-yet'), style: sans(13, 18, p.ink2), textAlign: TextAlign.center);
-
-  /// Under a dimmed Begin: what was refused, and the way to Settings.
-  Widget _refused(Palette p, Permissions perms) => Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(
-          Strings.refused(microphone: perms.microphone == Permission.denied, speech: perms.speech == Permission.denied),
-          key: const Key('refused'),
-          style: sans(13, 18, p.ink2),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 14),
-        PillBtn(
-          key: const Key('open-settings'),
-          label: Strings.openSettings,
-          palette: p,
-          kind: PillKind.quiet,
-          height: 40,
-          fontSize: 15,
-          onTap: widget.onOpenSettings,
-        ),
-      ]);
+  /// Under a dimmed Begin: what was refused, and the way to Settings. On Android, in its own words:
+  /// while the phone will still put its question, the button asks it again; after that, the line
+  /// says where in Settings the microphone is turned on, and the button opens the app's page there.
+  Widget _refused(Palette p, Permissions perms) {
+    final android = NotYet.android;
+    final again = android && perms.microphoneAskAgain && widget.onAskAgain != null;
+    final line = android
+        ? (again ? Strings.microphoneRefusedAndroid : '${Strings.microphoneRefusedAndroid} ${Strings.microphoneSettingsAndroid}')
+        : Strings.refused(microphone: perms.microphone == Permission.denied, speech: perms.speech == Permission.denied);
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(line, key: const Key('refused'), style: sans(13, 18, p.ink2), textAlign: TextAlign.center),
+      const SizedBox(height: 14),
+      PillBtn(
+        key: Key(again ? 'ask-again' : 'open-settings'),
+        label: again ? Strings.allowMicrophone : Strings.openSettings,
+        palette: p,
+        kind: PillKind.quiet,
+        height: 40,
+        fontSize: 15,
+        onTap: again ? widget.onAskAgain! : widget.onOpenSettings,
+      ),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,9 +166,7 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
     final mq = MediaQuery.of(context);
     final live = s.live;
     final perms = s.permissions;
-    // Android cannot record yet (not_yet.dart): Begin stays dimmed, with a plain line and no Settings
-    final notYet = NotYet.recording;
-    final refused = notYet || (perms?.anyDenied ?? false);
+    final refused = perms?.anyDenied ?? false;
     final top = math.max(62.0, mq.viewPadding.top);
     return LayoutBuilder(builder: (context, box) {
       final h = box.maxHeight;
@@ -258,22 +261,25 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
             child: AnimatedOpacity(
               opacity: live ? 0 : 1,
               duration: const Duration(milliseconds: 400),
-              child: notYet ? _notYet(p) : refused ? _refused(p, perms!) : _hintAndLanguage(p),
+              child: refused ? _refused(p, perms!) : _hintAndLanguage(p),
             ),
           ),
         ),
         // ---- while it listens ----
+        // The ring and, below it, what holding does: one column from the bottom, so a hint grown
+        // by the text size pushes the ring up instead of running across it. At the usual sizes the
+        // ring's centre is where it always was, 136 above the bottom (the hint is one 18-high line).
         Positioned(
-          left: 0,
-          right: 0,
-          bottom: 92 - HoldRing.reach,
-          child: Center(
-            child: Fade(
-              on: live,
-              inDuration: const Duration(milliseconds: 900),
-              outDuration: const Duration(milliseconds: 500),
-              delay: const Duration(milliseconds: 600),
-              child: HoldRing(
+          left: 24,
+          right: 24,
+          bottom: 58,
+          child: Fade(
+            on: live,
+            inDuration: const Duration(milliseconds: 900),
+            outDuration: const Duration(milliseconds: 500),
+            delay: const Duration(milliseconds: 600),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              HoldRing(
                 key: const Key('hold'),
                 palette: p,
                 amen: _amen,
@@ -281,33 +287,22 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
                 onHeld: () => _amen ? widget.onAmen() : widget.onDiscardEarly(),
                 onShortPress: _nudgeHint,
               ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 58,
-          child: IgnorePointer(
-            child: Fade(
-              on: live,
-              inDuration: const Duration(milliseconds: 900),
-              outDuration: const Duration(milliseconds: 500),
-              delay: const Duration(milliseconds: 600),
-              child: Stack(alignment: Alignment.center, children: [
-                for (final (text, show) in [(Strings.holdToDiscard, !_amen), (Strings.holdToFinish, _amen)])
-                  AnimatedOpacity(
-                    opacity: show ? 1 : 0,
-                    duration: const Duration(milliseconds: 800),
-                    curve: easeOut,
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 300),
-                      style: sans(13, 18, _nudge ? p.ink : p.ink3),
-                      child: Text(text, textAlign: TextAlign.center),
+              IgnorePointer(
+                child: Stack(alignment: Alignment.topCenter, children: [
+                  for (final (text, show) in [(Strings.holdToDiscard, !_amen), (Strings.holdToFinish, _amen)])
+                    AnimatedOpacity(
+                      opacity: show ? 1 : 0,
+                      duration: const Duration(milliseconds: 800),
+                      curve: easeOut,
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 300),
+                        style: sans(13, 18, _nudge ? p.ink : p.ink3),
+                        child: Text(text, key: Key(show ? 'hold-hint' : 'hold-hint-hidden'), textAlign: TextAlign.center),
+                      ),
                     ),
-                  ),
-              ]),
-            ),
+                ]),
+              ),
+            ]),
           ),
         ),
         // ---- are you sure ----

@@ -21,11 +21,15 @@ enum SpeechLanguage {
 enum Permission { granted, denied, undetermined }
 
 class Permissions {
-  const Permissions({required this.microphone, required this.speech});
+  const Permissions({required this.microphone, required this.speech, this.microphoneAskAgain = false});
 
   static const granted = Permissions(microphone: Permission.granted, speech: Permission.granted);
 
   final Permission microphone, speech;
+
+  /// Android: the microphone was refused, and the phone will still put its question once more
+  /// (rather than only its Settings page).
+  final bool microphoneAskAgain;
 
   bool get allGranted => microphone == Permission.granted && speech == Permission.granted;
   bool get anyDenied => microphone == Permission.denied || speech == Permission.denied;
@@ -57,10 +61,14 @@ abstract class Recorder {
 
 /// What came back from turning a file into words.
 class Transcript {
-  const Transcript({required this.text, this.engine = '', this.locale = '', this.unavailable = false});
+  const Transcript({required this.text, this.engine = '', this.locale = '', this.unavailable = false, this.later = false});
 
   /// No engine on this phone can write the language without a server; the audio is kept.
   const Transcript.unavailable() : this(text: '', unavailable: true);
+
+  /// This version of the app does not write words on this phone (Android, until
+  /// docs/android-plan.md task 8); a coming one will, from the kept recording.
+  const Transcript.later() : this(text: '', later: true);
 
   final String text;
 
@@ -70,6 +78,7 @@ class Transcript {
   /// The locale that was used, e.g. "es-US".
   final String locale;
   final bool unavailable;
+  final bool later;
 }
 
 /// Turns a recorded file into words, on the phone only.

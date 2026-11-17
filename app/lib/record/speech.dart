@@ -6,7 +6,8 @@ import 'package:flutter/services.dart';
 import 'recovery.dart';
 import 'transcriber.dart';
 
-/// The microphone and the words, on iOS (ios/Runner/SpeechChannel.swift, OnDeviceSpeech.swift).
+/// The microphone and the words, on iOS (ios/Runner/SpeechChannel.swift, OnDeviceSpeech.swift) and
+/// Android (android/app/src/main/kotlin/.../SpeechChannel.kt), with the same methods and events.
 ///
 /// Speech is turned into text on the phone only: the native side uses Apple's new engine where
 /// the phone has it, otherwise the older recogniser with on-device recognition required, and
@@ -40,7 +41,7 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
       };
 
   static Permissions _perms(Map<Object?, Object?>? m) =>
-      Permissions(microphone: _p(m?['microphone']), speech: _p(m?['speech']));
+      Permissions(microphone: _p(m?['microphone']), speech: _p(m?['speech']), microphoneAskAgain: m?['microphoneAskAgain'] == true);
 
   @override
   Future<Permissions> permissions() async => _perms(await _channel.invokeMethod<Map<Object?, Object?>>('permissions'));
@@ -99,6 +100,9 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
     } on PlatformException catch (e) {
       debugPrint('speech: ${e.code} ${e.message}');
       if (e.code == 'unavailable') return const Transcript.unavailable();
+      // Android, for now: the words are written from the kept recording in a coming version
+      // (SpeechChannel.kt, `transcribe`: the seam the next task fills)
+      if (e.code == 'later') return const Transcript.later();
       rethrow;
     }
   }
@@ -113,4 +117,10 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
 
   /// At stop, replace what the microphone heard with a copy of the file at [path] (null: stop doing so).
   Future<void> debugFeed(String? path) => _channel.invokeMethod<void>('debugFeed', {'path': path});
+
+  /// Android: whether the recorder and its foreground service are running now.
+  Future<({bool recording, bool service})> debugState() async {
+    final m = await _channel.invokeMethod<Map<Object?, Object?>>('debugState');
+    return (recording: m?['recording'] == true, service: m?['service'] == true);
+  }
 }

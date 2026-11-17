@@ -664,7 +664,7 @@ class _PracticeResultLayerState extends State<PracticeResultLayer> {
         final words = s.words.trim();
         final String? plain = switch (state) {
           WordsState.none || WordsState.writing => Strings.practiceWriting,
-          WordsState.unavailable => Strings.practiceUnavailable,
+          WordsState.unavailable || WordsState.later => Strings.practiceUnavailable,
           WordsState.failed => Strings.practiceFailed,
           WordsState.done => words.isEmpty ? Strings.practiceSilent : null,
         };
