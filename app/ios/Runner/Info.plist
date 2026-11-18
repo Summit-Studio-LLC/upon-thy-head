@@ -87,6 +87,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Upon Thy Head listens only while you record a blessing. The audio stays on this phone.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlocks your blessings.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
