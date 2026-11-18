@@ -26,14 +26,21 @@ done
 upload=0
 [ "${1:-}" = "--upload" ] && upload=1
 
-# Signing waits for ever, with nothing printed, when the Mac is showing a "codesign wants to sign
-# using key..." dialog that nobody answers. Sign a scrap file first, so that shows in ten seconds.
+# The Summit Studio distribution key is found first in a signing keychain of its own (made for
+# HiveCycle), whose password is not the Mac's login password: it sits in a file beside it. Locked,
+# it puts a dialog on the Mac's screen that the login password cannot answer.
+SIGNING="$HOME/.appstoreconnect/hivecycle-signing"
+if [ -f "$SIGNING/keychain-password" ]; then
+  security unlock-keychain -p "$(cat "$SIGNING/keychain-password")" "$SIGNING/distribution.keychain-db"
+fi
+# Signing waits for ever, with nothing printed, while such a dialog goes unanswered. Sign a scrap
+# file first, so that shows in ten seconds.
 SCRAP=$(mktemp -d)
 cp /bin/echo "$SCRAP/scrap"
 if ! perl -e 'alarm shift; exec @ARGV' 10 codesign -f -s "Apple Distribution: Summit Studio LLC (7R77MUH4FF)" "$SCRAP/scrap" 2>/dev/null; then
   rm -rf "$SCRAP"
-  echo "the distribution certificate cannot sign without someone at the Mac:"
-  echo "answer the keychain dialog on its screen with Always Allow, then run this again."
+  echo "the distribution certificate cannot sign: a keychain dialog is waiting on the Mac's screen."
+  echo "It wants the password of the keychain that holds the key, which may not be the login password."
   exit 1
 fi
 rm -rf "$SCRAP"
