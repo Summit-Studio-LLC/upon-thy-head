@@ -18,10 +18,13 @@ pnpm build && pnpm start    # the production build
 |------|-------|
 | Every word on the page | `app/content.ts` (one object, `en`; Spanish follows as a second object of the same shape) |
 | The page | `app/page.tsx` |
+| The footer: Summit Studio's own, copied from `storefront/src/components/layout/Footer.tsx` (its words and links are `footer` in `app/content.ts`) | `app/footer.tsx` |
+| The terms, at `/terms` (its words are `terms` in `app/content.ts`) | `app/terms/page.tsx` |
 | Colours, type, layout | `app/globals.css` (Lamplight, copied from `app/lib/theme.dart`) |
 | Picture and icon slots | `app/slots.tsx` |
 | How the words arrive (motion) | `app/reveal.tsx` |
 | Newsreader font files | `app/fonts/` (served from this site) |
+| Manrope, for the footer | `app/layout.tsx` (fetched from Google when the site is built, then served from this site; a visitor never contacts Google) |
 | The living sky (stars, ring, movement) | `app/sky.tsx`; pictures and star files in `public/sky/`, made by `scripts/make-sky.mjs` |
 
 ## Pictures of the app

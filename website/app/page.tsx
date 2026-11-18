@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { en } from "./content";
+import { Footer } from "./footer";
 import { PressLink, Reveal, RevealWords } from "./reveal";
 import { Sky } from "./sky";
 import { AppIcon, Shot } from "./slots";
@@ -241,13 +242,7 @@ export default function Page() {
         </section>
       </main>
 
-      <footer className="wrap footer">
-        <p className="footer-plain">{c.footer.notOfficial}</p>
-        <p className="footer-plain">
-          {c.footer.builtBy} <a href={c.footer.builderUrl}>{c.footer.builder}</a>.
-        </p>
-        <p>{c.footer.credits}</p>
-      </footer>
+      <Footer content={c} />
     </>
   );
 }

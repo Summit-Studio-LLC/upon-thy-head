@@ -95,14 +95,125 @@ export const en = {
     note: "Free. No ads. No account.",
     iconLabel: "App icon",
   },
+  // The footer is Summit Studio's own: its logo, colours and layout, as on summitstudio.dev.
   footer: {
+    builder: "Summit Studio",
+    builderUrl: "https://www.summitstudio.dev",
+    about: "Upon Thy Head is built by Summit Studio, a software studio in Cookeville, Tennessee.",
+    emailLabel: "Get in touch",
+    email: "hello@summitstudio.dev",
+    columns: [
+      {
+        heading: "Upon Thy Head",
+        links: [
+          { label: "Home", href: "/" },
+          { label: "Terms", href: "/terms" },
+        ],
+      },
+    ],
     notOfficial:
       "Upon Thy Head is not an official app of The Church of Jesus Christ of Latter-day Saints.",
-    builtBy: "Built by",
-    builder: "Summit Studio",
-    builderUrl: "https://summitstudio.dev",
     credits:
-      "The sky on this page is the real one: stars from the HYG Database by David Nash (CC BY-SA 4.0), and the Milky Way from the NASA/Goddard Space Flight Center Scientific Visualization Studio. The typeface is Newsreader by Production Type (SIL Open Font License 1.1).",
+      "The sky on this site is the real one: stars from the HYG Database by David Nash (CC BY-SA 4.0), and the Milky Way from the NASA/Goddard Space Flight Center Scientific Visualization Studio. The typeface is Newsreader by Production Type (SIL Open Font License 1.1).",
+    rights: "© 2026 Summit Studio, LLC. All rights reserved.",
+  },
+  // The terms page. A paragraph is a list of parts: plain words, or { link, href } for a link.
+  terms: {
+    title: "Terms",
+    description: "The terms for the app Upon Thy Head and for uponthyhead.app.",
+    changed: "Last changed 18 November 2026.",
+    intro:
+      "These are the terms for the app Upon Thy Head and for this website. By using either one, you agree to them.",
+    back: "Upon Thy Head",
+    sections: [
+      {
+        heading: "What the app does",
+        body: [
+          [
+            "Upon Thy Head listens while a blessing is spoken and writes the words down on your phone. It is free, it has no ads, and it needs no account.",
+          ],
+          [
+            "The writing is done by the phone and it can be wrong. Read the words through before the recording is erased, and correct what was misheard.",
+          ],
+        ],
+      },
+      {
+        heading: "Recording a blessing",
+        body: [
+          [
+            "The Church of Jesus Christ of Latter-day Saints has its own policy on which blessings may be recorded and written down. It is in the General Handbook, section 38.2.2, ",
+            {
+              link: "Photographs, Recordings, and Transcriptions of Ordinances and Blessings",
+              href: "https://www.churchofjesuschrist.org/study/manual/general-handbook/38-church-policies-and-guidelines?lang=eng&id=title_number19#title_number19",
+            },
+            " (",
+            {
+              link: "en español",
+              href: "https://www.churchofjesuschrist.org/study/manual/general-handbook/38-church-policies-and-guidelines?lang=spa&id=title_number19#title_number19",
+              lang: "es",
+            },
+            "), and in section 18.14.1 on ",
+            {
+              link: "father’s blessings",
+              href: "https://www.churchofjesuschrist.org/study/manual/general-handbook/18-priesthood-ordinances-and-blessings?lang=eng&id=title_number46#title_number46",
+            },
+            ". Please read it.",
+          ],
+          [
+            "The app does not know what kind of blessing is being given and does not decide for you. Whether to record a blessing is your choice, and so is following the Church’s policy.",
+          ],
+          [
+            "Ask the person giving the blessing, and anyone else whose voice will be heard, before you record. In some places the law requires it.",
+          ],
+        ],
+      },
+      {
+        heading: "Your blessings are yours",
+        body: [
+          [
+            "The words stay on your phone. We do not receive them and we cannot read them. Keeping them safe, and keeping a copy if you want one, is up to you: if the phone is lost or the app is removed, we cannot bring them back.",
+          ],
+        ],
+      },
+      {
+        heading: "Sharing a blessing",
+        body: [
+          [
+            "When you share a blessing as a link, the phone locks a copy and this site keeps the locked copy for 30 days. The key is in the link itself and never reaches us, so we cannot read the copy.",
+          ],
+          [
+            "Anyone who has the whole link can read the blessing until the link stops. You can stop it from the app at any time. Share only blessings that are yours to share.",
+          ],
+          ["Do not use the link service to send anything that is not a blessing, or to overload it."],
+        ],
+      },
+      {
+        heading: "Not an official app",
+        body: [
+          [
+            "Upon Thy Head is made by Summit Studio. It is not made, approved or supported by The Church of Jesus Christ of Latter-day Saints.",
+          ],
+        ],
+      },
+      {
+        heading: "No promises beyond these",
+        body: [
+          [
+            "The app and this site are offered as they are, free of charge, with no warranty. As far as the law allows, Summit Studio is not responsible for loss that comes from using them, including words written wrongly or blessings that are lost.",
+          ],
+        ],
+      },
+      {
+        heading: "Changes and questions",
+        body: [
+          [
+            "If these terms change, the new ones will be on this page with a new date. Questions go to ",
+            { link: "Summit Studio", href: "https://www.summitstudio.dev/contact" },
+            ".",
+          ],
+        ],
+      },
+    ],
   },
   // The pictures of the app. `label` is shown until the picture exists; `alt` describes it after.
   shots: {

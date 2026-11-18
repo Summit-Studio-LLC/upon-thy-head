@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import localFont from "next/font/local";
 import { en } from "./content";
 import "./globals.css";
@@ -12,6 +13,10 @@ const newsreader = localFont({
   variable: "--font-newsreader",
   display: "swap",
 });
+
+// Manrope, Summit Studio's typeface, for the footer. Downloaded when the site is built and served
+// from this site; a visitor's browser never asks Google for it.
+const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"], display: "swap", preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://uponthyhead.app"),
@@ -34,7 +39,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang={en.lang} className={newsreader.variable}>
+    <html lang={en.lang} className={`${newsreader.variable} ${manrope.variable}`}>
       <body>
         {/* Without JavaScript nothing animates, so nothing may wait to be revealed. */}
         <noscript>
