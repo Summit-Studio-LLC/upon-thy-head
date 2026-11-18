@@ -113,6 +113,7 @@ vec3 onRing(float th) { return u_c + u_a * cos(th) + u_b * sin(th); }`;
 const LINE_VS = `
 attribute float a_t;
 uniform float u_span;
+uniform vec2 u_shift;
 varying float v_t, v_near;
 ${PROJECT}
 ${RING}
@@ -121,16 +122,17 @@ void main() {
   v_t = a_t;
   v_near = mix(1.0, 0.5 + 0.5 * cos(th), u_halo);
   gl_Position = place(onRing(th), u_ringNudge, 1.0);
+  gl_Position.xy += u_shift * gl_Position.w;
 }`;
 
 const LINE_FS = `
 precision mediump float;
 ${LIT}
-uniform float u_draw;
+uniform float u_draw, u_strength;
 varying float v_t, v_near;
 void main() {
   if (v_t > u_draw) discard;
-  float a = (0.27 + 0.38 * v_near) * smoothstep(0.0, 0.04, u_draw - v_t + 0.04);
+  float a = u_strength * (0.27 + 0.38 * v_near) * smoothstep(0.0, 0.04, u_draw - v_t + 0.04);
   gl_FragColor = lit(vec3(0.941, 0.788, 0.529) * a);
 }`;
 
@@ -425,6 +427,13 @@ export function Sky({ scene }: { scene: Scene }) {
       gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
       gl.enableVertexAttribArray(line.a("a_t"));
       gl.vertexAttribPointer(line.a("a_t"), 1, gl.FLOAT, false, 0, 0);
+      // A GL line is one device pixel wide whatever is asked, which Noah found too faint. So it is
+      // drawn twice, the second a pixel across and down and a little weaker: nearly two pixels.
+      gl.uniform2f(line.u("u_shift"), 0, 0);
+      gl.uniform1f(line.u("u_strength"), 1);
+      gl.drawArrays(gl.LINE_STRIP, 0, SEGMENTS + 1);
+      gl.uniform2f(line.u("u_shift"), 2 / gl.drawingBufferWidth, -2 / gl.drawingBufferHeight);
+      gl.uniform1f(line.u("u_strength"), 0.7);
       gl.drawArrays(gl.LINE_STRIP, 0, SEGMENTS + 1);
 
       LIGHTS.forEach((l, i) => {

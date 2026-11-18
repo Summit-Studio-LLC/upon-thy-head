@@ -198,8 +198,8 @@ a {
 .horizon-ring {
   fill: none;
   stroke: var(--light);
-  stroke-opacity: 0.46;
-  stroke-width: 0.75px;
+  stroke-opacity: 0.5;
+  stroke-width: 1.1px;
 }
 
 .light {

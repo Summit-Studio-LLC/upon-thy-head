@@ -301,11 +301,10 @@ class SkyPainter extends CustomPainter {
     final e = engine, l = palette.lights[1];
     final paint = Paint()
       ..blendMode = BlendMode.plus
-      ..strokeWidth =
-          1 /
-          dpr // one device pixel, as the prototype's GL line; .34 strong (it was .2, which Noah found
-      // "very, very faint and difficult to see", 2026-11-18)
-      ..color = Color.fromARGB((.34 * math.min(1.0, math.max(e.names, e.ring)) * 255).round(), (l[0] * 255).round(), (l[1] * 255).round(), (l[2] * 255).round());
+      // 1.6 device pixels and .42 strong. It was one pixel at .2, then at .34: Noah found the first
+      // "very, very faint and difficult to see" and the second still not noticeable enough (2026-11-18).
+      ..strokeWidth = 1.6 / dpr
+      ..color = Color.fromARGB((.42 * math.min(1.0, math.max(e.names, e.ring)) * 255).round(), (l[0] * 255).round(), (l[1] * 255).round(), (l[2] * 255).round());
     var n = 0;
     void flush() {
       if (n >= 4) canvas.drawRawPoints(ui.PointMode.polygon, Float32List.sublistView(_linePts, 0, n), paint);
