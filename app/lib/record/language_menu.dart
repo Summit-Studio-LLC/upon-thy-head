@@ -66,26 +66,26 @@ class LanguageControlState extends State<LanguageControl> {
       ]),
     );
     if (!_native) {
-      return Semantics(
-        button: true,
-        label: Strings.languageLabel(widget.language),
-        excludeSemantics: true,
-        child: Builder(
-          builder: (context) => GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () async {
-              final code = await showPullDown(
-                context,
-                palette: p,
-                choices: [for (final l in SpeechLanguage.values) (l.code, Strings.languageName(l))],
-                selected: widget.language.code,
-              );
-              if (code != null && code != widget.language.code && mounted) widget.onChanged(SpeechLanguage.fromCode(code));
-            },
-            child: words,
-          ),
-        ),
-      );
+      // the Builder's context is the control's own box, where the pull-down opens from
+      return Builder(builder: (context) {
+        Future<void> open() async {
+          final code = await showPullDown(
+            context,
+            palette: p,
+            choices: [for (final l in SpeechLanguage.values) (l.code, Strings.languageName(l))],
+            selected: widget.language.code,
+          );
+          if (code != null && code != widget.language.code && mounted) widget.onChanged(SpeechLanguage.fromCode(code));
+        }
+
+        return Semantics(
+          button: true,
+          label: Strings.languageLabel(widget.language),
+          excludeSemantics: true,
+          onTap: open,
+          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: open, child: words),
+        );
+      });
     }
     return Stack(children: [
       words,

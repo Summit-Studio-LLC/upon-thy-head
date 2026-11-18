@@ -455,6 +455,7 @@ class _QuietBtnState extends State<_QuietBtn> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

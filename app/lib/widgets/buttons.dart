@@ -24,6 +24,7 @@ class _TextBtnState extends State<TextBtn> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -95,9 +96,11 @@ class _PillBtnState extends State<PillBtn> {
     };
     return Semantics(
       button: true,
-      enabled: widget.enabled,
+      // a pill with nothing to do is said to be unavailable
+      enabled: widget.enabled ?? (widget.onTap == null ? false : null),
       label: widget.semanticsLabel ?? widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -150,6 +153,7 @@ class _LightTextBtnState extends State<LightTextBtn> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

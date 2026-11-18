@@ -121,6 +121,7 @@ class _OpenRowState extends State<OpenRow> {
       button: true,
       label: widget.semantics,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

@@ -2802,6 +2802,7 @@ class _ReviewBadgeState extends State<ReviewBadge> {
       button: true,
       label: Strings.toReviewLabel(widget.count),
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -2854,6 +2855,7 @@ class _UnlockButtonState extends State<UnlockButton> {
       button: true,
       label: Strings.unlock,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
@@ -2901,6 +2903,7 @@ class _NewBlessingButtonState extends State<NewBlessingButton> {
       button: true,
       label: Strings.newBlessing,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),

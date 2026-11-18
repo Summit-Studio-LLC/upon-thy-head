@@ -299,6 +299,8 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
                 countdown: _countdown,
                 onHeld: () => _amen ? widget.onAmen() : widget.onDiscardEarly(),
                 onShortPress: _nudgeHint,
+                // a screen reader cannot hold: its double-tap finishes, or asks before discarding
+                onActivate: () => _amen ? widget.onAmen() : s.showSheet(true),
               ),
               IgnorePointer(
                 child: Stack(alignment: Alignment.topCenter, children: [
@@ -358,6 +360,7 @@ class _BeginButtonState extends State<BeginButton> {
       enabled: widget.onTap != null,
       label: Strings.beginLabel,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => widget.onTap == null ? null : setState(() => _down = true),

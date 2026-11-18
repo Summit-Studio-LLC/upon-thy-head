@@ -57,6 +57,7 @@ class Strings {
   static String get readBlessing => _w.readBlessing;
   static String get earlier => _w.earlier;
   static String get later => _w.later;
+  static String get rulerLabel => _w.rulerLabel;
   static String get newBlessing => _w.newBlessing;
   static String from(String name) => _w.from(name);
   static String get firstRun => _w.firstRun;
@@ -75,6 +76,8 @@ class Strings {
   static String get holdToFinish => _w.holdToFinish;
   static String get discardLabel => _w.discardLabel;
   static String get amenLabel => _w.amenLabel;
+  static String get amenTapHint => _w.amenTapHint;
+  static String get discardTapHint => _w.discardTapHint;
   static String get discardTitle => _w.discardTitle;
   static String get discardBody => _w.discardBody;
   static String get keepListening => _w.keepListening;
@@ -127,6 +130,7 @@ class Strings {
   static String get play => _w.play;
   static String get pause => _w.pause;
   static String get back10 => _w.back10;
+  static String get playbackPosition => _w.playbackPosition;
   static String elapsed(String at, String of) => _w.elapsed(at, of);
   static String get wordsLabel => _w.wordsLabel;
   static String get wordsNotWrittenHere => _w.wordsNotWrittenHere;
@@ -386,6 +390,7 @@ extension WordsCatalogue on Words {
         'readBlessing': readBlessing,
         'earlier': earlier,
         'later': later,
+        'rulerLabel': rulerLabel,
         'newBlessing': newBlessing,
         'firstRun': firstRun,
         'notReviewedNote': notReviewedNote,
@@ -400,6 +405,8 @@ extension WordsCatalogue on Words {
         'holdToFinish': holdToFinish,
         'discardLabel': discardLabel,
         'amenLabel': amenLabel,
+        'amenTapHint': amenTapHint,
+        'discardTapHint': discardTapHint,
         'discardTitle': discardTitle,
         'discardBody': discardBody,
         'keepListening': keepListening,
@@ -442,6 +449,7 @@ extension WordsCatalogue on Words {
         'play': play,
         'pause': pause,
         'back10': back10,
+        'playbackPosition': playbackPosition,
         'wordsLabel': wordsLabel,
         'wordsNotWrittenHere': wordsNotWrittenHere,
         'noWordsHeardHere': noWordsHeardHere,
@@ -719,6 +727,8 @@ class Words {
   String get readBlessing => 'Read this blessing';
   String get earlier => 'Earlier blessing';
   String get later => 'Later blessing';
+  /// VoiceOver: the ruler of months, a slider over the blessings (swipe up or down to turn).
+  String get rulerLabel => 'Blessings by date';
   String get newBlessing => 'New blessing';
   String from(String name) => 'From $name';
 
@@ -750,6 +760,9 @@ class Words {
   String get holdToFinish => 'Hold to finish';
   String get discardLabel => 'Discard. Hold to discard this recording';
   String get amenLabel => 'Amen. Hold to finish';
+  /// TalkBack: "Double-tap to …" on the ring (a screen reader's double-tap does what the hold does).
+  String get amenTapHint => 'finish the recording';
+  String get discardTapHint => 'choose whether to discard';
   String get discardTitle => 'Discard this recording?';
   String get discardBody => 'Nothing from it will be kept. It keeps listening while you decide.';
   String get keepListening => 'Keep listening';
@@ -839,6 +852,8 @@ class Words {
   String get play => 'Play the recording';
   String get pause => 'Pause';
   String get back10 => 'Back ten seconds';
+  /// VoiceOver: the listen bar's line, a slider (swipe up or down: ten seconds).
+  String get playbackPosition => 'Playback position';
   String elapsed(String at, String of) => '$at of $of';
   String get wordsLabel => 'The words';
   String get wordsNotWrittenHere => 'The words could not be written on this phone. Listen to the recording and type them here.';
@@ -1233,6 +1248,8 @@ class _Spanish implements Words {
   @override
   String get later => 'Bendición siguiente';
   @override
+  String get rulerLabel => 'Bendiciones por fecha';
+  @override
   String get newBlessing => 'Nueva bendición';
   @override
   String from(String name) => 'De $name';
@@ -1276,6 +1293,10 @@ class _Spanish implements Words {
   String get discardLabel => 'Descartar. Mantén presionado para descartar esta grabación';
   @override
   String get amenLabel => 'Amén. Mantén presionado para terminar';
+  @override
+  String get amenTapHint => 'terminar la grabación';
+  @override
+  String get discardTapHint => 'elegir si descartar';
   @override
   String get discardTitle => '¿Descartar esta grabación?';
   @override
@@ -1415,6 +1436,8 @@ class _Spanish implements Words {
   String get pause => 'Pausar';
   @override
   String get back10 => 'Retroceder diez segundos';
+  @override
+  String get playbackPosition => 'Posición de reproducción';
   @override
   String elapsed(String at, String of) => '$at de $of';
   @override

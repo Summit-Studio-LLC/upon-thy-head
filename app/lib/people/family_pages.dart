@@ -197,6 +197,7 @@ class PersonLayerState extends State<PersonLayer> {
       button: true,
       label: '${Strings.born}, ${born == null ? Strings.noDate : bornText}',
       excludeSemantics: true,
+      onTap: _pick,
       child: Text(bornText, key: const Key('person-born'), style: sans(17, 22, born == null ? p.ink3 : p.ink)),
     );
 
@@ -425,6 +426,7 @@ class _QuietBtnState extends State<_QuietBtn> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

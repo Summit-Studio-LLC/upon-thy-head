@@ -179,6 +179,7 @@ class OpeningLayer extends StatelessWidget {
       button: true,
       label: Strings.appName,
       excludeSemantics: true,
+      onTap: onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -561,6 +562,7 @@ class _RowPillState extends State<_RowPill> {
       button: true,
       label: widget.semanticsLabel,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

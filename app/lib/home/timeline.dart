@@ -302,6 +302,7 @@ class _RowState extends State<_Row> {
       button: true,
       label: '${b.longDate}. ${b.shownTitle}${b.from.isEmpty ? '' : '. ${Strings.from(b.from)}'}${b.draft ? '. ${Strings.notReviewedNote}' : ''}',
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

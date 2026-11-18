@@ -306,6 +306,7 @@ class ShareSheetState extends State<ShareSheet> {
         label: Strings.copyLink,
         button: true,
         excludeSemantics: true,
+        onTap: _copy,
         child: GestureDetector(
           key: const Key('share-copy'),
           behavior: HitTestBehavior.opaque,
@@ -351,13 +352,11 @@ class ShareSheetState extends State<ShareSheet> {
           button: true,
           label: Strings.yourLinks,
           excludeSemantics: true,
+          onTap: _yourLinks,
           child: GestureDetector(
             key: const Key('share-your-links'),
             behavior: HitTestBehavior.opaque,
-            onTap: () {
-              widget.onClose();
-              widget.onYourLinks!();
-            },
+            onTap: _yourLinks,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Row(children: [
@@ -369,6 +368,11 @@ class ShareSheetState extends State<ShareSheet> {
         ),
       ],
     ]);
+  }
+
+  void _yourLinks() {
+    widget.onClose();
+    widget.onYourLinks!();
   }
 
   Widget _noLink(Palette p) {
@@ -452,6 +456,7 @@ class _BigButtonState extends State<_BigButton> {
       enabled: widget.onTap != null,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: widget.onTap == null ? null : (_) => setState(() => _down = true),
@@ -496,6 +501,7 @@ class _ChipState extends State<_Chip> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),

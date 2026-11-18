@@ -20,6 +20,7 @@ class HoldRing extends StatefulWidget {
     required this.countdown,
     required this.onHeld,
     required this.onShortPress,
+    this.onActivate,
   });
 
   final Palette palette;
@@ -35,6 +36,11 @@ class HoldRing extends StatefulWidget {
 
   /// Let go too soon.
   final VoidCallback onShortPress;
+
+  /// A screen reader's double-tap (VoiceOver, TalkBack, Switch Control), which cannot hold: Amen
+  /// finishes; Discard asks first (the recording screen's own question). Null: the same as
+  /// [onHeld]. TalkBack's double-tap-and-hold and VoiceOver's pass-through hold are the real hold.
+  final VoidCallback? onActivate;
 
   static const double size = 88, reach = 16;
 
@@ -132,6 +138,8 @@ class HoldRingState extends State<HoldRing> with TickerProviderStateMixin {
     return Semantics(
       button: true,
       label: widget.amen ? Strings.amenLabel : Strings.discardLabel,
+      onTap: widget.onActivate ?? widget.onHeld,
+      onTapHint: widget.amen ? Strings.amenTapHint : Strings.discardTapHint,
       onLongPress: widget.onHeld,
       excludeSemantics: true,
       child: Listener(

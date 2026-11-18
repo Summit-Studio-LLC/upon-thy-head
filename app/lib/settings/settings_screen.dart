@@ -303,6 +303,7 @@ class GoldSwitch extends StatelessWidget {
       enabled: enabled,
       label: label,
       excludeSemantics: true,
+      onTap: enabled ? () => onChanged!(!value) : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!value) : null,
@@ -364,6 +365,7 @@ class _GoldWordState extends State<_GoldWord> {
       button: true,
       label: widget.label,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -443,22 +445,22 @@ class SettingsLanguageControlState extends State<SettingsLanguageControl> {
     );
     final label = '${Strings.recordingLanguage}: $name';
     if (!_native) {
-      return Semantics(
-        button: true,
-        label: label,
-        excludeSemantics: true,
-        child: Builder(
-          builder: (context) => GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () async {
-              final was = widget.code ?? SettingsLanguageControl.phone;
-              final code = await showPullDown(context, palette: p, choices: SettingsLanguageControl.choices, selected: was);
-              if (code != null && code != was && mounted) debugPick(code);
-            },
-            child: words,
-          ),
-        ),
-      );
+      // the Builder's context is the control's own box, where the pull-down opens from
+      return Builder(builder: (context) {
+        Future<void> open() async {
+          final was = widget.code ?? SettingsLanguageControl.phone;
+          final code = await showPullDown(context, palette: p, choices: SettingsLanguageControl.choices, selected: was);
+          if (code != null && code != was && mounted) debugPick(code);
+        }
+
+        return Semantics(
+          button: true,
+          label: label,
+          excludeSemantics: true,
+          onTap: open,
+          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: open, child: words),
+        );
+      });
     }
     return Stack(children: [
       words,

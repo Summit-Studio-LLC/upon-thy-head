@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../data/blessing.dart';
+import '../strings.dart';
 import '../theme.dart';
 
 /// The line of months along the bottom of the home screen, with a dot for each
@@ -57,7 +58,21 @@ class Ruler extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
-      return GestureDetector(
+      // VoiceOver and TalkBack: a slider over the blessings, its value the one in focus; a swipe up
+      // or down turns to the next or the one before (the drag along it is for a finger)
+      String said(int i) => '${blessings[i].longDate}. ${blessings[i].shownTitle}';
+      final has = blessings.isNotEmpty && focus >= 0 && focus < blessings.length;
+      final later = has && focus < blessings.length - 1, earlier = has && focus > 0;
+      return Semantics(
+        slider: true,
+        label: Strings.rulerLabel,
+        value: has ? said(focus) : null,
+        increasedValue: later ? said(focus + 1) : null,
+        decreasedValue: earlier ? said(focus - 1) : null,
+        onIncrease: later ? () => onPick(focus + 1, fresh: true) : null,
+        onDecrease: earlier ? () => onPick(focus - 1, fresh: true) : null,
+        excludeSemantics: true,
+        child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanDown: (d) => _pick(d.localPosition, w, fresh: true),
         onPanUpdate: (d) => _pick(d.localPosition, w, fresh: false),
@@ -76,6 +91,7 @@ class Ruler extends StatelessWidget {
               ),
           ]),
         ),
+      ),
       );
     });
   }

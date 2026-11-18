@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 UDID="${1:-512A6D6E-FE1E-43AF-AB3F-53C0DFE04208}"
 flutter build ios --simulator --debug >/dev/null || exit 1
 failed=()
-for t in home record reduce_motion ring ring_demo store_demo zoom; do
+for t in home record reduce_motion ring ring_demo store_demo zoom screen_reader; do
   xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
   tool/sim_permissions.sh grant "$UDID" >/dev/null
   echo "== $t"

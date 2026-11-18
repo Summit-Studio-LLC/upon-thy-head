@@ -845,6 +845,7 @@ class _QuietActionState extends State<_QuietAction> {
       label: widget.label,
       hint: widget.hint,
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -886,6 +887,7 @@ class _PolishedRowState extends State<_PolishedRow> {
       button: true,
       label: '${widget.label}, ${widget.detail}',
       excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -954,7 +956,16 @@ class ListenBar extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: LayoutBuilder(
-                builder: (context, box) => GestureDetector(
+                // VoiceOver and TalkBack: a slider; a swipe up or down moves ten seconds
+                builder: (context, box) => Semantics(
+                  slider: true,
+                  label: Strings.playbackPosition,
+                  value: Strings.elapsed(clockTime(at), clockTime(d)),
+                  increasedValue: d > 0 && at < d ? Strings.elapsed(clockTime(math.min(d, at + 10)), clockTime(d)) : null,
+                  decreasedValue: d > 0 && at > 0 ? Strings.elapsed(clockTime(math.max(0, at - 10)), clockTime(d)) : null,
+                  onIncrease: d > 0 && at < d ? () => player.seek(math.min(d, at + 10)) : null,
+                  onDecrease: d > 0 && at > 0 ? () => player.seek(math.max(0, at - 10)) : null,
+                  child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapUp: d > 0 ? (e) => player.seek((e.localPosition.dx / box.maxWidth).clamp(0.0, 1.0) * d) : null,
                   child: ExcludeSemantics(
@@ -978,6 +989,7 @@ class ListenBar extends StatelessWidget {
                       ),
                     ),
                   ),
+                ),
                 ),
               ),
             ),
@@ -1020,6 +1032,7 @@ class _TagChip extends StatelessWidget {
             button: true,
             label: Strings.removeTag(label),
             excludeSemantics: true,
+            onTap: onRemove,
             child: GestureDetector(
               key: Key('untag-$label'),
               behavior: HitTestBehavior.opaque,
@@ -1053,6 +1066,7 @@ class _Suggestion extends StatelessWidget {
       button: true,
       label: Strings.suggestTag(label),
       excludeSemantics: true,
+      onTap: onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -1090,6 +1104,7 @@ class OwnershipChoice extends StatelessWidget {
           inMutuallyExclusiveGroup: true,
           label: label,
           excludeSemantics: true,
+          onTap: () => onChanged(o),
           child: GestureDetector(
             key: key,
             behavior: HitTestBehavior.opaque,
