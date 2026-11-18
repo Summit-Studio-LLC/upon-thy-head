@@ -431,10 +431,10 @@ enum BlessingInbox {
       // a universal link (the app was closed), or the simulator's stand-in for one
       let links = (connectionOptions?.userActivities ?? []).compactMap(webLink) + contexts.filter(isTestLink)
       links.forEach(receiveLink)
-      // the app's own Spotlight entry (Shortcuts.swift): home
-      let spotlight = (connectionOptions?.userActivities ?? []).contains(where: SpotlightEntry.isOurs)
-      if spotlight { BlessingInbox.receiveShortcut(.home) }
-      return !urls.isEmpty || !links.isEmpty || spotlight
+      // one of the app's own Spotlight entries (Shortcuts.swift): its place
+      let spotlight = (connectionOptions?.userActivities ?? []).compactMap(SpotlightEntry.place)
+      spotlight.forEach(BlessingInbox.receiveShortcut)
+      return !urls.isEmpty || !links.isEmpty || !spotlight.isEmpty
     }
 
     /// While running or in the background.
@@ -450,8 +450,8 @@ enum BlessingInbox {
 
     /// A universal link while running or in the background (`scene(_:continue:)`).
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) -> Bool {
-      if SpotlightEntry.isOurs(userActivity) {
-        BlessingInbox.receiveShortcut(.home)
+      if let place = SpotlightEntry.place(userActivity) {
+        BlessingInbox.receiveShortcut(place)
         return true
       }
       guard let url = webLink(userActivity) else { return false }
@@ -487,7 +487,7 @@ enum BlessingInbox {
     }
   }
 
-  /// An App Shortcut or the app's Spotlight entry (Shortcuts.swift): where the app should open. It
+  /// An App Shortcut or one of the app's Spotlight entries (Shortcuts.swift): where the app should open. It
   /// waits, as a link does, until Dart is ready; only the newest one counts there.
   static func receiveShortcut(_ place: ShortcutPlace) {
     NSLog("receive: shortcut %@", place.rawValue)

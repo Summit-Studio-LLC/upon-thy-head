@@ -7,7 +7,7 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // the app's one Spotlight entry (Shortcuts.swift): fixed words only, nothing of any blessing
+    // the app's two Spotlight entries (Shortcuts.swift): fixed words only, nothing of any blessing
     SpotlightEntry.write()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
