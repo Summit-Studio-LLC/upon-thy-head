@@ -182,9 +182,9 @@ void main() {
     Map<String, Object?> good() => jsonOf(BlessingRecord.of(surgery));
 
     test('newer version: recognised as newer, whatever else it holds', () {
-      final r = readMap({'format': 'upon-thy-head/blessing', 'version': 2, 'something': 'new'});
+      final r = readMap({'format': 'upon-thy-head/blessing', 'version': 3, 'something': 'new'});
       expect(r, isA<BlessingReadNewer>());
-      expect((r as BlessingReadNewer).version, 2);
+      expect((r as BlessingReadNewer).version, 3);
     });
 
     test('rubbish, empty, not UTF-8, not JSON, not an object, not ours', () {

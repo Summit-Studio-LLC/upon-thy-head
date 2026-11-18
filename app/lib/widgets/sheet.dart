@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 import 'buttons.dart';
+import 'measure.dart';
 
 /// The prototype's `.sheet`: a raised panel rising from the bottom edge.
 /// With [barrier], the rest of the screen dims and a tap on it calls [onDismiss].
@@ -65,7 +68,9 @@ class _SheetState extends State<Sheet> {
     // never taller than the screen below the status bar: at the largest text sizes the content
     // scrolls inside the panel instead of running off the top (found on Android at font 2.0 with
     // the display size raised; the same holds for iPhone's largest sizes)
-    final room = MediaQuery.sizeOf(context).height - MediaQuery.paddingOf(context).top - 12 - 20 - 38 - inset;
+    final wide = MediaQuery.sizeOf(context).width >= Widths.cardFrom;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final room = MediaQuery.sizeOf(context).height - MediaQuery.paddingOf(context).top - 12 - 20 - 38 - inset - (wide ? math.max(20.0, safeBottom) : 0);
     // off, it is slid below the screen and still built: out of VoiceOver's reach as well as the finger's
     final panel = ExcludeSemantics(
       excluding: !on,
@@ -75,12 +80,20 @@ class _SheetState extends State<Sheet> {
           offset: on ? Offset.zero : const Offset(0, 1.04),
           duration: still ? Duration.zero : const Duration(milliseconds: 500),
           curve: easeOut,
-          child: Container(
+          // a wide screen (an iPad, not a Split View third): a card of its own width, lifted off the
+          // bottom edge and rounded all round; a phone's sheet is as it was
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            heightFactor: 1,
+            child: Padding(
+            padding: EdgeInsets.only(bottom: wide ? math.max(20.0, safeBottom) : 0),
+            child: Container(
             key: panelKey,
-            padding: EdgeInsets.fromLTRB(24, 20, 24, 38 + inset),
+            width: wide ? Widths.card : null,
+            padding: EdgeInsets.fromLTRB(24, 20, 24, (wide ? 28 : 38) + inset),
             decoration: BoxDecoration(
               color: p.raised,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: wide ? BorderRadius.circular(28) : const BorderRadius.vertical(top: Radius.circular(28)),
               boxShadow: [BoxShadow(color: p.ink.withValues(alpha: .07), offset: const Offset(0, -1))],
             ),
             child: Semantics(
@@ -92,6 +105,8 @@ class _SheetState extends State<Sheet> {
                 child: SingleChildScrollView(child: child),
               ),
             ),
+          ),
+          ),
           ),
         ),
       ),

@@ -221,6 +221,13 @@ class SqliteBlessingStore implements BlessingStore {
       db.execute("ALTER TABLE blessings ADD COLUMN person_id TEXT NOT NULL DEFAULT ''");
       db.execute('CREATE INDEX blessings_by_person ON blessings (person_id)');
     },
+    // 9: blessings entered from a written copy (typed or pasted, not recorded), and how much of the
+    // date each is known to: the day, the month, or only the year ('unset' while an entry is still
+    // being written). Every blessing so far was recorded, on a known day.
+    (db) {
+      db.execute("ALTER TABLE blessings ADD COLUMN date_precision TEXT NOT NULL DEFAULT 'day' CHECK (date_precision IN ('day', 'month', 'year', 'unset'))");
+      db.execute('ALTER TABLE blessings ADD COLUMN entered INTEGER NOT NULL DEFAULT 0 CHECK (entered IN (0, 1))');
+    },
   ];
 
   static void _insertChanges(Database db, String id, List<Change> changes) {
@@ -268,7 +275,7 @@ class SqliteBlessingStore implements BlessingStore {
 
   static const _columns = 'id, title, giver, recipient, ownership, given_utc_minute, utc_offset_minutes, '
       'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text, sent_at_ms, '
-      'person_id';
+      'person_id, date_precision, entered';
 
   List<Object?> _values(Blessing b) => [
         b.id,
@@ -293,6 +300,8 @@ class SqliteBlessingStore implements BlessingStore {
         b.sent?.millisecondsSinceEpoch,
         // one passed along is on no ring
         b.ownership == Ownership.passingOn ? '' : b.personId,
+        b.precision.code,
+        b.entered ? 1 : 0,
       ];
 
   Blessing _read(Row r, Map<String, List<String>> tags, Map<String, List<Change>> changes) {
@@ -319,6 +328,8 @@ class SqliteBlessingStore implements BlessingStore {
       sent: r['sent_at_ms'] == null ? null : DateTime.fromMillisecondsSinceEpoch(r['sent_at_ms'] as int, isUtc: true),
       created: DateTime.fromMillisecondsSinceEpoch(r['created_at_ms'] as int, isUtc: true),
       updated: DateTime.fromMillisecondsSinceEpoch(r['updated_at_ms'] as int, isUtc: true),
+      precision: DatePrecision.fromCode(r['date_precision'] as String),
+      entered: r['entered'] == 1,
     );
   }
 
@@ -387,7 +398,7 @@ class SqliteBlessingStore implements BlessingStore {
   @override
   Future<void> create(Blessing b) async {
     _tx(_db, () {
-      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(21, '?').join(', ')})', _values(b));
+      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(23, '?').join(', ')})', _values(b));
       _writeTags(b);
       _writeChanges(b);
     });
@@ -404,7 +415,7 @@ class SqliteBlessingStore implements BlessingStore {
         'audio = ?, language = ?, words_state = ?, '
         // the first writing is kept as it was once there is one
         "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END, "
-        'sent_at_ms = ?, person_id = ? '
+        'sent_at_ms = ?, person_id = ?, date_precision = ?, entered = ? '
         'WHERE id = ?',
         [...v.skip(1), b.id],
       );

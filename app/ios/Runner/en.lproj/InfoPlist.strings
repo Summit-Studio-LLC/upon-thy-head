@@ -3,3 +3,6 @@
 "NSFaceIDUsageDescription" = "Unlocks your blessings.";
 "NSLocationWhenInUseUsageDescription" = "Used once to place your first blessing's light in the sky where it was given. Allow Once is enough.";
 "NSSpeechRecognitionUsageDescription" = "Speech is turned into text on this phone. Nothing is sent anywhere.";
+/* On an iPad (not a phone) */
+"NSMicrophoneUsageDescription~ipad" = "Upon Thy Head listens only while you record a blessing. The audio stays on this iPad.";
+"NSSpeechRecognitionUsageDescription~ipad" = "Speech is turned into text on this iPad. Nothing is sent anywhere.";

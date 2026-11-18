@@ -15,6 +15,7 @@ import '../record/words_model.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
+import '../widgets/measure.dart';
 import '../widgets/over_sky_page.dart';
 import '../widgets/pull_down.dart';
 
@@ -80,6 +81,7 @@ class SettingsLayer extends StatelessWidget {
       builder: (context, _) {
         final canLock = lock.method != LockMethod.none;
         final place = where.fallback ? Strings.nearTemple : Strings.near(where.place.lat, where.place.lon);
+        final side = Widths.side(MediaQuery.sizeOf(context).width, 28, Widths.form);
         return Stack(children: [
           // the sky dims behind the page
           Positioned.fill(child: IgnorePointer(child: ColoredBox(color: p.ground.withValues(alpha: .55)))),
@@ -87,7 +89,8 @@ class SettingsLayer extends StatelessWidget {
             child: SingleChildScrollView(
               key: const Key('settings-scroll'),
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              padding: EdgeInsets.fromLTRB(28, 112 + dy, 28, 64),
+              // an iPad: a form's measure, centred (a phone keeps its 28 at each side)
+              padding: EdgeInsets.fromLTRB(side, 112 + dy, side, 64),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(Strings.settings, key: const Key('settings-title'), style: serif(34, 38, p.ink, tracking: -.012)),
                 const SizedBox(height: 28),

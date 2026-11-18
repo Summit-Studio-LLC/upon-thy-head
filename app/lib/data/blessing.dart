@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import '../polish/change.dart';
 import '../sky/astro.dart';
 import '../strings.dart';
+import 'given.dart';
+
+export 'given.dart';
 
 /// Whose blessing this is: given to the person keeping the record, or one they
 /// are keeping for someone else to pass along.
@@ -57,6 +60,8 @@ class Blessing {
     this.language = '',
     this.wordsStatus = WordsStatus.written,
     this.sent,
+    this.precision = DatePrecision.day,
+    this.entered = false,
     DateTime? created,
     DateTime? updated,
   })  : changes = changes ?? [],
@@ -127,6 +132,17 @@ class Blessing {
   /// When this record was made and last changed (UTC).
   DateTime created, updated;
 
+  /// How much of the date is known: a recording's is the day (and minute); an entered one may know
+  /// only the month or the year ([utc] is then its light's place: the 15th, or July 2, at noon), or
+  /// not yet have one ([DatePrecision.unset]: an entry still being written, on no ring).
+  DatePrecision precision;
+
+  /// Entered from a written copy (typed or pasted), not recorded. Its words are never polished.
+  bool entered;
+
+  /// It has a date, so a light and a place on its ring.
+  bool get placed => precision != DatePrecision.unset;
+
   /// Its place in the sky, set by the placement rule (see sky/placement.dart). Not stored.
   double ra = 0, dec = 0;
   Vec3 v = const Vec3(1, 0, 0);
@@ -142,10 +158,17 @@ class Blessing {
   /// whichever language it was made in. A title the person typed is shown exactly as typed.
   String get shownTitle => Strings.isUntitled(title) ? Strings.untitled : title;
 
-  String get longDate => Strings.longDate(local);
+  /// "Tuesday, March 3, 2026", "August 1998" or "1998", as much as is known.
+  String get longDate => Strings.givenLong(local, precision);
 
-  /// "Mar 3, 2026"
-  String get shortDate => Strings.shortDate(local);
+  /// "Mar 3, 2026", "Aug 1998" or "1998".
+  String get shortDate => Strings.givenShort(local, precision);
+
+  /// The words in paragraphs, as the reading page and what is shared show them. A recording's
+  /// paragraphs are separated by a blank line; words entered from a written copy are kept exactly
+  /// as typed or pasted, where a single line break (as Notes and mail write one) also ends one.
+  List<String> get paragraphs =>
+      words.split(entered ? RegExp(r'\n') : RegExp(r'\n\s*\n')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 }
 
 final _random = math.Random.secure();
@@ -166,6 +189,44 @@ Blessing draftBlessing(DateTime now, {required Place place, String personId = ''
       personId: personId,
       draft: true,
     );
+
+/// A blessing entered from a written copy, as its entry page opens: no date yet, no words, for me
+/// or for the family member [personId], at [place] (the place blessings are given, as a recording's).
+/// It is a draft from the start, so nothing typed is lost.
+Blessing enteredBlessing(DateTime now, {required Place place, String personId = ''}) => Blessing(
+      id: newBlessingId(),
+      title: Strings.untitled,
+      from: '',
+      utc: now.toUtc(),
+      utcOffset: now.timeZoneOffset,
+      place: place,
+      ownership: Ownership.forMe,
+      personId: personId,
+      draft: true,
+      entered: true,
+      precision: DatePrecision.unset,
+    );
+
+/// An entry opened and left with nothing in it: no date, no words, no title, names or tags.
+bool isEmptyEntry(Blessing b) =>
+    b.entered &&
+    b.draft &&
+    !b.placed &&
+    b.rawText.trim().isEmpty &&
+    Strings.isUntitled(b.title) &&
+    b.from.isEmpty &&
+    b.recipient.isEmpty &&
+    b.tags.isEmpty;
+
+/// [b] given on a date known to [p]; its light sits at noon of the day, the 15th, or July 2, on the
+/// phone's clock for that date.
+void setGiven(Blessing b, DatePrecision p, int year, [int month = 1, int day = 1]) {
+  final at = givenAnchor(p, year, month, day);
+  b
+    ..precision = p
+    ..utcOffset = at.timeZoneOffset
+    ..utc = at.toUtc();
+}
 
 /// The sample blessings' home (data/samples.dart and tests). Real recordings never use it.
 const samplePlace = Place(40.23, -111.66);

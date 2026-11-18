@@ -40,11 +40,33 @@ function message(state, { title, body }, retry = false) {
 
 const day = (date, timeZone) => new Intl.DateTimeFormat(w.locale, { month: "long", day: "numeric", timeZone }).format(date);
 const longDate = (date) => new Intl.DateTimeFormat(w.locale, { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(date);
+// as much of the date as is known, as the app shows it: "Sunday, August 23, 1998", "August 1998", "1998"
+const givenDate = (date, precision) =>
+  precision === "year"
+    ? String(date.getUTCFullYear())
+    : precision === "month"
+      ? new Intl.DateTimeFormat(w.locale, { year: "numeric", month: "long", timeZone: "UTC" }).format(date)
+      : longDate(date);
+
+/** A small written page, drawn as the app draws it (lib/widgets/icons.dart, Glyph.page). */
+function pageIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "page-icon");
+  for (const d of ["M7 3.5h6.5l5 5V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z", "M13.5 3.5v5h5", "M8.5 12.5h7M8.5 16h7"]) {
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
+}
 
 function showBlessing(record, expires) {
   const until = expires ? day(expires) : "";
   // the date as it was where the blessing was given
-  const given = longDate(new Date(record.given.getTime() + record.offset * 60000));
+  const given = givenDate(new Date(record.given.getTime() + record.offset * 60000), record.precision);
   const article = el("article", "blessing");
   if (record.language) article.lang = record.language;
   const head = el("header", "blessing-head");
@@ -53,10 +75,13 @@ function showBlessing(record, expires) {
   head.append(Object.assign(el("p", "from", record.from ? w.blessingFrom(record.from) : w.aBlessing), { lang: w.lang }));
   head.append(Object.assign(el("p", "given", [given, record.for && w.forName(record.for)].filter(Boolean).join(" · ")), { lang: w.lang }));
   const words = el("div", "words");
-  for (const p of paragraphs(polished(record))) words.append(el("p", "", p));
+  for (const p of paragraphs(polished(record), record.entered)) words.append(el("p", "", p));
   const kept = keptChanges(record);
   const notes = Object.assign(el("footer", "notes"), { lang: w.lang });
-  notes.append(el("p", "", kept ? w.polishedFrom(kept) : w.asSpoken), el("p", "", w.unlockedHere), el("p", "", w.notOfficial));
+  // entered from a written copy: said so, with a small page, where a recording says "as spoken"
+  const how = record.entered ? el("p", "entered", w.entered) : el("p", "", kept ? w.polishedFrom(kept) : w.asSpoken);
+  if (record.entered) how.prepend(pageIcon());
+  notes.append(how, el("p", "", w.unlockedHere), el("p", "", w.notOfficial));
   article.append(head, words, notes);
   document.title = `${record.title || w.untitled} · ${w.brand}`;
   show("open", [article]);

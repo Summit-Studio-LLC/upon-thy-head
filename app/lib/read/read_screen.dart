@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/balanced_text.dart';
 import '../widgets/buttons.dart';
 import '../widgets/sheet.dart';
+import '../widgets/measure.dart';
 
 /// Reading a blessing: the page scrolls up over the sky, where its light sits
 /// alone near the top (SkyView.read). Edit and Delete live here too.
@@ -256,17 +257,25 @@ class ReadLayerState extends State<ReadLayer> {
           height: 44,
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             IconBtn(key: const Key('read-back'), icon: Glyph.older, color: p.ink, palette: p, semantics: Strings.back, onTap: widget.onBack),
-            Row(mainAxisSize: MainAxisSize.min, children: [
+            // the largest text in a narrow iPad window: the pair shrinks rather than overflow (no change otherwise)
+            Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: [
               // a draft has not been reviewed, so it cannot leave the phone yet
               if (b != null && !b.draft && widget.share != null)
-                IconBtn(key: const Key('read-share'), icon: Glyph.share, color: p.ink, palette: p, semantics: Strings.share, onTap: () => setState(() => _sharing = true)),
+                // the system sheet, a popover on an iPad, points at this button
+                Builder(
+                  builder: (bc) => IconBtn(key: const Key('read-share'), icon: Glyph.share, color: p.ink, palette: p, semantics: Strings.share, onTap: () {
+                    final box = bc.findRenderObject() as RenderBox?;
+                    if (box != null && box.attached) NativeShareApi.origin = box.localToGlobal(Offset.zero) & box.size;
+                    setState(() => _sharing = true);
+                  }),
+                ),
               LightTextBtn(
                 key: const Key('read-edit'),
                 label: b?.draft ?? false ? Strings.review : Strings.edit,
                 palette: p,
                 onTap: widget.onReview,
               ),
-            ]),
+            ]))),
           ]),
         ),
         if (widget.share != null)
@@ -325,7 +334,7 @@ class ReadLayerState extends State<ReadLayer> {
 
   Widget _page(Palette p, Blessing? b) {
     if (b == null) return ColoredBox(color: p.ground);
-    final words = b.words.split(RegExp(r'\n\s*\n')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final words = b.paragraphs;
     final wordStyle = serif(19, 30, p.ink).copyWith(fontFeatures: const [FontFeature.oldstyleFigures()]);
     final note = sans(13, 20, p.ink3);
     // passthrough: the page fills the minimum height it is given, so the sky
@@ -354,7 +363,8 @@ class ReadLayerState extends State<ReadLayer> {
       ),
       Container(
         color: p.ground,
-        padding: const EdgeInsets.fromLTRB(28, 0, 28, 96),
+        // an iPad: the words keep a reading measure, centred (a phone keeps its 28 at each side)
+        padding: EdgeInsets.fromLTRB(Widths.side(MediaQuery.sizeOf(context).width, 28, Widths.reading), 0, Widths.side(MediaQuery.sizeOf(context).width, 28, Widths.reading), 96),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(b.longDate, key: const Key('read-date'), style: sans(13, 18, p.ink2, tracking: .005)),
           const SizedBox(height: 6),
@@ -392,7 +402,19 @@ class ReadLayerState extends State<ReadLayer> {
           const SizedBox(height: 20),
           if (words.isNotEmpty) ...[
             // polished words say so, and how much; the spoken words are always kept beside them
-            Text(b.keptChanges > 0 ? Strings.polishedFrom(b.keptChanges) : Strings.asSpoken, key: const Key('read-as-spoken'), style: note),
+            if (b.entered)
+              // entered from a written copy: said plainly, with a small page, where a recording says "as spoken"
+              Row(key: const Key('read-entered'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                ExcludeSemantics(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 1, right: 12),
+                    child: SizedBox(width: 18, height: 18, child: GlyphIcon(Glyph.page, color: p.ink3)),
+                  ),
+                ),
+                Expanded(child: Text(Strings.enteredNote, style: note)),
+              ])
+            else
+              Text(b.keptChanges > 0 ? Strings.polishedFrom(b.keptChanges) : Strings.asSpoken, key: const Key('read-as-spoken'), style: note),
             if (b.changes.isNotEmpty) ...[
               const SizedBox(height: 16),
               PillBtn(

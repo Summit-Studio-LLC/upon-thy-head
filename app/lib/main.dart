@@ -23,6 +23,8 @@ const String skyStart = String.fromEnvironment('SKY_START');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // an iPad names itself in the app's words (strings_ipad.dart)
+  Strings.iPad = Strings.detectIPad();
   // the app's words follow the phone's first language (iOS restarts the app when it changes)
   Strings.use(UiLanguage.forLocales(WidgetsBinding.instance.platformDispatcher.locales));
   // iPhone stays upright and iPad turns freely: Info.plist says which, per device (ruled 2026-11-16).

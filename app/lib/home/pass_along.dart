@@ -51,7 +51,7 @@ class PassAlongLayer extends StatelessWidget {
     final lines = [
       b.shownTitle,
       if (who.isNotEmpty) Strings.forName(who),
-      Strings.shortDate(b.local),
+      b.shortDate,
       status,
     ];
     return OpenRow(
@@ -66,7 +66,7 @@ class PassAlongLayer extends StatelessWidget {
           Text(Strings.forName(who), style: serif(16, 22, p.light, italic: true)),
         ],
         const SizedBox(height: 4),
-        Text('${Strings.shortDate(b.local)}  ·  $status', key: Key('pass-status-${b.id}'), style: sans(13, 18, sent == null ? p.ink2 : p.ink3)),
+        Text('${b.shortDate}  ·  $status', key: Key('pass-status-${b.id}'), style: sans(13, 18, sent == null ? p.ink2 : p.ink3)),
       ]),
     );
   }

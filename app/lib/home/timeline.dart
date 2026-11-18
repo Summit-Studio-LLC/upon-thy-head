@@ -333,9 +333,10 @@ class _RowState extends State<_Row> {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
-                  child: AnimatedDefaultTextStyle(duration: fade, style: num, child: Text(Strings.dayMonth(b.local), textAlign: TextAlign.right)),
+                  child: AnimatedDefaultTextStyle(duration: fade, style: num, child: Text(_rowDate(b), textAlign: TextAlign.right)),
                 ),
-                if (widget.showYear)
+                // a year-only blessing shows its year above; no second one under it
+                if (widget.showYear && b.precision != DatePrecision.year)
                   Transform.translate(
                     offset: const Offset(0, -4),
                     child: Text('${b.local.year}', style: sans(11, 14, p.ink3).copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
@@ -369,3 +370,11 @@ class _RowState extends State<_Row> {
     );
   }
 }
+
+/// The date in a row's narrow column, as much as is known: "Oct 4", "Aug" (month and year, the year
+/// under it), "1998" (only the year).
+String _rowDate(Blessing b) => switch (b.precision) {
+      DatePrecision.month => Strings.givenShort(b.local, DatePrecision.month).split(' ').first,
+      DatePrecision.year => '${b.local.year}',
+      DatePrecision.day || DatePrecision.unset => Strings.dayMonth(b.local),
+    };

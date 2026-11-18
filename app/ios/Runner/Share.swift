@@ -43,8 +43,21 @@ enum ShareChannel {
     channel = c
   }
 
+  /// iPad: where the app's Share button is (in the Flutter view's points), for the popover to point at.
+  static var origin: CGRect?
+  /// A small view over that button, which keeps to its corner of the window as the iPad turns or its
+  /// window is resized, so the popover stays on the button.
+  static var anchor: UIView?
+
   static func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
+    if ["text", "pdf", "file", "link"].contains(call.method) {
+      if let o = args["origin"] as? [NSNumber], o.count == 4 {
+        origin = CGRect(x: o[0].doubleValue, y: o[1].doubleValue, width: o[2].doubleValue, height: o[3].doubleValue)
+      } else {
+        origin = nil
+      }
+    }
     switch call.method {
     case "text":
       let text = args["text"] as? String ?? ""
@@ -131,9 +144,28 @@ enum ShareChannel {
       }
     }
     if let pop = vc.popoverPresentationController {
-      pop.sourceView = top.view
-      pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY - 80, width: 1, height: 1)
-      pop.permittedArrowDirections = []
+      anchor?.removeFromSuperview()
+      anchor = nil
+      if let o = origin, let host = top.view, host.bounds.contains(CGPoint(x: o.midX, y: o.midY)) {
+        // on the button, and kept on it: pinned to the nearer side of the window, left or right,
+        // and to the top or bottom, as the window changes size
+        let a = UIView(frame: o)
+        a.isUserInteractionEnabled = false
+        a.backgroundColor = .clear
+        var mask: UIView.AutoresizingMask = []
+        mask.insert(o.midX > host.bounds.midX ? .flexibleLeftMargin : .flexibleRightMargin)
+        mask.insert(o.midY > host.bounds.midY ? .flexibleTopMargin : .flexibleBottomMargin)
+        a.autoresizingMask = mask
+        host.addSubview(a)
+        anchor = a
+        pop.sourceView = a
+        pop.sourceRect = a.bounds
+        pop.permittedArrowDirections = .any
+      } else {
+        pop.sourceView = top.view
+        pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY - 80, width: 1, height: 1)
+        pop.permittedArrowDirections = []
+      }
     }
     sheet = vc
     answer = result
@@ -153,6 +185,8 @@ enum ShareChannel {
   /// The sheet has closed: remove what was made for it and answer Dart.
   static func finish() {
     clean()
+    anchor?.removeFromSuperview()
+    anchor = nil
     sheet = nil
     let a = answer
     answer = nil

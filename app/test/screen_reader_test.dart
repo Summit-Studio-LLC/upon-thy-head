@@ -11,6 +11,7 @@ import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as m;
+import 'package:flutter/services.dart' show SystemChannels;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upon_thy_head/data/blessing.dart';
 import 'package:upon_thy_head/data/samples.dart';
@@ -510,6 +511,71 @@ void main() {
         expect(unpressable(t), isEmpty);
         await pressEach(t, person);
         expect(pressed, containsAll(['person back']));
+        handle.dispose();
+      });
+
+      testWidgets('entering a past blessing: the line on the recording start, Given, Paste, the date sheet', (t) async {
+        handle = t.ensureSemantics();
+        final pressed = <String>[];
+        final s = RecordSession(recorder: SilentRecorder(), audioDir: '${dir.path}/audio')..draft = draftBlessing(DateTime.now(), place: saltLakeTemple);
+        await t.runAsync(() => s.checkPermissions(ask: false));
+        await show(
+            t,
+            RecordLayer(
+              palette: p,
+              session: s,
+              active: false,
+              onBegin: () {},
+              onClose: () {},
+              onDiscardEarly: () {},
+              onAmen: () {},
+              onLanguage: (_) {},
+              onOpenSettings: () {},
+              onEnter: () => pressed.add('enter'),
+            ));
+        expect(unpressable(t), isEmpty);
+        await activate(t, Strings.enterPast);
+        expect(pressed, ['enter']);
+        await t.pumpWidget(const SizedBox());
+        s.dispose();
+        // the entry page: Given and Paste press; Done is dim and says why
+        t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async => call.method == 'Clipboard.getData' ? {'text': 'I bless you.'} : null);
+        addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+        final b = enteredBlessing(DateTime.now(), place: saltLakeTemple);
+        await show(
+            t,
+            ReviewLayer(palette: p, blessing: b, on: true, player: FakePlayer(), onSave: () async {}, onBack: () {}, onFinish: () {}, onGiven: () => pressed.add('given')));
+        expect(unpressable(t), isEmpty);
+        expect(nodeLabelled(t, Strings.done).getSemanticsData().flagsCollection.isEnabled, Tristate.isFalse);
+        expect(nodeLabelled(t, Strings.givenField).getSemanticsData().value, Strings.whenGiven);
+        await t.runAsync(() async {
+          await activate(t, Strings.paste);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+        await t.pump(const Duration(milliseconds: 500));
+        expect(b.rawText, 'I bless you.');
+        await activate(t, Strings.givenField);
+        await t.pump(const Duration(milliseconds: 600));
+        // the sheet: the three kinds are a choice of one; Done; nothing behind it to land on
+        expect(unpressable(t), isEmpty);
+        await activate(t, Strings.monthAndYear);
+        await t.pump(const Duration(milliseconds: 300));
+        expect(nodeLabelled(t, Strings.monthAndYear).getSemanticsData().flagsCollection.isSelected, Tristate.isTrue);
+        expect(nodeLabelled(t, Strings.fullDateChoice).getSemanticsData().flagsCollection.isSelected, Tristate.isFalse);
+        await activate(t, Strings.yearOnly);
+        await t.pump(const Duration(milliseconds: 300));
+        expect(pressable(t).where((l) => l == Strings.done), hasLength(1), reason: 'the page behind the sheet is out of reach');
+        await t.runAsync(() async {
+          await activate(t, Strings.done);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+        await t.pump(const Duration(milliseconds: 600));
+        expect(pressed.last, 'given');
+        expect(b.precision, DatePrecision.year);
+        // a year and words: Done lights
+        expect(nodeLabelled(t, Strings.done).getSemanticsData().flagsCollection.isEnabled, isNot(Tristate.isFalse));
+        expect(unpressable(t), isEmpty);
+        await t.pumpWidget(const SizedBox());
         handle.dispose();
       });
     });

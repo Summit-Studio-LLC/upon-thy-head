@@ -14,6 +14,9 @@ enum Glyph {
   // sending a blessing (design/share/src/app.js): the blessing (hands over a head), the words as
   // text, a page (PDF), the blessing file, a link, copy, and no internet
   blessing, text, pdf, file, link, copy, offline,
+  // entering a past blessing (design/entry-and-rings): a written page, a page being written on, a
+  // calendar, and the clipboard
+  page, enter, calendar, clipboard,
 }
 
 /// Vertical corrections, in grid units, so glyphs shown together sit on one line.
@@ -73,6 +76,22 @@ class _IconPainter extends CustomPainter {
         canvas.drawCircle(const Offset(12, 14), 1.35, dot);
         canvas.drawCircle(const Offset(9.45, 14.9), .95, dot);
         canvas.drawCircle(const Offset(14.55, 14.9), .95, dot);
+      case Glyph.page:
+        svg('M7 3.5h6.5l5 5V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z');
+        svg('M13.5 3.5v5h5');
+        svg('M8.5 12.5h7M8.5 16h7');
+      case Glyph.enter:
+        svg('M15.5 20.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5h6.5l5 5v2.5');
+        svg('M13.5 3.5v5h5');
+        svg('M8.5 12.5h5M8.5 16h3');
+        svg('M14.5 20.5l.5-2.5 4.75-4.75a1.4 1.4 0 0 1 2 2L17 20z');
+      case Glyph.calendar:
+        canvas.drawRRect(RRect.fromLTRBR(4, 5.5, 20, 20, const Radius.circular(2.5)), paint);
+        svg('M4 10h16M8.5 3.5v4M15.5 3.5v4');
+      case Glyph.clipboard:
+        svg('M9 5H7.5A1.5 1.5 0 0 0 6 6.5v13A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 5H15');
+        canvas.drawRRect(RRect.fromLTRBR(9, 3.5, 15, 6.5, const Radius.circular(1)), paint);
+        svg('M9.5 11h5M9.5 14.5h5M9.5 18h3');
       case Glyph.link:
         svg('M10.25 13.75a3.75 3.75 0 0 0 5.3 0l3-3a3.75 3.75 0 0 0-5.3-5.3l-.85.85');
         svg('M13.75 10.25a3.75 3.75 0 0 0-5.3 0l-3 3a3.75 3.75 0 0 0 5.3 5.3l.85-.85');

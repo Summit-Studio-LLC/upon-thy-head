@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/balanced_text.dart';
 import '../widgets/buttons.dart';
 import '../widgets/scrims.dart';
+import '../widgets/measure.dart';
 import '../not_yet.dart';
 import 'model_offer.dart';
 import 'session.dart';
@@ -84,9 +85,10 @@ class _AfterLayerState extends State<AfterLayer> {
       Positioned(left: 0, right: 0, bottom: 0, height: 440, child: BottomScrim(palette: p)),
       // From the bottom up. At the largest text and display sizes (Spanish is the longest) it is
       // taller than the screen: it then stops under the status bar and scrolls, the buttons in view.
+      // an iPad: a reading measure, centred (a phone keeps its 24 at each side)
       Positioned(
-        left: 24,
-        right: 24,
+        left: Widths.side(MediaQuery.sizeOf(context).width, 24, Widths.reading),
+        right: Widths.side(MediaQuery.sizeOf(context).width, 24, Widths.reading),
         top: MediaQuery.viewPaddingOf(context).top + 16,
         bottom: 50,
         child: Column(mainAxisAlignment: MainAxisAlignment.end, crossAxisAlignment: CrossAxisAlignment.stretch, children: [

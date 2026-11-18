@@ -24,8 +24,11 @@ import '../strings.dart';
 /// What the record says it is, so a file of anything else is refused.
 const blessingFormat = 'upon-thy-head/blessing';
 
-/// The version this code writes, and the newest it reads.
-const blessingFormatVersion = 1;
+/// The newest version this code reads. It writes version 1 for a blessing recorded on a known day,
+/// exactly as before, so every app reads it; and version 2 for one entered from a written copy or
+/// known only to its month or year, so an app from before those cannot show it as a recording on
+/// July 2 and says instead that it was made with a newer version.
+const blessingFormatVersion = 2;
 
 /// The largest file read at all, in bytes. A 2,500-word blessing with its changes is about 17 KB.
 const blessingFileMaxBytes = 512 * 1024;
@@ -58,7 +61,18 @@ class BlessingRecord {
     required this.spoken,
     this.changes = const [],
     this.place,
+    this.precision = DatePrecision.day,
+    this.entered = false,
   });
+
+  /// How much of the date is known; [utc] is where its light sits (the 15th, or July 2, at noon).
+  final DatePrecision precision;
+
+  /// Entered from a written copy, not recorded.
+  final bool entered;
+
+  /// The version this record is written as: 1 unless it needs what came in 2.
+  int get version => precision == DatePrecision.day && !entered ? 1 : 2;
 
   /// What [b] shares: the words as spoken and its changes as they stand, so the receiver's reading
   /// page shows what the sender's does.
@@ -74,6 +88,9 @@ class BlessingRecord {
         spoken: b.rawText,
         changes: [for (final c in [...b.changes]..sort((x, y) => x.start.compareTo(y.start))) c.copy()],
         place: roughly(b.place.lat, b.place.lon),
+        // a draft with no date yet is never sent; were one to be, it would be its day
+        precision: b.precision == DatePrecision.unset ? DatePrecision.day : b.precision,
+        entered: b.entered,
       );
 
   final String id, title, from, recipient, language, spoken;
@@ -90,7 +107,7 @@ class BlessingRecord {
   /// The JSON object, keys in a fixed order (the same blessing always gives the same bytes).
   Map<String, Object> toJson() => {
         'format': blessingFormat,
-        'version': blessingFormatVersion,
+        'version': version,
         'id': id,
         'title': title,
         'given': _iso(utc),
@@ -104,6 +121,8 @@ class BlessingRecord {
           for (final c in changes) {'at': c.start, 'was': c.was, 'now': c.now, 'kind': c.kind.code, 'source': c.source, 'kept': c.kept},
         ],
         if (place != null) 'place': {'lat': place!.lat, 'lon': place!.lon},
+        if (precision != DatePrecision.day) 'precision': precision.code,
+        if (entered) 'entered': true,
       };
 
   /// The file's bytes: UTF-8 JSON, indented so a person who opens it in a text editor can read it.
@@ -117,6 +136,7 @@ class BlessingRecord {
   bool sameAs(Blessing b) {
     final o = BlessingRecord.of(b);
     if (o.id != id || o.title != title || o.utc != utc || o.utcOffset != utcOffset || o.from != from || o.recipient != recipient) return false;
+    if (o.precision != precision || o.entered != entered) return false;
     if (o.language != language || o.spoken != spoken || o.tags.length != tags.length || o.changes.length != changes.length) return false;
     for (var i = 0; i < tags.length; i++) {
       if (o.tags[i] != tags[i]) return false;
@@ -150,6 +170,8 @@ class BlessingRecord {
       draft: false,
       language: language,
       wordsStatus: WordsStatus.written,
+      precision: precision,
+      entered: entered,
       created: t,
       updated: t,
     );
@@ -171,6 +193,8 @@ class BlessingRecord {
       ..tags = [...tags]
       ..language = language
       ..ownership = Ownership.forMe
+      ..precision = precision
+      ..entered = entered
       ..wordsStatus = WordsStatus.written;
     if (place != null) b.place = place!;
     if (b.firstText.isEmpty) b.firstText = spoken;
@@ -315,8 +339,25 @@ BlessingRecord _record(Map<String, Object?> j, DateTime now) {
     spoken: spoken,
     changes: changes,
     place: _place(j['place']),
+    precision: _precision(j['precision']),
+    entered: _entered(j['entered']),
   );
 }
+
+/// The optional `precision`: "day" (or missing, as in every file before version 2), "month", "year".
+DatePrecision _precision(Object? v) => switch (v) {
+      null || 'day' => DatePrecision.day,
+      'month' => DatePrecision.month,
+      'year' => DatePrecision.year,
+      _ => throw _Bad('precision'),
+    };
+
+/// The optional `entered`: true for a blessing entered from a written copy; missing is false.
+bool _entered(Object? v) => switch (v) {
+      null => false,
+      bool b => b,
+      _ => throw _Bad('entered'),
+    };
 
 /// The optional place: `{"lat": 40.8, "lon": -111.9}`, kept to a tenth of a degree whatever was
 /// written. Missing or null is no place (a file made before it was carried).

@@ -117,7 +117,7 @@ const badRecord = (name, edit, error = "record") => {
   return { name, key: v1.key.base64url, locked: b64(seal(plain, bytes(1, 32), bytes(200, 12))), error };
 };
 const records = [
-  badRecord("record version 2", (r) => (r.version = 2), "newer"),
+  badRecord("record version 3", (r) => (r.version = 3), "newer"),
   badRecord("another format", (r) => (r.format = "something/else")),
   badRecord("a change that does not stand on the words", (r) => (r.changes[0].at += 1)),
   badRecord("changes that overlap", (r) => (r.changes[1].at = r.changes[0].at)),

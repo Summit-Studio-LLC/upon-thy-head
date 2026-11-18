@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as m;
+import 'package:flutter/services.dart';
 
 import '../data/blessing.dart';
 import '../not_yet.dart';
@@ -15,7 +16,9 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
+import '../widgets/measure.dart';
 import '../widgets/sheet.dart';
+import 'date_sheet.dart';
 import 'player.dart';
 import 'tags.dart';
 
@@ -42,7 +45,11 @@ class ReviewLayer extends StatefulWidget {
     this.audioPath,
     this.words,
     this.knownTags = const [],
+    this.onGiven,
   });
+
+  /// An entered blessing's date was set or changed (already saved): its light takes its place.
+  final VoidCallback? onGiven;
 
   final Palette palette;
   final Blessing? blessing;
@@ -97,7 +104,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
       _tagFocus = FocusNode(),
       _wordsFocus = FocusNode();
   List<String> _tags = [];
-  bool _finishing = false, _scrolled = false, _loading = false;
+  bool _finishing = false, _scrolled = false, _loading = false, _dating = false;
+  final GlobalKey<DateSheetState> _dateKey = GlobalKey();
   Timer? _saveTimer;
   Future<void>? _saving;
 
@@ -118,6 +126,12 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
 
   /// The listen bar is pinned above the keyboard while the words are being typed.
   bool get _pinned => _hasAudio && _wordsFocus.hasFocus;
+
+  /// Entered from a written copy: the page starts with "Given", and its words are never polished.
+  bool get _entered => _b?.entered ?? false;
+
+  /// Done waits for a date (at least a year) and some words, on an entered blessing.
+  bool get _canFinish => !_entered || (_b!.placed && _words.text.trim().isNotEmpty);
 
   @override
   void initState() {
@@ -209,6 +223,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     _nothingFor = null;
     _loading = false;
     _finishing = false;
+    _dating = false;
     if (_scroll.hasClients) _scroll.jumpTo(0);
     _loadAudio();
   }
@@ -311,9 +326,49 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   /// it stays a draft.
   /// Android's back: the finish sheet goes, if it is up. True when it went.
   bool closeSheet() {
+    if (_dating) {
+      setState(() => _dating = false);
+      return true;
+    }
     if (!_finishing) return false;
     setState(() => _finishing = false);
     return true;
+  }
+
+  /// "Given": the date sheet, at the date chosen, or today.
+  void openDate() {
+    final b = _b;
+    if (b == null || !_entered) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final at = b.placed ? b.local : DateTime.now();
+    final GivenChoice c = (precision: b.placed ? b.precision : DatePrecision.day, year: at.year, month: at.month, day: at.day);
+    _dateKey.currentState?.reset(c);
+    setState(() => _dating = true);
+  }
+
+  Future<void> _dateChosen(GivenChoice c) async {
+    final b = _b;
+    setState(() => _dating = false);
+    if (b == null) return;
+    setGiven(b, c.precision, c.year, c.month, c.day);
+    _dirty = true;
+    await flush();
+    if (mounted) setState(() {});
+    widget.onGiven?.call();
+  }
+
+  /// The Paste chip: the words copied, put in where the cursor is (or as the words, when there are
+  /// none). The clipboard is read only here, when it is pressed.
+  Future<void> paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty || !mounted) return;
+    final v = _words.value;
+    final sel = v.selection;
+    final at = sel.isValid ? sel : TextSelection.collapsed(offset: v.text.length);
+    final next = v.text.replaceRange(at.start, at.end, text);
+    _words.value = TextEditingValue(text: next, selection: TextSelection.collapsed(offset: at.start + text.length));
+    setState(() {});
   }
 
   Future<void> back() async {
@@ -323,6 +378,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   }
 
   Future<void> _done() async {
+    if (!_canFinish) return;
     FocusManager.instance.primaryFocus?.unfocus();
     await flush();
     final b = _b;
@@ -365,7 +421,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                     SizedBox(height: spacer),
                     ConstrainedBox(
                       constraints: BoxConstraints(minHeight: math.max(0, h - spacer - keyboard + 16)),
-                      child: _page(p, b),
+                      // behind the date sheet, out of a screen reader's reach (one Done at a time)
+                      child: ExcludeSemantics(excluding: _dating, child: _page(p, b)),
                     ),
                   ],
                 ),
@@ -398,7 +455,9 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               right: 12,
               top: 54 + dy,
               // like an iOS navigation bar, the top bar grows only a little with the text size
-              child: MediaQuery.withClampedTextScaling(
+              child: ExcludeSemantics(
+                excluding: _dating,
+                child: MediaQuery.withClampedTextScaling(
                 maxScaleFactor: 1.3,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -411,9 +470,17 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                       semantics: Strings.backFromReview,
                       onTap: back,
                     ),
-                    LightTextBtn(key: const Key('review-done'), label: Strings.done, palette: p, onTap: _done),
+                    LightTextBtn(
+                      key: const Key('review-done'),
+                      label: Strings.done,
+                      palette: p,
+                      onTap: _done,
+                      enabled: _canFinish,
+                      disabledHint: Strings.doneNeedsDateAndWords,
+                    ),
                   ],
                 ),
+              ),
               ),
             ),
             if (pinned)
@@ -429,11 +496,28 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                     border: Border(top: BorderSide(color: p.ink.withValues(alpha: .08))),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: EdgeInsets.symmetric(horizontal: Widths.side(MediaQuery.sizeOf(context).width, 16, Widths.reading)),
                     child: ListenBar(palette: p, player: widget.player, keys: 'pinned'),
                   ),
                 ),
               ),
+            // an entered blessing's date
+            Positioned.fill(
+              child: Sheet(
+                palette: p,
+                on: _dating,
+                barrier: true,
+                onDismiss: () => setState(() => _dating = false),
+                label: Strings.whenGiven,
+                panelKey: const Key('date-panel'),
+                child: DateSheet(
+                  key: _dateKey,
+                  palette: p,
+                  initial: (precision: DatePrecision.day, year: DateTime.now().year, month: DateTime.now().month, day: DateTime.now().day),
+                  onDone: _dateChosen,
+                ),
+              ),
+            ),
             Positioned.fill(
               child: Sheet(
                 palette: p,
@@ -515,12 +599,16 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
         ),
         Container(
           color: p.ground,
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 120),
+          // an iPad: the page keeps a reading measure, centred (a phone keeps its 28)
+          padding: EdgeInsets.fromLTRB(Widths.side(MediaQuery.sizeOf(context).width, 28, Widths.reading), 0, Widths.side(MediaQuery.sizeOf(context).width, 28, Widths.reading), 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(b.longDate, key: const Key('review-date'), style: sans(13, 18, p.ink2, tracking: .005)),
-              const SizedBox(height: 6),
+              // an entered blessing's date is its first row instead
+              if (!b.entered) ...[
+                Text(b.longDate, key: const Key('review-date'), style: sans(13, 18, p.ink2, tracking: .005)),
+                const SizedBox(height: 6),
+              ],
               _field(
                 key: const Key('review-title'),
                 label: Strings.titleLabel,
@@ -535,6 +623,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 18),
               _rule(p),
+              if (b.entered) ...[_givenRow(p, b), _rule(p)],
               _row(p, Strings.fromField, Strings.fromLabel, _from, _fromFocus, const Key('review-from'), next: _forFocus),
               _rule(p),
               _row(p, Strings.forField, Strings.forLabel, _for, _forFocus, const Key('review-for'), next: _tagFocus),
@@ -579,6 +668,46 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
           ),
         ),
       ],
+    );
+  }
+
+  /// "Given  When was it given?" (or its date), and a calendar: opens the date sheet.
+  Widget _givenRow(Palette p, Blessing b) {
+    final stacked = MediaQuery.textScalerOf(context).scale(15) > 28;
+    final value = b.placed ? b.longDate : Strings.whenGiven;
+    final label = Text(Strings.givenField, style: sans(15, 20, p.ink2));
+    final shown = Text(value, key: const Key('review-given'), style: sans(17, 22, b.placed ? p.ink : p.light));
+    final icon = SizedBox(width: 22, height: 22, child: GlyphIcon(Glyph.calendar, color: p.light));
+    return Semantics(
+      button: true,
+      label: Strings.givenField,
+      value: value,
+      hint: Strings.givenHint,
+      excludeSemantics: true,
+      onTap: openDate,
+      child: GestureDetector(
+        key: const Key('review-given-row'),
+        behavior: HitTestBehavior.opaque,
+        onTap: openDate,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 50),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            child: stacked
+                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    label,
+                    const SizedBox(height: 4),
+                    Row(children: [Expanded(child: shown), const SizedBox(width: 8), icon]),
+                  ])
+                : Row(children: [
+                    SizedBox(width: 64 * math.max(1, MediaQuery.textScalerOf(context).scale(15) / 15), child: label),
+                    Expanded(child: shown),
+                    const SizedBox(width: 8),
+                    icon,
+                  ]),
+          ),
+        ),
+      ),
     );
   }
 
@@ -777,14 +906,22 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
           controller: _words,
           focus: _wordsFocus,
           style: wordStyle,
-          placeholder: Strings.typeWords,
+          placeholder: b.entered ? Strings.typeOrPaste : Strings.typeWords,
           placeholderColor: p.ink3,
           capitalization: TextCapitalization.sentences,
           action: TextInputAction.newline,
           maxLines: null,
           minLines: 4,
         ),
-        _polishBlock(p, b),
+        // entered: a Paste chip while there are no words yet; polish never runs on them
+        if (b.entered) ...[
+          if (_words.text.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Align(alignment: Alignment.centerLeft, child: _PasteChip(key: const Key('review-paste'), palette: p, onTap: paste)),
+            ),
+        ] else
+          _polishBlock(p, b),
       ],
     );
   }
@@ -819,6 +956,50 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
       );
     }
     return Padding(padding: const EdgeInsets.only(top: 18), child: child);
+  }
+}
+
+/// "Paste", with a clipboard: puts in the words copied.
+class _PasteChip extends StatefulWidget {
+  const _PasteChip({super.key, required this.palette, required this.onTap});
+  final Palette palette;
+  final VoidCallback onTap;
+
+  @override
+  State<_PasteChip> createState() => _PasteChipState();
+}
+
+class _PasteChipState extends State<_PasteChip> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return Semantics(
+      button: true,
+      label: Strings.paste,
+      hint: Strings.pasteHint,
+      excludeSemantics: true,
+      onTap: widget.onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(color: p.ink.withValues(alpha: _down ? .14 : .08), borderRadius: BorderRadius.circular(24)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: 20, height: 20, child: GlyphIcon(Glyph.clipboard, color: p.light)),
+            const SizedBox(width: 10),
+            Flexible(child: Text(Strings.paste, style: sans(17, 22, p.ink))),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

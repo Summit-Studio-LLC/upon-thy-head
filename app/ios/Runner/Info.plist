@@ -87,6 +87,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Upon Thy Head listens only while you record a blessing. The audio stays on this phone.</string>
+	<key>NSMicrophoneUsageDescription~ipad</key>
+	<string>Upon Thy Head listens only while you record a blessing. The audio stays on this iPad.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSFaceIDUsageDescription</key>
@@ -97,6 +99,8 @@
 	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Speech is turned into text on this phone. Nothing is sent anywhere.</string>
+	<key>NSSpeechRecognitionUsageDescription~ipad</key>
+	<string>Speech is turned into text on this iPad. Nothing is sent anywhere.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

@@ -110,7 +110,7 @@ async function run(name, type) {
   await p.context().close();
 
   // 5. Made by a newer version.
-  const newer = await share(origin, { ...sample(), version: 2 });
+  const newer = await share(origin, { ...sample(), version: 3 });
   p = await page();
   await p.goto(newer.link);
   await state(p, "newer");

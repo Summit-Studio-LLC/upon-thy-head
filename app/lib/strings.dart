@@ -1,8 +1,11 @@
-import 'dart:ui' show Locale;
+import 'dart:ui' show Locale, PlatformDispatcher;
 
+import 'data/given.dart';
 import 'lock/lock.dart';
 import 'not_yet.dart';
 import 'record/transcriber.dart';
+
+part 'strings_ipad.dart';
 
 /// The language the app's own words are in. It follows the phone's first language and has no
 /// switch of its own; the language a blessing is recorded in is a separate setting.
@@ -34,9 +37,28 @@ class Strings {
   static UiLanguage get language => _w.language;
   static Locale get locale => _w.language.locale;
   static Words wordsFor(UiLanguage l) => switch (l) {
-        UiLanguage.english => const Words(),
-        UiLanguage.spanish => const _Spanish(),
+        UiLanguage.english => iPad ? const _IPadEnglish() : const Words(),
+        UiLanguage.spanish => iPad ? const _IPadSpanish() : const _Spanish(),
       };
+
+  /// Running on an iPad: the sentences that name the device say "iPad" (strings_ipad.dart). main()
+  /// sets it before the first frame, from [detectIPad].
+  static bool iPad = false;
+
+  /// An iPad, told by its screen (never its window, which a Split View third makes phone-sized):
+  /// no iPhone's screen is 600 points across its short side, every iPad's is.
+  static bool detectIPad() {
+    if (!Phone.ios) return false;
+    final d = PlatformDispatcher.instance;
+    for (final s in d.displays) {
+      if (s.devicePixelRatio > 0 && s.size.shortestSide / s.devicePixelRatio >= 600) return true;
+    }
+    // no display reported: a window's long side is never shorter than an iPad's screen is tall
+    for (final v in d.views) {
+      if (v.devicePixelRatio > 0 && v.physicalSize.longestSide / v.devicePixelRatio >= 1000) return true;
+    }
+    return false;
+  }
 
   /// Whether [title] is the title a blessing carries until it is reviewed, in either language
   /// (a draft keeps the word it was made with when the phone's language changes).
@@ -51,6 +73,26 @@ class Strings {
   static String dayAndTime(DateTime d) => _w.dayAndTime(d);
   static String dayMonthLong(DateTime d) => _w.dayMonthLong(d);
   static String dayMonth(DateTime d) => _w.dayMonth(d);
+  static String givenLong(DateTime d, DatePrecision p) => _w.givenLong(d, p);
+  static String givenShort(DateTime d, DatePrecision p) => _w.givenShort(d, p);
+  static String monthYear(DateTime d) => _w.monthYear(d);
+  static String get enterPast => _w.enterPast;
+  static String get enterPastHint => _w.enterPastHint;
+  static String get givenField => _w.givenField;
+  static String get whenGiven => _w.whenGiven;
+  static String get givenHint => _w.givenHint;
+  static String get typeOrPaste => _w.typeOrPaste;
+  static String get paste => _w.paste;
+  static String get pasteHint => _w.pasteHint;
+  static String get fullDateChoice => _w.fullDateChoice;
+  static String get monthAndYear => _w.monthAndYear;
+  static String get yearOnly => _w.yearOnly;
+  static String get monthWheel => _w.monthWheel;
+  static String get dayWheel => _w.dayWheel;
+  static String get yearWheel => _w.yearWheel;
+  static String precisionNote(DatePrecision p, DateTime d) => _w.precisionNote(p, d);
+  static String get enteredNote => _w.enteredNote;
+  static String get doneNeedsDateAndWords => _w.doneNeedsDateAndWords;
   static String get forMe => _w.forMe;
   static String get showAsList => _w.showAsList;
   static String get showAsSky => _w.showAsSky;
@@ -64,7 +106,7 @@ class Strings {
   static String toReview(int n) => _w.toReview(n);
   static String toReviewLabel(int n) => _w.toReviewLabel(n);
   static String get notReviewedNote => _w.notReviewedNote;
-  static String countLine(int n, DateTime first) => _w.countLine(n, first);
+  static String countLine(int n, DateTime first, {bool yearOnly = false}) => _w.countLine(n, first, yearOnly: yearOnly);
   static String get close => _w.close;
   static String get begin => _w.begin;
   static String get beginLabel => _w.beginLabel;
@@ -673,6 +715,22 @@ extension WordsCatalogue on Words {
         'removeBody': removeBody('Emma', 7),
         'welcomeFamily': welcomeFamily,
         'editPersonLede': editPersonLede,
+        'enterPast': enterPast,
+        'enterPastHint': enterPastHint,
+        'givenField': givenField,
+        'whenGiven': whenGiven,
+        'givenHint': givenHint,
+        'typeOrPaste': typeOrPaste,
+        'paste': paste,
+        'pasteHint': pasteHint,
+        'fullDateChoice': fullDateChoice,
+        'monthAndYear': monthAndYear,
+        'yearOnly': yearOnly,
+        'monthWheel': monthWheel,
+        'dayWheel': dayWheel,
+        'yearWheel': yearWheel,
+        'enteredNote': enteredNote,
+        'doneNeedsDateAndWords': doneNeedsDateAndWords,
       };
 }
 
@@ -714,6 +772,52 @@ class Words {
   /// "Oct 4", in the list.
   String dayMonth(DateTime d) => '${months[d.month - 1].substring(0, 3)} ${d.day}';
 
+  /// "August 1998"
+  String monthYear(DateTime d) => '${months[d.month - 1]} ${d.year}';
+
+  /// A blessing's date, as much as is known: "Sunday, August 23, 1998", "August 1998", "1998".
+  String givenLong(DateTime d, DatePrecision p) => switch (p) {
+        DatePrecision.month => monthYear(d),
+        DatePrecision.year => '${d.year}',
+        DatePrecision.day || DatePrecision.unset => longDate(d),
+      };
+
+  /// The same, short (by a light): "Aug 23, 1998", "Aug 1998", "1998".
+  String givenShort(DateTime d, DatePrecision p) => switch (p) {
+        DatePrecision.month => '${months[d.month - 1].substring(0, 3)} ${d.year}',
+        DatePrecision.year => '${d.year}',
+        DatePrecision.day || DatePrecision.unset => shortDate(d),
+      };
+
+  // ---- entering a past blessing ----
+  String get enterPast => 'Enter a past blessing';
+  String get enterPastHint => 'Type or paste the words of a blessing written down';
+  String get givenField => 'Given';
+  String get whenGiven => 'When was it given?';
+  String get givenHint => 'Opens the date';
+  String get typeOrPaste => 'Type the words here, or paste them in one go.';
+  String get paste => 'Paste';
+  String get pasteHint => 'Puts in the words you copied';
+  String get fullDateChoice => 'Full date';
+  String get monthAndYear => 'Month and year';
+  String get yearOnly => 'Year only';
+  String get monthWheel => 'Month';
+  String get dayWheel => 'Day';
+  String get yearWheel => 'Year';
+
+  /// Under the wheels, when less than the day is known.
+  String precisionNote(DatePrecision p, DateTime d) => switch (p) {
+        DatePrecision.month => 'Only the month is known. Its light sits at mid-${monthYear(d)}.',
+        DatePrecision.year => 'Only the year is known. Its light sits at mid-${d.year}.',
+        _ => '',
+      };
+
+  /// On the reading page of one entered, where a recording's says "The words as they were spoken."
+  String get enteredNote => 'Entered from a written copy, not recorded.';
+
+  /// VoiceOver, on a dimmed Done.
+  String get doneNeedsDateAndWords => 'Needs a date and the words';
+
   /// "One", "Two" ... "Twelve", then digits.
   String count(int n) {
     const words = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
@@ -742,10 +846,10 @@ class Words {
   /// Under a draft's "From" line in the list.
   String get notReviewedNote => 'Not reviewed';
 
-  /// "Five blessings since June 2024".
-  String countLine(int n, DateTime first) {
+  /// "Five blessings since June 2024"; "since 1998" when only the year of the first is known.
+  String countLine(int n, DateTime first, {bool yearOnly = false}) {
     if (n == 0) return 'No blessings yet';
-    return '${count(n)} ${n == 1 ? 'blessing' : 'blessings'} since ${months[first.month - 1]} ${first.year}';
+    return '${count(n)} ${n == 1 ? 'blessing' : 'blessings'} since ${yearOnly ? '${first.year}' : '${months[first.month - 1]} ${first.year}'}';
   }
 
   // ---- recording ----
@@ -1227,6 +1331,65 @@ class _Spanish implements Words {
   @override
   String dayMonth(DateTime d) => '${d.day} ${_shortMonths[d.month - 1]}';
 
+  /// "agosto de 1998"
+  @override
+  String monthYear(DateTime d) => '${months[d.month - 1]} de ${d.year}';
+
+  @override
+  String givenLong(DateTime d, DatePrecision p) => switch (p) {
+        DatePrecision.month => monthYear(d),
+        DatePrecision.year => '${d.year}',
+        DatePrecision.day || DatePrecision.unset => longDate(d),
+      };
+
+  /// "23 ago 1998", "ago 1998", "1998"
+  @override
+  String givenShort(DateTime d, DatePrecision p) => switch (p) {
+        DatePrecision.month => '${_shortMonths[d.month - 1]} ${d.year}',
+        DatePrecision.year => '${d.year}',
+        DatePrecision.day || DatePrecision.unset => shortDate(d),
+      };
+
+  // ---- entering a past blessing ----
+  @override
+  String get enterPast => 'Anotar una bendición pasada';
+  @override
+  String get enterPastHint => 'Escribe o pega las palabras de una bendición que tienes por escrito';
+  @override
+  String get givenField => 'Fecha';
+  @override
+  String get whenGiven => '¿Cuándo se dio?';
+  @override
+  String get givenHint => 'Abre la fecha';
+  @override
+  String get typeOrPaste => 'Escribe aquí las palabras, o pégalas de una vez.';
+  @override
+  String get paste => 'Pegar';
+  @override
+  String get pasteHint => 'Pone las palabras que copiaste';
+  @override
+  String get fullDateChoice => 'Fecha exacta';
+  @override
+  String get monthAndYear => 'Mes y año';
+  @override
+  String get yearOnly => 'Solo el año';
+  @override
+  String get monthWheel => 'Mes';
+  @override
+  String get dayWheel => 'Día';
+  @override
+  String get yearWheel => 'Año';
+  @override
+  String precisionNote(DatePrecision p, DateTime d) => switch (p) {
+        DatePrecision.month => 'Solo se sabe el mes. Su luz se sitúa a mediados de ${monthYear(d)}.',
+        DatePrecision.year => 'Solo se sabe el año. Su luz se sitúa a mediados de ${d.year}.',
+        _ => '',
+      };
+  @override
+  String get enteredNote => 'Anotada de una copia escrita, no grabada.';
+  @override
+  String get doneNeedsDateAndWords => 'Necesita una fecha y las palabras';
+
   /// Feminine, for "bendición" and "grabación": "Una", "Dos" ... "Doce", then digits.
   @override
   String count(int n) {
@@ -1265,9 +1428,9 @@ class _Spanish implements Words {
 
   /// "Cinco bendiciones desde junio de 2024", "Una bendición desde junio de 2024"
   @override
-  String countLine(int n, DateTime first) {
+  String countLine(int n, DateTime first, {bool yearOnly = false}) {
     if (n == 0) return 'Todavía no hay bendiciones';
-    return '${count(n)} ${n == 1 ? 'bendición' : 'bendiciones'} desde ${months[first.month - 1]} de ${first.year}';
+    return '${count(n)} ${n == 1 ? 'bendición' : 'bendiciones'} desde ${yearOnly ? '${first.year}' : '${months[first.month - 1]} de ${first.year}'}';
   }
 
   // ---- recording ----

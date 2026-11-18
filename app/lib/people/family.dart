@@ -10,6 +10,11 @@ class Family {
     final known = {for (final p in people) p.id};
     for (final b in onRings) {
       if (b.ownership == Ownership.passingOn) continue;
+      // an entry not yet given a date has no place on any ring until it has one
+      if (!b.placed) {
+        unplaced.add(b);
+        continue;
+      }
       // a ring this phone does not know (never written by this app): kept with the person's own
       // rather than lost from sight
       final ring = known.contains(b.personId) ? b.personId : '';
@@ -23,6 +28,9 @@ class Family {
   /// In the order they were added.
   final List<Person> people;
   final Map<String, List<Blessing>> _rings = {};
+
+  /// Entries still being written that have no date yet (drafts, on no ring), oldest made first.
+  final List<Blessing> unplaced = [];
 
   /// The blessings on [ring], oldest first.
   List<Blessing> on(String ring) => [...?_rings[ring]];
@@ -72,6 +80,6 @@ abstract final class SkyMenu {
 /// "Five blessings since June 2024".
 String countLine(List<Blessing> blessings) {
   if (blessings.isEmpty) return Strings.countLine(0, DateTime(0));
-  final first = blessings.map((b) => b.local).reduce((a, b) => a.isBefore(b) ? a : b);
-  return Strings.countLine(blessings.length, first);
+  final first = blessings.reduce((a, b) => a.utc.isBefore(b.utc) ? a : b);
+  return Strings.countLine(blessings.length, first.local, yearOnly: first.precision == DatePrecision.year);
 }

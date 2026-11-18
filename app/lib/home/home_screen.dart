@@ -62,6 +62,7 @@ import '../widgets/fade.dart';
 import '../widgets/icons.dart';
 import '../widgets/pull_down.dart';
 import '../widgets/scrims.dart';
+import '../widgets/measure.dart';
 import 'pass_along.dart';
 import 'ruler.dart';
 import 'sky_stats.dart';
@@ -508,6 +509,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint('family: $e');
     }
     _family = Family(people, onRings);
+    // an entry opened and left with nothing in it (the app closed on it) is not kept
+    for (final b in _family.unplaced.where(isEmptyEntry).toList()) {
+      try {
+        await _store.delete(b.id);
+        _family.unplaced.remove(b);
+      } catch (_) {}
+    }
     // the sky that was showing last
     _ring = _family.known(settings.sky);
     return _family.on(_ring);
@@ -1082,8 +1090,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  /// The back chevron: a draft stays a draft; back where the page was opened from.
+  /// The back chevron: a draft stays a draft; back where the page was opened from. An entry left
+  /// with nothing in it at all is not kept.
   void _closeReview() {
+    final b = _reviewing;
+    if (b != null && isEmptyEntry(b)) unawaited(_dropEntry(b));
     if (_reviewFrom == Stage.read) {
       _skyFor(SkyView.read);
       setState(() => _stage = Stage.read);
@@ -1107,13 +1118,75 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _finishReview() async {
     final b = _reviewing;
     if (b == null) return;
+    final arriving = b.entered && b.draft && b.placed && _reviewFrom == Stage.home;
     b.draft = false;
     await _saveReview();
     if (!keepsRecording(b)) await _store.eraseAudio(b);
     if (!mounted) return;
+    if (arriving) return _entryArrives(b);
     if (identical(b, _aside) && _reviewFrom == Stage.home) _readFrom = Stage.home;
     _skyFor(SkyView.read);
     setState(() => _stage = Stage.read);
+  }
+
+  // ---- entering a past blessing ----
+
+  /// "Enter a past blessing" on the recording start: the recording is put away, and an entry (a
+  /// draft with no date and no words, kept in the store from the start, so nothing typed is lost)
+  /// opens on the review page, for whoever's sky is showing. Never while locked.
+  Future<void> _openEntry() async {
+    if (_stage != Stage.record || _locked || _session.live || _session.practice) return;
+    final person = _session.draft?.personId ?? _ring;
+    _session.discard();
+    _engine.show?.stop();
+    final b = enteredBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple, personId: person);
+    await _store.create(b);
+    await _reloadFamily();
+    if (!mounted || _locked) return;
+    // the sky as it was, without the recording's new light; the entry has none until it has a date
+    _setBlessings(_blessings, focus: _homeFocus);
+    _aside = b;
+    _readFrom = Stage.home;
+    await _openReview(b, from: Stage.home);
+  }
+
+  /// An entered blessing's date was set or changed: its light takes its place on its ring (the
+  /// ring's start moves back when it is the earliest; the others slide closer), in focus behind the page.
+  Future<void> _entryGiven() async {
+    final b = _reviewing;
+    if (b == null || !b.placed || !mounted) return;
+    await _reloadFamily();
+    if (!mounted || !identical(b, _reviewing)) return;
+    if (b.ownership == Ownership.passingOn) return setState(() {});
+    final ring = _family.known(b.personId);
+    if (ring != _ring) _setRing(ring);
+    final list = [..._blessings.where((x) => x.id != b.id), b]..sort((x, y) => x.utc.compareTo(y.utc));
+    _aside = null;
+    _setBlessings(list, focus: list.indexOf(b));
+    _engine.setView(_stage == Stage.read ? SkyView.read : SkyView.review);
+    _engine.lookAt(_engine.focus);
+    setState(() {});
+  }
+
+  /// Done on a new entry: the sky turns to its light, which brightens in place (Reduce Motion: it
+  /// fades in, and the sky does not turn).
+  void _entryArrives(Blessing b) {
+    _aside = null;
+    final i = _blessings.indexWhere((x) => x.id == b.id);
+    _engine.setView(SkyView.home);
+    if (i >= 0) _engine.setFocus(i, instant: _engine.reduceMotion);
+    setState(() {
+      _showNow();
+      _stage = Stage.home;
+    });
+  }
+
+  Future<void> _dropEntry(Blessing b) async {
+    try {
+      await _store.delete(b.id);
+    } catch (_) {}
+    await _reloadFamily();
+    if (mounted) setState(() {});
   }
 
   // ---- the changes polish made ----
@@ -1149,15 +1222,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // ---- drafts waiting ----
 
   /// How many blessings are still drafts: those in the sky and those to pass along.
-  int get _drafts => _blessings.where((b) => b.draft).length + _passing.where((b) => b.draft).length;
+  int get _drafts => _blessings.where((b) => b.draft).length + _passing.where((b) => b.draft).length + _unplaced.length;
+
+  /// Entries on the ring showing still being written, with no date yet: no light, but waiting, so
+  /// counted in the badge.
+  List<Blessing> get _unplaced => [for (final b in _family.unplaced) if (_family.known(b.personId) == _ring) b];
 
   /// The badge: the review page of the oldest draft, of either kind.
   Future<void> _reviewOldestDraft() async {
     if (_stage != Stage.home || _recoveredSheet) return;
-    final drafts = [..._blessings, ..._passing].where((b) => b.draft).toList()..sort((a, b) => a.utc.compareTo(b.utc));
+    final drafts = [..._blessings, ..._passing, ..._unplaced].where((b) => b.draft).toList()..sort((a, b) => a.utc.compareTo(b.utc));
     if (drafts.isEmpty) return;
     final d = drafts.first;
-    if (d.ownership == Ownership.passingOn) {
+    // passed along, or an entry with no date yet: no light to frame
+    if (d.ownership == Ownership.passingOn || !d.placed) {
       _aside = d;
       _readFrom = Stage.home;
       return _openReview(d, from: Stage.home);
@@ -1187,6 +1265,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final b = _reviewing;
     if (b == null || !mounted) return;
     final ring = w.ring;
+    // an entry with no date yet has no light on any ring: only whose it is changes
+    if (!b.placed) {
+      await _reloadFamily();
+      if (mounted) setState(() {});
+      return;
+    }
     if (ring != null && ring != _ring) {
       await _reloadFamily();
       if (!mounted || !identical(b, _reviewing)) return;
@@ -2227,9 +2311,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     // scrims keep the words readable over the brightest parts of the sky
                     Positioned(left: 0, right: 0, top: 0, height: 190, child: TopScrim(palette: p)),
                     Positioned(left: 0, right: 0, bottom: 0, height: 392, child: BottomScrim(palette: p)),
+                    // an iPad: the caption, the ruler and New blessing keep together in a centred
+                    // column (a phone's is the whole width)
                     Positioned(
-                      left: 0,
-                      right: 0,
+                      left: Widths.side(mq.size.width, 0, Widths.foot),
+                      right: Widths.side(mq.size.width, 0, Widths.foot),
                       bottom: 30,
                       child: Fade(on: !_list, inDuration: listTime, outDuration: listTime, child: _locked ? _lockedFoot(p) : _foot(p)),
                     ),
@@ -2241,7 +2327,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           on: _list,
                           inDuration: listTime,
                           outDuration: listTime,
-                          child: Timeline(blessings: _blessings, palette: p, now: DateTime.now(), on: _list, onOpen: _openFromList),
+                          // an iPad: the list keeps a reading measure, centred on the dark ground
+                          child: ColoredBox(
+                            color: p.ground,
+                            child: Measure(
+                              max: Widths.reading,
+                              child: Timeline(blessings: _blessings, palette: p, now: DateTime.now(), on: _list, onOpen: _openFromList),
+                            ),
+                          ),
                         ),
                       ),
                     Positioned(
@@ -2327,6 +2420,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onBack: _closeReview,
                     onFinish: _finishReview,
                     onOwnership: (w) => unawaited(_ownershipChanged(w)),
+                    onGiven: () => unawaited(_entryGiven()),
                     people: _locked ? const [] : _family.people,
                     onChanges: () {
                       final b = _reviewing;
@@ -2491,6 +2585,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   practice: _session.practice,
                   // whose it will be, once there are family members; nothing of them while locked
                   whose: _locked || _family.people.isEmpty || _session.practice || _session.draft == null ? null : _family.title(_session.draft!.personId),
+                  // nothing of the store while locked, and nothing to enter from the practice
+                  onEnter: _locked || _session.practice ? null : () => unawaited(_openEntry()),
                 ),
               ),
             ),

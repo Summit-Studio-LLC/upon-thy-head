@@ -6,6 +6,77 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ### 2026-11-18
 
+- **The iPad pass (from the coordinator's brief: make the app right on iPad, without changing the iPhone).**
+  - **Faults found** (11-inch simulator, portrait; `design/sim/ipad/before/`): every page and form spanned the full width, so lines ran 700–1000 pt (Add a family member, Manage family, Settings, Your links, the reading page, review, after Amen). Pills stretched to the width ("Review now" about 900 pt). Home's caption and its Read button were about 800 pt apart, and the ruler spanned the screen. The list hugged the left edge. Every sheet and confirmation was a full-width slab at the bottom. The system share sheet floated at the bottom middle with no arrow, pointing at nothing. The app said "this phone" or "this iPhone" on an iPad ("Same as this iPhone", "Your words stay on this iPhone", the recording "kept on this phone", and the iOS microphone and speech questions). Touch ID was already named correctly on a Touch ID iPad.
+  - **Changes:**
+    - `lib/widgets/measure.dart` holds the widths and a `Measure` wrapper. Each margin is `max(phone margin, (width − measure) / 2)`, so a phone's margins are exactly what they were.
+    - The reading page and review are centred columns of 620 pt; the Settings, family and over-sky pages, 600 pt. Home's foot (caption, ruler, New blessing) is a centred 600-pt column, and the list is centred at 620 pt. After Amen keeps to the reading column.
+    - Pills stop at 420 pt. Sheets and confirmations are centred 560-pt cards, floating above the bottom edge, once the screen is 700 pt wide; narrower (every phone, a Split View third) they are as before.
+    - The system share sheet (text, PDF, file, link) is a popover anchored to the Share button that opened it (`share.dart` sends its rect; `Share.swift` puts an anchor view there, which stays with the button across a turn). Without a rect it falls back to the old place.
+    - On an iPad, whole sentences name the iPad instead of the phone, in English and Spanish (`lib/strings_ipad.dart`; `Strings.iPad` is set at launch). `Info.plist` and both `InfoPlist.strings` files have `~ipad` microphone and speech questions.
+    - The reading page's Share and Edit pair shrinks rather than overflowing in a 320-pt window at the largest text.
+    - The review page's side margins: two exact edits in `review_screen.dart` (the other builder's file), nothing else touched there.
+  - **Claude's choices (open to change):**
+    - The measures: reading 620, forms 600, foot 600, cards 560 (from a 700-pt screen), pills 420.
+    - Home's foot and the list are centred columns, not split to the sides.
+    - The share popover points at the Share button and follows it on a turn.
+    - "Opens in Upon Thy Head on another iPhone or iPad" for a file.
+    - An iPad is told by its screen (iOS, shortest side at least 600 pt), so the iPad wording is never shown on an iPhone.
+    - On iPad, VoiceOver's outline of a pill is the column's width, not the pill's (the cap sits inside the button's semantics so tests and VoiceOver still find the button).
+    - The three named simulators did not exist on this Mac, so three temporary ones were made ("… ipad-pass") and deleted at the end.
+  - **Proven on the simulator** (`app/tool/ipad_acceptance.sh`, iPad Air 11-inch (M3), iOS 26; screenshots in `design/sim/ipad/`): in English, portrait then landscape with real rotations:
+    - first run (welcome, permissions naming Touch ID, practice);
+    - home, the capsule menu, the list; adding Emma and her sky; the recording start, recording, the discard question, after Amen;
+    - review with the keyboard up (the field typed in stays visible in both orientations);
+    - typed words surviving two turns mid-review, in both orientations;
+    - the finish question, the reading page, Edit, the delete question;
+    - share as text and as PDF, through the real system sheet, anchored with its arrow on Share;
+    - Settings, Your links, Manage family, change person, the remove question;
+    - lock and unlock with Touch ID;
+    - a turn on the sky keeping the same blessing in focus.
+  - **Proven by host tests only** (`test/ipad_layout_test.dart`, `test/strings_ipad_test.dart`):
+    - reading, review, Settings, a confirmation, the share sheet, the receiving sheet and Manage family at 11- and 13-inch portrait and landscape, and 320- and 375-pt windows: no overflow, no line over 680 pt, nothing off-screen;
+    - all of the above in Spanish, and at the largest text (3.1×);
+    - a confirmation is a centred card;
+    - no iPad sentence names a phone, in either language;
+    - the iPhone 17 Pro draws reading, review, Settings, the confirmation, both sheets and Manage family pixel for pixel as before the pass (goldens in `test/goldens/iphone/`, made from the code before it).
+  - **Not proven:**
+    - the 13-inch on the simulator (stopped by the owner);
+    - Spanish and the largest text on the simulator (the run was stopped);
+    - a real Split View window (simctl cannot make one; host tests only);
+    - the iOS permission questions in their iPad wording, seen on screen;
+    - hardware Escape and Return;
+    - the file and link share popovers (same code path as text and PDF);
+    - home on the iPhone pixel for pixel (it is not in the golden set; its foot's margin is `max(0, …)`, unchanged on a phone);
+    - landscape "before" screenshots (my changes were already in the shared checkout).
+  - **Left:**
+    - At the largest text, narrower than 400 pt, review's listen row (`review_screen.dart:1117`) overflows by up to 236 pt. That includes a 375-pt iPhone, so it predates this pass; skipped in the test, left for the other builder.
+    - Across two turns with the keyboard up, review's scroll moved about 23 pt (87 → 64 portrait, 510 → 487 landscape); the words and the field stayed.
+  - **Questions for the owner:**
+    - Are the measures right (620 reading, 600 forms, 560 cards, 420 pills), or should the iPad use more of its width?
+    - Should home's foot stay one centred column on a wide landscape iPad, or spread out?
+    - Should the review page keep its exact scroll position across a turn with the keyboard up, or is keeping the field in view enough?
+    - Who fixes the review listen row at the largest text?
+
+- **Enter a past blessing: type or paste a written blessing, placed on the ring by its date (built from Noah's brief; design/entry-and-rings Part A).**
+  - **What was built:** a quiet "Enter a past blessing" line at the foot of the recording start (also when the microphone was refused; on a family member's sky it enters for them; not offered while locked or in the practice). It opens the review page as the entry page: "Given · When was it given?" first, empty words with "Type the words here, or paste them in one go." and a Paste chip, no listen bar, no polish. The date sheet (drawn by the app, the same on iPhone and Android) offers Full date / Month and year / Year only with wheels to match, no date after today, and a line saying where the light sits (noon of the day, the 15th, July 2). Done stays dim, and says why to a screen reader, until there is a year and some words. Saving goes home with the sky on the new light; the ring's start moves back. The reading page says "Entered from a written copy, not recorded." with a page icon ("Anotada de una copia escrita, no grabada."). Edit changes the date. Dates read by what is known everywhere: caption, list, count line ("since 1998"), ruler and its screen-reader value, reading page, shared text, PDF and its file name, the blessing file, the website page.
+  - **The data:** the store migrates from version 8 to 9: `date_precision` ('day', 'month', 'year', 'unset'; existing rows 'day') and `entered` (0/1; existing rows 0). The blessing file and the link's record carry `precision` and `entered` and are written as record version 2 only when one of them says something; a recorded blessing on a known day is still version 1, byte for byte as before. Every version 1 file and link reads as a full date, as spoken. **An older app** given a version 2 file or link says "made with a newer version, update the app" (its existing refusal) rather than showing a wrong date. The website reads 1 and 2. `docs/blessing-file.md` and `website/PROTOCOL.md` say so; the protocol vectors were regenerated (the "newer" refusal is now record version 3).
+  - **Claude's choices:**
+    - Nothing typed is lost because the entry is a draft row in the store from the moment it opens, saved by the review page's own 400 ms autosave (and on going to the background). No separate draft file.
+    - Before it has a date an entry has no light and is on no ring; it counts in the "to review" badge and reopens from it. An entry left with nothing in it is deleted on Back and at launch.
+    - Entered words are kept exactly; each line break starts a paragraph on the reading page, the shared text and PDF, and the website (a recording still splits only at blank lines).
+    - In the list a month-only row shows "Aug" with the year under it; a year-only row shows "1998" alone.
+    - The date sheet opens on today, Full date; the wheels run month, day, year in English and día, mes, año in Spanish.
+    - Done on a new entry goes home to its light; Done after Edit goes back to the reading page.
+    - While the date sheet is up, the page behind it is hidden from screen readers, so there is only one Done to land on.
+    - Reduce Motion: the light simply appears in place (the sky engine's existing jump); there is no separate cross-fade yet.
+  - **Proven on the simulator** (`app/tool/entry_acceptance.sh`, a new iPhone 17 Pro (clean), the old one had been deleted; screenshots in `design/sim/entry/`): a multi-paragraph blessing put on the simulator's clipboard with `simctl pbcopy`, Paste, iOS's own "would like to paste" question answered Allow Paste, the words in exactly with their paragraphs; a line typed after it, no date, the app killed on that page: after relaunch all 377 characters were back and it waited in "to review". Then Given, Year only, the wheel turned to 1998, Done: saved as year only on July 2, 1998, five paragraphs; back home the count line read "Six blessings since 1998" and the caption "1998". The walk then stopped on a fault in the test itself (it read the ruler's value from the wrong semantics node, empty before the save too), so **the ruler, the reading page, the share text and PDF, and the link's browser page were not reached on the simulator.** Per Noah's cut the script was not chased further.
+  - **Proven only by tests:** the upgrade (migration 8→9 and an old file and link read as full dates, as spoken: `test/entry_test.dart`, `test/blessing_file_test.dart`; the store from 51932fd was also upgraded on the simulator in the first phase, with every blessing still a full date and "as spoken"); formatting in both languages, ordering, where the light sits, the file round trip, the share text, PDF date and file name (`test/entry_test.dart`); the entry page and date sheet, in English and Spanish and at the largest text (`test/entry_widgets_test.dart`); every new control pressable by VoiceOver and TalkBack (`test/screen_reader_test.dart`); an entry on a family member's sky on her ring only (`test/entry_test.dart`); the website page showing "1998" and the entered line (`website/tests/format.test.mjs`).
+  - **Not proven:** on a device, the ruler reaching 1998, the reading page's "1998" and entered line, the share text, PDF and link page (all covered by unit and website tests only); the month-and-year and full-date entries on home, list and reading page on a device; Edit changing the date on a device; the main path in Spanish and at the largest text on a device; Android (no emulator pass); Reduce Motion.
+  - **Questions for Noah:**
+    1. iOS asks "“Upon Thy Head” would like to paste from …" every time the Paste chip is pressed with words copied in another app. Fine, or should the chip be the system's own Paste button (no question asked; iOS 16 and later)?
+    2. "Fecha" for "Given" and "Anotar" for "Enter" in Spanish (starred in `docs/spanish-strings.md`).
+    3. Should an entry ever ask for a place? It uses the phone's kept place, as the brief said.
 - **How the app is built from here: rapid development, one final evaluation (Noah, evening: "your automated test pipelines are long an onerous. please consider rapid development. and then an eval that is final before we push to app store to be released").**
   - **During development:** a feature is built with the unit tests its logic needs, a clean analyzer and one quick look that it works on the simulator, then goes to TestFlight for Noah to try. No acceptance script per feature, and no replays in Spanish, at the largest text, on other device sizes, on Android or as an upgrade install.
   - **Before a build is submitted to the App Store or Play:** the full gate runs once, as the final evaluation: every acceptance script in `app/tool/`, both languages, the largest text, iPhone, iPad and Android, and the checks only a real phone can make.

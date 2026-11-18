@@ -4,3 +4,6 @@
 "NSLocationWhenInUseUsageDescription" = "Se usa una vez para poner la luz de tu primera bendición en el cielo donde se dio. Con «Permitir una vez» basta.";
 "NSSpeechRecognitionUsageDescription" = "La voz se convierte en texto en este teléfono. No se envía nada a ningún lado.";
 "Blessing" = "Bendición";
+/* On an iPad (not a phone) */
+"NSMicrophoneUsageDescription~ipad" = "Upon Thy Head escucha solo mientras grabas una bendición. El audio se queda en este iPad.";
+"NSSpeechRecognitionUsageDescription~ipad" = "La voz se convierte en texto en este iPad. No se envía nada a ningún lado.";

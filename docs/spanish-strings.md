@@ -235,6 +235,27 @@ exact but more technical; the English avoids "transcribe" on purpose.
 | Your words stay on this iPhone. Nothing leaves it unless you share it. | Tus palabras se quedan en este iPhone. Nada sale de él a menos que lo compartas. | |
 | Version 0.1.0 | Versión 0.1.0 | |
 
+## Entering a past blessing (added 2026-11-18)
+
+| English | Spanish | Note |
+|---|---|---|
+| Enter a past blessing (the line at the foot of the recording start) | Anotar una bendición pasada | ★ "Anotar" (to write down) rather than "Ingresar" (data entry) or "Introducir" (Spain). Matches the honesty line's "Anotada". |
+| Type or paste the words of a blessing written down (its VoiceOver hint) | Escribe o pega las palabras de una bendición que tienes por escrito | ★ Says "that you have in writing"; the English is shorter. |
+| Given (the first row of the entry page) | Fecha | ★ "Dada" alone reads oddly as a label, so the row is named "Date". |
+| When was it given? | ¿Cuándo se dio? | ★ Or "¿Cuándo la recibiste?" (when did you receive it), which is warmer but assumes the reader is the one blessed. |
+| Opens the date (hint) | Abre la fecha | |
+| Type the words here, or paste them in one go. | Escribe aquí las palabras, o pégalas de una vez. | |
+| Paste | Pegar | iOS's own word. |
+| Puts in the words you copied (hint) | Pone las palabras que copiaste | ★ "Pone" is plain; "Inserta" is more technical. |
+| Full date / Month and year / Year only | Fecha exacta / Mes y año / Solo el año | ★ "Fecha exacta" (exact date) for "Full date"; "Fecha completa" is the literal one. |
+| Month / Day / Year (the wheels, for VoiceOver) | Mes / Día / Año | The Spanish wheels run día, mes, año. |
+| Only the month is known. Its light sits at mid-August 1998. | Solo se sabe el mes. Su luz se sitúa a mediados de agosto de 1998. | ★ "Se sitúa" for "sits"; "está" is plainer. |
+| Only the year is known. Its light sits at mid-1998. | Solo se sabe el año. Su luz se sitúa a mediados de 1998. | |
+| Entered from a written copy, not recorded. (the reading page and the website) | Anotada de una copia escrita, no grabada. | The design's own Spanish. |
+| Needs a date and the words (the dim Done's hint) | Necesita una fecha y las palabras | ★ |
+| August 1998 / 1998 (a date known only to the month or the year) | agosto de 1998 / 1998 | Short form "ago 1998". Everywhere the date is shown: home, list, reading page, shared text, PDF and its file name, the website. |
+| Six blessings since 1998 | Seis bendiciones desde 1998 | When the first is known only to the year. |
+
 ## Sharing (reading page, and the shared text and PDF)
 
 | English | Spanish | Note |

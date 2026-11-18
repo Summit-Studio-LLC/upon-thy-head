@@ -12,8 +12,10 @@ import '../strings.dart';
 String shareTitle(Blessing b, Words w) => Strings.isUntitled(b.title) || b.title.trim().isEmpty ? w.untitled : b.title.trim();
 
 /// The words in paragraphs, as the reading page splits them.
-List<String> shareParagraphs(Blessing b) =>
-    b.words.split(RegExp(r'\n\s*\n')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+List<String> shareParagraphs(Blessing b) => b.paragraphs;
+
+/// The date, as much as is known: "Tuesday, March 3, 2026", "August 1998", "1998".
+String shareDate(Blessing b, Words w) => w.givenLong(b.local, b.precision);
 
 /// The text handed to the share sheet:
 ///
@@ -30,7 +32,7 @@ String shareText(Blessing b, [Words? words]) {
   final from = b.from.trim(), to = b.recipient.trim();
   final head = [
     shareTitle(b, w),
-    w.longDate(b.local),
+    shareDate(b, w),
     if (from.isNotEmpty) w.blessingFrom(from),
     if (to.isNotEmpty) w.forName(to),
   ].join('\n');
@@ -59,7 +61,9 @@ String shareFileName(Blessing b, [Words? words]) {
     t = '${cut.replaceFirst(RegExp(r'[\s,.;-]+$'), '')}…';
   }
   if (t.isEmpty) t = w.untitled;
-  return '$t, ${w.fullDate(b.local)}.pdf';
+  // "…, March 3, 2026.pdf", "…, August 1998.pdf", "…, 1998.pdf"
+  final date = b.precision == DatePrecision.day || b.precision == DatePrecision.unset ? w.fullDate(b.local) : shareDate(b, w);
+  return '$t, $date.pdf';
 }
 
 /// What the native side lays out as the PDF.
@@ -69,7 +73,7 @@ Map<String, Object> sharePdf(Blessing b, [Words? words]) {
   return {
     'fileName': shareFileName(b, w),
     'title': shareTitle(b, w),
-    'date': w.longDate(b.local),
+    'date': shareDate(b, w),
     'from': from.isEmpty ? '' : w.blessingFrom(from),
     'recipient': to.isEmpty ? '' : w.forName(to),
     'paragraphs': shareParagraphs(b),
@@ -116,18 +120,27 @@ abstract class ShareApi {
 class NativeShareApi implements ShareApi {
   static const _channel = MethodChannel('upon_thy_head/share');
 
-  @override
-  Future<void> text(String text, String subject) => _channel.invokeMethod<void>('text', {'text': text, 'subject': subject});
+  /// iPad: what the system sheet points at (the reading page's Share button, in the app's
+  /// points), set as it is tapped. An iPad shows the sheet as a popover and needs one; a phone
+  /// ignores it.
+  static Rect? origin;
+  static Map<String, Object> _at() {
+    final r = origin;
+    return r == null ? const {} : {'origin': [r.left, r.top, r.width, r.height]};
+  }
 
   @override
-  Future<void> pdf(Map<String, Object> pdf) => _channel.invokeMethod<void>('pdf', pdf);
+  Future<void> text(String text, String subject) => _channel.invokeMethod<void>('text', {'text': text, 'subject': subject, ..._at()});
+
+  @override
+  Future<void> pdf(Map<String, Object> pdf) => _channel.invokeMethod<void>('pdf', {...pdf, ..._at()});
 
   @override
   Future<bool> file(String fileName, Uint8List bytes, String title) async =>
-      await _channel.invokeMethod<bool>('file', {'fileName': fileName, 'bytes': bytes, 'title': title}) ?? false;
+      await _channel.invokeMethod<bool>('file', {'fileName': fileName, 'bytes': bytes, 'title': title, ..._at()}) ?? false;
 
   @override
-  Future<bool> link(String url, String title) async => await _channel.invokeMethod<bool>('link', {'url': url, 'title': title}) ?? false;
+  Future<bool> link(String url, String title) async => await _channel.invokeMethod<bool>('link', {'url': url, 'title': title, ..._at()}) ?? false;
 
   @override
   Future<List<IncomingFile>> receiving(void Function(IncomingFile) onIncoming) async {

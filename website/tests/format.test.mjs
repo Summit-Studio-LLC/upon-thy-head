@@ -86,3 +86,32 @@ test("a 2,500-word blessing with accents and an emoji fits well under the cap", 
   assert.ok(locked.length < MAX_BYTES / 3, `${locked.length} bytes`);
   assert.equal(polished(readRecord(await open(locked, hex(V.vectors[1].key.hex)))), words);
 });
+
+// 2026-11-18: a blessing entered from a written copy, known only to its year or month (record version 2)
+const v2Record = (fields) => {
+  const r = JSON.parse(V.vectors[0].plaintext.utf8);
+  return new TextEncoder().encode(JSON.stringify({ ...r, version: 2, changes: [], ...fields }));
+};
+
+test("record version 2: an entered blessing known only to its year is read with both", () => {
+  const r = readRecord(v2Record({ precision: "year", entered: true, given: "1998-07-02T18:00Z", offset: -360 }));
+  assert.equal(r.precision, "year");
+  assert.equal(r.entered, true);
+});
+
+test("record version 1 and 2 without the new fields: a full date, as spoken", () => {
+  const old = readRecord(new TextEncoder().encode(V.vectors[0].plaintext.utf8));
+  assert.equal(old.precision, "day");
+  assert.equal(old.entered, false);
+  assert.equal(readRecord(v2Record({ precision: "month" })).precision, "month");
+});
+
+test("refuses a precision or entered that is not one of the known ones", async () => {
+  assert.equal(await code(() => readRecord(v2Record({ precision: "week" }))), "record");
+  assert.equal(await code(() => readRecord(v2Record({ entered: "yes" }))), "record");
+});
+
+test("entered words: each line break ends a paragraph; a recording's only a blank line", () => {
+  assert.deepEqual(paragraphs("One.\nTwo.\n\nThree.", true), ["One.", "Two.", "Three."]);
+  assert.deepEqual(paragraphs("One.\nTwo.\n\nThree."), ["One.\nTwo.", "Three."]);
+});

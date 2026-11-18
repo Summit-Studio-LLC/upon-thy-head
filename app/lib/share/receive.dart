@@ -147,7 +147,7 @@ class ReceiveSheet extends StatelessWidget {
               const SizedBox(height: 6),
               Text(from.isEmpty ? Strings.aBlessing : Strings.blessingFrom(from), key: const Key('receive-from'), style: serif(17, 24, p.light, italic: true)),
               const SizedBox(height: 2),
-              Text(Strings.longDate(record.utc.add(record.utcOffset)), key: const Key('receive-date'), style: sans(14, 20, p.ink2)),
+              Text(Strings.givenLong(record.utc.add(record.utcOffset), record.precision), key: const Key('receive-date'), style: sans(14, 20, p.ink2)),
             ],
             if (body != null) ...[const SizedBox(height: 14), Text(body, key: const Key('receive-body'), style: sans(15, 22, p.ink2))],
             const SizedBox(height: 20),

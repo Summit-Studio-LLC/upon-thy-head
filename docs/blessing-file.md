@@ -22,7 +22,7 @@ UTF-8 JSON, indented, one object, keys in this order:
 | key | type | what |
 |---|---|---|
 | `format` | string | always `"upon-thy-head/blessing"` |
-| `version` | integer | `1`. A reader refuses a higher one as "made with a newer version" |
+| `version` | integer | `1`, or `2` for a blessing entered from a written copy or one whose date is known only to the month or the year (below). A reader refuses a higher one than it knows as "made with a newer version" |
 | `id` | string | the blessing's id, `[A-Za-z0-9_-]`, at most 64 |
 | `title` | string | at most 300; missing or blank reads as the untitled blessing |
 | `given` | string | the minute it was given, UTC: `"2026-03-03T16:40Z"` |
@@ -34,6 +34,8 @@ UTF-8 JSON, indented, one object, keys in this order:
 | `words` | string | the spoken words, exactly as spoken, at most 200,000 characters |
 | `place` | object, optional | where it was given, `{"lat": 40.8, "lon": -111.9}`, to a tenth of a degree as the app keeps it (about 11 km). Missing or null in a file made before 2026-11-16 |
 | `changes` | object[] | the polish changes, in order: `at` (character offset in `words`), `was`, `now`, `kind` (`filler`, `repeat`, `restart`, `grammar`, `punctuation`), `source`, `kept` (bool). At most 5,000 |
+| `precision` | string, optional (version 2) | how much of the date is known: `"day"` (the default when missing), `"month"` or `"year"`. `given` then holds noon local time on the 15th of the month, or on July 2 of the year: where the light sits. Shown as "August 1998" or "1998" |
+| `entered` | bool, optional (version 2) | `true` when the words were typed or pasted from a written copy, not recorded. Shown as "Entered from a written copy, not recorded." The words are kept exactly as entered, and each line break starts a paragraph |
 
 Not carried: the audio, the first transcript, created/updated times, the
 draft flag, the owner flag, or anything about the sender's phone.
@@ -46,6 +48,12 @@ from N changes", and can open the changes screen and restore any change to the s
 - At most 512 KiB; the native side reads at most one byte over and refuses without parsing.
 - Must be UTF-8, JSON, an object, `format` exact, `version` an integer ≥ 1.
 - Every field typed and bounded as above; unknown fields are ignored (so a later version can add some).
+- `precision`, when present: one of `day`, `month`, `year`; `entered`, when present: a bool.
+  Anything else refuses the file. The app writes version `2` only when one of them says something
+  (not a full date, or entered); a recorded blessing on a known day is still written as version 1,
+  byte for byte as before, so an older app still reads it. An older app (version 1 only) shows a
+  version 2 file or link as "made with a newer version, update the app" rather than a wrong date.
+  Every version 1 file and link reads as a full date, as spoken.
 - `place`, when present: an object with finite numbers `lat` (±90) and `lon` (±180), rounded to a
   tenth of a degree on reading whatever was written. Anything else refuses the file. The version stays
   `1`: the field is optional, and an older app ignores it.

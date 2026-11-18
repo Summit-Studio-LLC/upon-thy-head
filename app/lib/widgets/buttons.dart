@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
+import 'measure.dart';
 import 'swap_text.dart';
 
 /// A word for a button, as the recording screen's Close and Discard.
@@ -101,6 +102,11 @@ class _PillBtnState extends State<PillBtn> {
       label: widget.semanticsLabel ?? widget.label,
       excludeSemantics: true,
       onTap: widget.onTap,
+      // an iPad: a pill that spans its column on a phone keeps to a phone's width, centred
+      child: Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: Widths.pill),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -128,16 +134,22 @@ class _PillBtnState extends State<PillBtn> {
           ),
         ),
       ),
+      ),
+      ),
     );
   }
 }
 
 /// The prototype's `.topbar .txtbtn`: a word in the light colour.
 class LightTextBtn extends StatefulWidget {
-  const LightTextBtn({super.key, required this.label, required this.palette, required this.onTap});
+  const LightTextBtn({super.key, required this.label, required this.palette, required this.onTap, this.enabled = true, this.disabledHint});
   final String label;
   final Palette palette;
   final VoidCallback onTap;
+
+  /// False: dimmed, said to be unavailable (with [disabledHint]), and a tap does nothing.
+  final bool enabled;
+  final String? disabledHint;
 
   @override
   State<LightTextBtn> createState() => _LightTextBtnState();
@@ -149,24 +161,31 @@ class _LightTextBtnState extends State<LightTextBtn> {
   @override
   Widget build(BuildContext context) {
     final p = widget.palette;
+    final on = widget.enabled;
     return Semantics(
       button: true,
+      enabled: on ? null : false,
       label: widget.label,
+      hint: on ? null : widget.disabledHint,
       excludeSemantics: true,
-      onTap: widget.onTap,
+      onTap: on ? widget.onTap : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _down = true),
+        onTapDown: on ? (_) => setState(() => _down = true) : null,
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
+        onTap: on ? widget.onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(color: p.ink.withValues(alpha: _down ? .07 : 0), borderRadius: BorderRadius.circular(22)),
-          child: Text(widget.label, style: sans(17, 22, p.light, weight: FontWeight.w500)),
+          child: AnimatedOpacity(
+            opacity: on ? 1 : .4,
+            duration: const Duration(milliseconds: 200),
+            child: Text(widget.label, style: sans(17, 22, p.light, weight: FontWeight.w500)),
+          ),
         ),
       ),
     );

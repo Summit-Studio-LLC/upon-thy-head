@@ -32,7 +32,10 @@ Format version: **1**. Written 2026-11-16.
 
 What is locked is the same record a `.blessing` file carries (`docs/blessing-file.md`,
 `app/lib/share/blessing_file.dart`): the JSON object with `format`, `version`, `id`, `title`,
-`given`, `offset`, `from`, `for`, `tags`, `language`, `words`, `changes`, and optionally `place`.
+`given`, `offset`, `from`, `for`, `tags`, `language`, `words`, `changes`, and optionally `place`,
+`precision` and `entered` (record version 2, 2026-11-18: a blessing entered from a written copy, or
+one whose date is known only to the month or the year; the page shows "August 1998" or "1998" and
+"Entered from a written copy, not recorded.").
 
 - Written **compact** (no spaces or line breaks between tokens), UTF-8, no byte-order mark:
   `BlessingRecord.toCompactBytes()`.
@@ -41,7 +44,8 @@ What is locked is the same record a `.blessing` file carries (`docs/blessing-fil
   2015) and not the newer decompression stream (Safari 16.4, March 2023), there is one step fewer
   to get identical on three platforms, and there is no decompression bomb to guard against.
 - A reader checks the record as strictly as the app checks a file: see "Reading strictly" in
-  `docs/blessing-file.md`. A `version` above 1 is "made with a newer version".
+  `docs/blessing-file.md`. A record `version` above 2 is "made with a newer version" (the
+  site reads 1 and 2; the link's own format byte stays `0x01`).
 - The words shown are the spoken words with each change whose `kept` is true applied in order
   (`applyChanges` in `app/lib/polish/change.dart`).
 
@@ -83,7 +87,7 @@ Opening, in this order (the error names are the ones in `protocol-vectors.json`)
 2. Fewer than 31 or more than 65,536 bytes, or byte 0 is `0x00`: `damaged`.
 3. Byte 0 is greater than `0x01`: `newer`.
 4. AES-GCM does not authenticate (wrong key, any byte changed, cut short): `locked`.
-5. The plaintext is not a valid record: `record`, or `newer` if its `version` is above 1.
+5. The plaintext is not a valid record: `record`, or `newer` if its `version` is above 2.
 
 ## 4. The service
 

@@ -12,7 +12,9 @@ export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const KEY_PATTERN = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/; // 43 characters, the spare bits zero
 
 export const RECORD_FORMAT = "upon-thy-head/blessing";
-export const RECORD_VERSION = 1;
+// 2 (2026-11-18): a blessing entered from a written copy ("entered": true), and one known only to its
+// month or year ("precision"). The app still writes 1 for a blessing recorded on a known day.
+export const RECORD_VERSION = 2;
 export const LIMITS = { id: 64, title: 300, name: 200, tags: 40, tag: 60, language: 20, words: 200000, changes: 5000, changeText: 2000, source: 40 };
 // docs/blessing-file.md lists "restart"; app/lib/polish/change.dart has "reworded". Both are read.
 const KINDS = ["filler", "repeat", "reworded", "restart", "grammar", "punctuation"];
@@ -198,7 +200,11 @@ export function readRecord(bytes, now = new Date()) {
       changes.push({ at: c.at, was, now: now0, kept: c.kept });
     }
   }
-  return { id, title, given: when, offset: j.offset, from, for: recipient, language, words, changes };
+  const precision = j.precision == null ? "day" : j.precision;
+  if (!["day", "month", "year"].includes(precision)) throw bad("precision");
+  if (j.entered != null && typeof j.entered !== "boolean") throw bad("entered");
+  const entered = j.entered === true;
+  return { id, title, given: when, offset: j.offset, from, for: recipient, language, words, changes, precision, entered };
 }
 
 /** The words as the app's reading page shows them: the spoken words with the kept changes applied. */
@@ -214,5 +220,8 @@ export function polished(record) {
 
 export const keptChanges = (record) => record.changes.filter((c) => c.kept).length;
 
-/** Paragraphs, split where the app's reading page splits them. */
-export const paragraphs = (words) => words.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+/**
+ * Paragraphs, split where the app's reading page splits them: at a blank line; and, for words entered
+ * from a written copy (kept exactly as typed or pasted), at every line break.
+ */
+export const paragraphs = (words, entered = false) => words.split(entered ? /\n/ : /\n\s*\n/).map((s) => s.trim()).filter(Boolean);

@@ -10,6 +10,7 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/fade.dart';
+import '../widgets/icons.dart';
 import '../widgets/scrims.dart';
 import '../widgets/sheet.dart';
 import 'hold_ring.dart';
@@ -34,7 +35,11 @@ class RecordLayer extends StatefulWidget {
     this.active = true,
     this.practice = false,
     this.whose,
+    this.onEnter,
   });
+
+  /// "Enter a past blessing", at the foot before Begin; null shows nothing (locked, or the practice).
+  final VoidCallback? onEnter;
 
   /// Whose blessing this will be ("For Emma"), shown under the title once there are family
   /// members; null shows nothing (no family members, or locked).
@@ -278,6 +283,24 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
             ),
           ),
         ),
+        // ---- far from Begin, at the foot: a blessing written down ----
+        if (widget.onEnter != null)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: math.max(24.0, mq.viewPadding.bottom + 8),
+            child: IgnorePointer(
+              ignoring: live,
+              child: ExcludeSemantics(
+                excluding: live,
+                child: AnimatedOpacity(
+                  opacity: live ? 0 : 1,
+                  duration: const Duration(milliseconds: 400),
+                  child: Center(child: EnterPastButton(key: const Key('enter-past'), palette: p, onTap: widget.onEnter!)),
+                ),
+              ),
+            ),
+          ),
         // ---- while it listens ----
         // The ring and, below it, what holding does: one column from the bottom, so a hint grown
         // by the text size pushes the ring up instead of running across it. At the usual sizes the
@@ -334,6 +357,50 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
         ),
       ]);
     });
+  }
+}
+
+/// "Enter a past blessing": one quiet line on a faint pill, with a page being written on.
+class EnterPastButton extends StatefulWidget {
+  const EnterPastButton({super.key, required this.palette, required this.onTap});
+  final Palette palette;
+  final VoidCallback onTap;
+
+  @override
+  State<EnterPastButton> createState() => _EnterPastButtonState();
+}
+
+class _EnterPastButtonState extends State<EnterPastButton> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return Semantics(
+      button: true,
+      label: Strings.enterPast,
+      hint: Strings.enterPastHint,
+      excludeSemantics: true,
+      onTap: widget.onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+          decoration: BoxDecoration(color: p.ink.withValues(alpha: _down ? .12 : .06), borderRadius: BorderRadius.circular(28)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: 22, height: 22, child: GlyphIcon(Glyph.enter, color: p.ink2)),
+            const SizedBox(width: 12),
+            Flexible(child: Text(Strings.enterPast, textAlign: TextAlign.center, style: sans(17, 22, p.ink2))),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

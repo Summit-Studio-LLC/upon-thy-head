@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../strings.dart';
 import '../theme.dart';
 import 'icons.dart';
+import 'measure.dart';
 
 /// A page over the dimmed sky in the Settings family: the back chevron, a large serif title, a line
 /// under it, and its rows ("To pass along", "Your links").
@@ -39,7 +40,10 @@ class OverSkyPage extends StatelessWidget {
           key: scrollKey,
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: EdgeInsets.fromLTRB(28, 112 + dy, 28, 64),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // an iPad: the page's column keeps a form's measure, centred
+          child: Measure(
+            max: Widths.form,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _Title(title, key: titleKey, style: serif(34, 38, p.ink, tracking: -.012)),
             const SizedBox(height: 8),
             Text(lede, style: sans(15, 22, p.ink2)),
@@ -47,6 +51,7 @@ class OverSkyPage extends StatelessWidget {
             Container(height: 1, color: p.ink.withValues(alpha: .10)),
             ...children,
           ]),
+          ),
         ),
       ),
       Positioned(
