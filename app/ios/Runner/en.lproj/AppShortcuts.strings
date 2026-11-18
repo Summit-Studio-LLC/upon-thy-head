@@ -1,0 +1,7 @@
+/* The phrases of the App Shortcuts (Shortcuts.swift). */
+"Record a blessing in ${applicationName}" = "Record a blessing in ${applicationName}";
+"Record a blessing with ${applicationName}" = "Record a blessing with ${applicationName}";
+"New blessing in ${applicationName}" = "New blessing in ${applicationName}";
+"${applicationName} record a blessing" = "${applicationName} record a blessing";
+"Open my blessings in ${applicationName}" = "Open my blessings in ${applicationName}";
+"Show my blessings in ${applicationName}" = "Show my blessings in ${applicationName}";

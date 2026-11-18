@@ -21,7 +21,8 @@ import UniformTypeIdentifiers
 ///  - `debugShowing` → whether the sheet is up; `debugPaper` → "letter" or "a4"; `debugItems` → what
 ///    the sheet was handed (for each item: its kind, file name, type and what the type conforms to)
 ///  - `receiving`: Dart is ready for files that arrive (BlessingInbox, below); answers with any that
-///    came before it was, and sends later ones with `incoming`
+///    came before it was, and sends later ones with `incoming`; an App Shortcut or the Spotlight entry
+///    (Shortcuts.swift) comes the same way, as {shortcut: "record" | "home"}
 ///
 /// The app adds nothing of its own to what is shared: no message, no link, no app name.
 enum ShareChannel {
@@ -430,7 +431,10 @@ enum BlessingInbox {
       // a universal link (the app was closed), or the simulator's stand-in for one
       let links = (connectionOptions?.userActivities ?? []).compactMap(webLink) + contexts.filter(isTestLink)
       links.forEach(receiveLink)
-      return !urls.isEmpty || !links.isEmpty
+      // the app's own Spotlight entry (Shortcuts.swift): home
+      let spotlight = (connectionOptions?.userActivities ?? []).contains(where: SpotlightEntry.isOurs)
+      if spotlight { BlessingInbox.receiveShortcut(.home) }
+      return !urls.isEmpty || !links.isEmpty || spotlight
     }
 
     /// While running or in the background.
@@ -446,6 +450,10 @@ enum BlessingInbox {
 
     /// A universal link while running or in the background (`scene(_:continue:)`).
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) -> Bool {
+      if SpotlightEntry.isOurs(userActivity) {
+        BlessingInbox.receiveShortcut(.home)
+        return true
+      }
       guard let url = webLink(userActivity) else { return false }
       receiveLink(url)
       return true
@@ -479,6 +487,17 @@ enum BlessingInbox {
     }
   }
 
+  /// An App Shortcut or the app's Spotlight entry (Shortcuts.swift): where the app should open. It
+  /// waits, as a link does, until Dart is ready; only the newest one counts there.
+  static func receiveShortcut(_ place: ShortcutPlace) {
+    NSLog("receive: shortcut %@", place.rawValue)
+    let item: [String: Any] = ["shortcut": place.rawValue]
+    if listening, let c = ShareChannel.channel {
+      c.invokeMethod("incoming", arguments: item)
+    } else {
+      waiting.append(item)
+    }
+  }
 
   /// The same limit as lib/share/blessing_file.dart's blessingFileMaxBytes.
   static let maxBytes = 512 * 1024

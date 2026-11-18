@@ -29,6 +29,16 @@ void main() {
   final rec = BlessingRecord.of(surgery);
   setUp(() => Strings.use(UiLanguage.english));
 
+  test('a shortcut that opened the app is read as a place, and only as one', () {
+    final record = IncomingFile.from({'shortcut': 'record'}), home = IncomingFile.from({'shortcut': 'home'});
+    expect(record.shortcut, ShortcutPlace.record);
+    expect(home.shortcut, ShortcutPlace.home);
+    expect([record.bytes, record.link, home.bytes, home.link], everyElement(isNull));
+    expect(IncomingFile.from({'shortcut': 'read/surgery'}).shortcut, isNull);
+    expect(IncomingFile.from({'link': 'https://uponthyhead.app/b/x#y'}).shortcut, isNull);
+    expect(IncomingFile.from(null).shortcut, isNull);
+  });
+
   test('a file that arrives: new, the same, different, newer, unreadable, too large', () async {
     Future<Blessing?> none(String _) async => null;
     Future<Blessing?> mine(String _) async => surgery;

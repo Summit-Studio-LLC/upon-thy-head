@@ -24,6 +24,9 @@ import XCTest
 ///    <name>, as a person opens a file they were sent; `ok <label>` or `missing …`
 ///  - `fileslabels`: what the Files app shows now (for writing scripts)
 ///  - `sbhold [x y]`, `sbtap <label>`, `sblabels`: hold, tap or read the home screen (the icon style)
+///  - `spotlight <words>`: Home, Spotlight opened by a swipe down, the words typed; answers every
+///    label it then shows. `spotlighttap <label>`: tap the first result whose label starts so;
+///    `spotlightscroll`: drag the results up; `spotlightlabels`: the labels of its result rows; `spotlighttree`: everything it shows
 ///  - `quit`: stop
 final class Tapper: XCTestCase {
   let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -78,10 +81,12 @@ final class Tapper: XCTestCase {
         answer = e.exists ? (e.isEnabled ? "yes" : "no") : "missing"
       case "applabels":
         let app = XCUIApplication(bundleIdentifier: appBundle)
+        guard app.state != .notRunning else { answer = "notrunning"; break }
         answer = (app.buttons.allElementsBoundByIndex + app.cells.allElementsBoundByIndex).map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
       case "appall":
         // every labelled element, the rows and lines too (applabels is buttons and cells only)
         let app = XCUIApplication(bundleIdentifier: appBundle)
+        guard app.state != .notRunning else { answer = "notrunning"; break }
         answer = app.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
       case "appswipeup":
         // drag the app's page up by two thirds of the screen, slowly, so it scrolls without a fling
@@ -103,6 +108,23 @@ final class Tapper: XCTestCase {
       case "sblabels":
         let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         answer = sb.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "spotlight":
+        // the home screen, Spotlight opened by a swipe down, the words typed; answers what it lists
+        answer = spotlight(arg)
+      case "spotlighttap":
+        // tap the first Spotlight result with that label (waiting up to 12 s)
+        answer = spotlightTap(arg)
+      case "spotlightscroll":
+        // the keyboard away, then the results dragged up by half a screen
+        let sp = spotlightApp
+        // only while Spotlight is up (a drag on an app not in front cannot be placed, and stops the test)
+        guard sp.state == .runningForeground, sp.frame.width > 0 else { answer = "nospotlight"; break }
+        sp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+          .press(forDuration: 0.1, thenDragTo: sp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)))
+      case "spotlightlabels":
+        answer = spotlightApp.cells.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+      case "spotlighttree":
+        answer = spotlightApp.debugDescription
       case "orient":
         XCUIDevice.shared.orientation = arg == "landscape" ? .landscapeLeft : .portrait
       case "files": answer = openInFiles(arg)
@@ -116,6 +138,50 @@ final class Tapper: XCTestCase {
       }
       try? answer.write(to: out, atomically: true, encoding: .utf8)
     }
+  }
+
+  /// Spotlight as a person opens it: Home, a swipe down on the home screen, the words typed. Answers
+  /// the labels of everything it then shows (the results), or `nofield` if no search field came up.
+  func spotlight(_ words: String) -> String {
+    XCUIDevice.shared.press(.home)
+    Thread.sleep(forTimeInterval: 1)
+    let from = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+    from.press(forDuration: 0.05, thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)))
+    // iOS 26 draws Spotlight in its own process
+    let end = Date().addingTimeInterval(8)
+    while spotlightApp.state != .runningForeground && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
+    guard spotlightApp.state == .runningForeground else { return "nofield" }
+    Thread.sleep(forTimeInterval: 1)
+    // Spotlight may open on the last search: cleared first
+    let clear = spotlightApp.buttons["Clear text"]
+    if clear.exists { clear.tap(); Thread.sleep(forTimeInterval: 0.5) }
+    // the field has the keyboard as Spotlight opens
+    spotlightApp.typeText(words)
+    Thread.sleep(forTimeInterval: 4)
+    return spotlightApp.descendants(matching: .any).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+  }
+
+  let spotlightApp = XCUIApplication(bundleIdentifier: "com.apple.Spotlight")
+
+  /// The result row with that label, tapped once it is on screen: the results are dragged down, then
+  /// up, a third of a screen at a time, until it is (its place in the list changes with use).
+  func spotlightTap(_ label: String) -> String {
+    let sp = spotlightApp
+    guard sp.state == .runningForeground else { return "nospotlight" }
+    let row = sp.cells.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    let moves: [CGFloat] = [0, 0.33, 0.33, 0.33, -0.33, -0.33, -0.33, -0.33, -0.33, -0.33]
+    for m in moves {
+      if m != 0 {
+        let from = sp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+        from.press(forDuration: 0.1, thenDragTo: sp.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45 + m)))
+        Thread.sleep(forTimeInterval: 0.6)
+      }
+      if row.exists && row.isHittable && row.frame.minY > 60 && row.frame.maxY < sp.frame.height * 0.85 {
+        row.tap()
+        return "ok \(label)"
+      }
+    }
+    return "missing \(label)"
   }
 
   /// Where the system's own questions are drawn: permission alerts by SpringBoard, the Face ID
@@ -143,6 +209,7 @@ final class Tapper: XCTestCase {
   /// A button or a row of the share sheet the app presents, by its label.
   func appTap(_ labels: [String], hold: Double = 0) -> String {
     let app = XCUIApplication(bundleIdentifier: appBundle)
+    guard app.state != .notRunning else { return "notrunning" }
     let end = Date().addingTimeInterval(12)
     while Date() < end {
       for l in labels {

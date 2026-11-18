@@ -223,6 +223,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Arrival? _arrival;
   bool _receiving = false, _arrivalsOpen = false, _arrivalBusy = false, _arrivalScheduled = false;
 
+  /// Where an App Shortcut, the Spotlight entry or a launcher shortcut asked the app to open (the
+  /// newest only), waiting until the app is unlocked and free to go there.
+  ShortcutPlace? _shortcut;
+  bool _shortcutScheduled = false;
+
   /// "You already have this blessing.", for a few seconds.
   bool _noticeOn = false;
   Timer? _noticeTimer;
@@ -1235,10 +1240,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _startReceiving() async {
     try {
       final waiting = await _share.receiving((f) {
-        _inbox.add(f);
+        final place = f.shortcut;
+        place != null ? _shortcut = place : _inbox.add(f);
         if (mounted) setState(() {});
       });
-      _inbox.addAll(waiting);
+      for (final f in waiting) {
+        final place = f.shortcut;
+        place != null ? _shortcut = place : _inbox.add(f);
+      }
     } catch (e) {
       debugPrint('receive: $e');
     }
@@ -1314,6 +1323,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _arrivalFile = f;
       _arrival = a;
       _receiving = true;
+    });
+  }
+
+  // ---- shortcuts (share/share.dart, ShortcutPlace) ----
+
+  /// A shortcut may be followed now: exactly when a blessing file may be shown, as far as the lock
+  /// goes (unlocked, not asking, back in front), and with no first run, sheet or file in the way.
+  bool get _shortcutMayGo =>
+      _arrivalsOpen &&
+      !_away &&
+      _lock.ready &&
+      !_locked &&
+      !_lock.asking &&
+      !_receiving &&
+      !_arrivalBusy &&
+      !_recoveredSheet &&
+      _onboard == Onboard.none &&
+      _afterUnlock == null;
+
+  /// Called after each frame while a shortcut waits.
+  void _scheduleShortcut() {
+    if (_shortcutScheduled || _shortcut == null || !_shortcutMayGo) return;
+    _shortcutScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _shortcutScheduled = false;
+      if (mounted && _shortcutMayGo) _goShortcut();
+    });
+  }
+
+  /// Go where the shortcut leads: the recording start (as New blessing; the microphone waits for
+  /// Begin), or the sky. A recording under way, the screen after Amen, and a page being edited are
+  /// never left: the app comes to the front where it was.
+  void _goShortcut() {
+    final place = _shortcut;
+    _shortcut = null;
+    if (place == null) return;
+    debugPrint('shortcut: ${place.name} from ${_stage.name}');
+    if (_session.live || _stage == Stage.after || _stage == Stage.review || _stage == Stage.changes) return;
+    if (_stage == Stage.record) {
+      if (place == ShortcutPlace.home) _closeRecord();
+      return;
+    }
+    if (_stage != Stage.home || _list) _toHome();
+    if (place == ShortcutPlace.record) _openRecord();
+  }
+
+  /// From a reading page, Settings, To pass along, Your links or the list: back to the sky.
+  void _toHome() {
+    _aside = null;
+    _engine.setView(SkyView.home);
+    _lookHome(_engine.focus);
+    setState(() {
+      _showNow();
+      _stage = Stage.home;
+      _list = false;
     });
   }
 
@@ -1419,6 +1483,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (settings.firstRun == null && _inbox.isEmpty) await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted || _onboard != Onboard.waiting) return;
     final start = firstRunStart(settings.firstRun, hasBlessings: _blessings.isNotEmpty && !seedWithFirstRun, fileWaiting: _inbox.isNotEmpty);
+    // the first run is where a fresh install opens, whatever shortcut opened it
+    if (start != FirstRunStart.none) _shortcut = null;
     debugPrint('first run: ${settings.firstRun ?? 'fresh'} -> ${start.name}');
     if (_locked && start != FirstRunStart.none) {
       // a blessing was kept at a shared first launch: the lock first, then the rest
@@ -1880,6 +1946,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // locked: no blessing is handed to any page, even one faded out
     final reading = _locked ? null : (_aside ?? (_blessings.isEmpty ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)]));
     if (_inbox.isNotEmpty) _scheduleArrival();
+    if (_shortcut != null) _scheduleShortcut();
     return PopScope(
       canPop: _backLeavesApp,
       onPopInvokedWithResult: (didPop, _) {

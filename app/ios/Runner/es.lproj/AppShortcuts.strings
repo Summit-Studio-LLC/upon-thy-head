@@ -1,0 +1,7 @@
+/* Las frases de los atajos de la app (Shortcuts.swift). */
+"Record a blessing in ${applicationName}" = "Grabar una bendición en ${applicationName}";
+"Record a blessing with ${applicationName}" = "Grabar una bendición con ${applicationName}";
+"New blessing in ${applicationName}" = "Nueva bendición en ${applicationName}";
+"${applicationName} record a blessing" = "${applicationName} grabar una bendición";
+"Open my blessings in ${applicationName}" = "Abrir mis bendiciones en ${applicationName}";
+"Show my blessings in ${applicationName}" = "Ver mis bendiciones en ${applicationName}";

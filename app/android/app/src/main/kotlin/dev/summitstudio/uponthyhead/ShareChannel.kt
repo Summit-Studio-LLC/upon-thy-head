@@ -267,6 +267,13 @@ object ShareChannel {
         return true
     }
 
+    /** A launcher shortcut opened the app ("record" or "home"): handed to Dart the way a link is,
+     *  waiting until it is ready. Only the place: nothing else is in it. */
+    fun shortcut(place: String) {
+        Log.i(TAG, "receive: shortcut $place")
+        deliver(mapOf("shortcut" to place))
+    }
+
     private fun deliver(item: Map<String, Any?>) {
         val c = channel
         if (listening && c != null) c.invokeMethod("incoming", item) else waiting.add(item)

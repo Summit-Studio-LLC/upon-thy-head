@@ -103,7 +103,16 @@ class MainActivity : FlutterActivity() {
     /** A blessing link (handed to Dart whole, fragment and all; never logged: it holds the key) or a
      *  blessing file (VIEW from Files, Gmail, WhatsApp; SEND into the app) this intent carries. */
     private fun receive(i: Intent?) {
+        val place = shortcutOf(i)
+        if (place != null) return ShareChannel.shortcut(place)
         ShareChannel.incoming(this, i, linkOf(i))
+    }
+
+    /** A launcher shortcut (res/xml/shortcuts.xml): where it leads, as Dart reads it. */
+    private fun shortcutOf(i: Intent?): String? = when (i?.action) {
+        "dev.summitstudio.uponthyhead.RECORD" -> "record"
+        "dev.summitstudio.uponthyhead.HOME" -> "home"
+        else -> null
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -5,4 +5,7 @@
     <string name="recording_paused">Paused</string>
     <string name="recording_channel">Recording</string>
     <string name="recording_channel_about">Shows while a blessing is being recorded.</string>
+    <!-- The launcher's shortcuts (xml/shortcuts.xml). -->
+    <string name="shortcut_record">Record a blessing</string>
+    <string name="shortcut_home">Open my blessings</string>
 </resources>

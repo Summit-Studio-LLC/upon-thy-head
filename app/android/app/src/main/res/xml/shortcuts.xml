@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher's shortcuts (a long press on the icon): the same two as the iPhone's App
+     Shortcuts (ios/Runner/Shortcuts.swift). Fixed words only: nothing of any blessing is ever given
+     to the launcher. MainActivity hands the place to Dart, which goes there once unlocked. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="record"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_record"
+        android:shortcutShortLabel="@string/shortcut_record"
+        android:shortcutLongLabel="@string/shortcut_record">
+        <intent
+            android:action="dev.summitstudio.uponthyhead.RECORD"
+            android:targetPackage="dev.summitstudio.uponthyhead"
+            android:targetClass="dev.summitstudio.uponthyhead.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="home"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_home"
+        android:shortcutShortLabel="@string/shortcut_home"
+        android:shortcutLongLabel="@string/shortcut_home">
+        <intent
+            android:action="dev.summitstudio.uponthyhead.HOME"
+            android:targetPackage="dev.summitstudio.uponthyhead"
+            android:targetClass="dev.summitstudio.uponthyhead.MainActivity" />
+    </shortcut>
+</shortcuts>

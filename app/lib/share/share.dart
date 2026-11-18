@@ -173,7 +173,7 @@ class NativeShareApi implements ShareApi {
 
 /// A blessing file as iOS handed it over: its bytes, or why there are none.
 class IncomingFile {
-  const IncomingFile({this.bytes, this.tooLarge = false, this.link});
+  const IncomingFile({this.bytes, this.tooLarge = false, this.link, this.shortcut});
   final Uint8List? bytes;
   final bool tooLarge;
 
@@ -181,11 +181,33 @@ class IncomingFile {
   /// file. It holds the key: never logged.
   final String? link;
 
+  /// Not a blessing at all: an App Shortcut, the app's Spotlight entry (iOS, Shortcuts.swift) or a
+  /// launcher shortcut (Android, res/xml/shortcuts.xml) that opened the app, and where it leads.
+  final ShortcutPlace? shortcut;
+
   factory IncomingFile.from(Object? m) {
     final map = m is Map ? m : const {};
     final b = map['bytes'], l = map['link'];
-    return IncomingFile(bytes: b is Uint8List ? b : null, tooLarge: map['tooLarge'] == true, link: l is String ? l : null);
+    return IncomingFile(
+      bytes: b is Uint8List ? b : null,
+      tooLarge: map['tooLarge'] == true,
+      link: l is String ? l : null,
+      shortcut: ShortcutPlace.of(map['shortcut']),
+    );
   }
+}
+
+/// Where a shortcut opens the app: the recording start (as New blessing does; nothing is recorded
+/// until Begin), or home, the night sky. Reached only once the app is unlocked.
+enum ShortcutPlace {
+  record,
+  home;
+
+  static ShortcutPlace? of(Object? name) => switch (name) {
+        'record' => record,
+        'home' => home,
+        _ => null,
+      };
 }
 
 /// No share sheet (tests on the host).

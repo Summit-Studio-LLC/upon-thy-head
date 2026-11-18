@@ -50,6 +50,8 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- The launcher's shortcuts: Record a blessing, Open my blessings (MainActivity.shortcutOf). -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <!-- A blessing link (website/PROTOCOL.md §6). It opens here once the site's
                  assetlinks.json names this package and its signing key; until then Android opens
                  it in the browser, which reads it too. -->
