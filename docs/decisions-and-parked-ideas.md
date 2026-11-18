@@ -6,6 +6,11 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ### 2026-11-18
 
+- **How the app is built from here: rapid development, one final evaluation (Noah, evening: "your automated test pipelines are long an onerous. please consider rapid development. and then an eval that is final before we push to app store to be released").**
+  - **During development:** a feature is built with the unit tests its logic needs, a clean analyzer and one quick look that it works on the simulator, then goes to TestFlight for Noah to try. No acceptance script per feature, and no replays in Spanish, at the largest text, on other device sizes, on Android or as an upgrade install.
+  - **Before a build is submitted to the App Store or Play:** the full gate runs once, as the final evaluation: every acceptance script in `app/tool/`, both languages, the largest text, iPhone, iPad and Android, and the checks only a real phone can make.
+  - **What this means for entries below and above:** "Not proven" lists will be longer from now on. They are the final evaluation's to-do list, not faults.
+
 - **The link service gets proof that a request comes from the real app, and warnings (Noah, evening: "let's add the attester for ios and android and add warning limits, and call it done").**
   - **Why:** the app has no account, so the service cannot tell the app from a script: anyone can make links. Nobody's blessing can be read (only locked copies are held), and the daily allowance caps the cost, but a script could use the allowance up and switch link sharing off for real people for the rest of a day. Noah's line: only his app should reach his server.
   - **What is to be built:** Apple's App Attest on iPhone and iPad and Google's Play Integrity on Android, checked by the service before it makes a link. Opening a link needs no proof. Plus a warning to Noah when the day's allowance is being used up.
