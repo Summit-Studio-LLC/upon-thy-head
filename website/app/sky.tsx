@@ -130,7 +130,7 @@ uniform float u_draw;
 varying float v_t, v_near;
 void main() {
   if (v_t > u_draw) discard;
-  float a = (0.16 + 0.34 * v_near) * smoothstep(0.0, 0.04, u_draw - v_t + 0.04);
+  float a = (0.27 + 0.38 * v_near) * smoothstep(0.0, 0.04, u_draw - v_t + 0.04);
   gl_FragColor = lit(vec3(0.941, 0.788, 0.529) * a);
 }`;
 
