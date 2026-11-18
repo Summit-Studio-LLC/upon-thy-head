@@ -66,6 +66,12 @@ class Settings {
 
   Future<void> setFaceIdAsked() => _set('faceIdAsked', true);
 
+  /// Whose sky was showing last (a family member's id, people/person.dart), so the app reopens on
+  /// it; '' or unset for the person's own.
+  String get sky => _values['sky'] as String? ?? '';
+
+  Future<void> setSky(String id) => _set('sky', id.isEmpty ? null : id);
+
   Future<void> _set(String key, Object? value) async {
     if (value == null) {
       _values.remove(key);

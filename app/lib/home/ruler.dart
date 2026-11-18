@@ -13,7 +13,12 @@ class Ruler extends StatelessWidget {
     required this.palette,
     required this.now,
     required this.onPick,
+    this.begins,
   });
+
+  /// When the ring begins (a family member's birth), if before the first blessing: the months
+  /// start there.
+  final DateTime? begins;
 
   final List<Blessing> blessings;
   final int focus;
@@ -23,7 +28,11 @@ class Ruler extends StatelessWidget {
   /// Called with the index of the blessing nearest the touch; [fresh] is true on first contact.
   final void Function(int index, {required bool fresh}) onPick;
 
-  DateTime get _start => DateTime.utc((blessings.isEmpty ? now : blessings.first.local).year);
+  DateTime get _start {
+    final first = blessings.isEmpty ? now : blessings.first.local;
+    final b = begins;
+    return DateTime.utc((b != null && b.isBefore(first) ? b : first).year);
+  }
   DateTime get _end => DateTime.utc(now.year + 1);
 
   double _frac(DateTime t) =>

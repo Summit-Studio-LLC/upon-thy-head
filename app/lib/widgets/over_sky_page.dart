@@ -40,7 +40,7 @@ class OverSkyPage extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: EdgeInsets.fromLTRB(28, 112 + dy, 28, 64),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(title, key: titleKey, style: serif(34, 38, p.ink, tracking: -.012)),
+            _Title(title, key: titleKey, style: serif(34, 38, p.ink, tracking: -.012)),
             const SizedBox(height: 8),
             Text(lede, style: sans(15, 22, p.ink2)),
             const SizedBox(height: 24),
@@ -73,6 +73,29 @@ class OverSkyPage extends StatelessWidget {
         child: IconBtn(key: backKey, icon: Glyph.older, color: p.ink, palette: p, semantics: Strings.back, onTap: onBack),
       ),
     ]);
+  }
+}
+
+/// The page's title at the phone's text size, except that no word of it is ever broken across
+/// lines: at the largest sizes the size steps down just enough for its longest word to fit.
+class _Title extends StatelessWidget {
+  const _Title(this.text, {super.key, required this.style});
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(builder: (context, box) {
+      var widest = 0.0;
+      for (final word in text.split(RegExp(r'\s+'))) {
+        final tp = TextPainter(text: TextSpan(text: word, style: style), textScaler: scaler, textDirection: Directionality.of(context), maxLines: 1)..layout();
+        widest = math.max(widest, tp.width);
+        tp.dispose();
+      }
+      final fit = widest > box.maxWidth && widest > 0 ? box.maxWidth / widest * .98 : 1.0;
+      return Text(text, style: style, textScaler: fit < 1 ? TextScaler.linear(scaler.scale(style.fontSize!) / style.fontSize! * fit) : scaler);
+    });
   }
 }
 

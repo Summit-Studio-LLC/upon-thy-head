@@ -14,9 +14,16 @@ import '../data/blessing.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import '../lock/lock.dart';
+import 'locked.dart';
 import '../not_yet.dart';
 import '../onboarding/first_run.dart';
 import '../onboarding/first_run_screens.dart';
+import '../people/family.dart';
+// the count line moved to people/family.dart; still found here by those who read it from home
+export '../people/family.dart' show countLine;
+import '../people/family_pages.dart';
+import '../people/person.dart';
+import '../people/sky_switch.dart';
 import '../place/where.dart';
 import '../polish/changes_screen.dart';
 import '../read/read_screen.dart';
@@ -53,6 +60,7 @@ import '../widgets/balanced_text.dart';
 import '../widgets/edge_swipe.dart';
 import '../widgets/fade.dart';
 import '../widgets/icons.dart';
+import '../widgets/pull_down.dart';
 import '../widgets/scrims.dart';
 import 'pass_along.dart';
 import 'ruler.dart';
@@ -60,7 +68,7 @@ import 'sky_stats.dart';
 import 'timeline.dart';
 
 /// Which screen is over the sky.
-enum Stage { home, record, after, read, review, changes, settings, passing, links }
+enum Stage { home, record, after, read, review, changes, settings, passing, links, family, person }
 
 /// Where the first run is (onboarding/first_run.dart); [none] once it is over or never shown.
 /// [waiting]: it will be shown, once the launch knows whether a blessing file opened the app.
@@ -144,8 +152,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Where the empty sky looks: the Milky Way through Aquila and Scutum.
   static const double emptyRa = 285 * deg, emptyDec = 2 * deg;
 
-  /// The blessings marked "for me", oldest first. Only these are in the sky.
+  /// The blessings on the ring showing ([_ring]), oldest first. Only these are in the sky.
   List<Blessing> _blessings = [];
+
+  /// The family members and every ring's blessings, as last read from the store (people/).
+  Family _family = Family(const [], const []);
+
+  /// Whose sky is showing: '' for the person's own, else a family member's id. Remembered, so the
+  /// app reopens on it. While locked it is kept but nothing of it is shown.
+  String _ring = '';
+
+  /// The family member being changed on the person page (null: adding one), and where that page
+  /// was opened from (the sky's menu, or Manage family).
+  Person? _editing;
+  Stage _personFrom = Stage.home;
+  final GlobalKey<PersonLayerState> _personKey = GlobalKey();
+
+  /// The sky's menu is being opened or is open, and whether it is on the screen (it is closed at
+  /// once if the app locks).
+  bool _skyMenuOpen = false, _skyMenuShown = false;
+
+  /// When the ring showing begins: a family member's birth, if given.
+  DateTime? get _begins => _family.person(_ring)?.born?.local;
   List<Vec3> _line = const [];
 
   Stage _stage = Stage.home;
@@ -378,6 +406,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Locked: nothing of any blessing stays on screen or in the sky. A recording under way, or its
   /// after-Amen screen, stays; only its own new light is in the sky.
   void _hideBlessings() {
+    // the sky's menu, with its names and counts, goes at once
+    _skyMenuOpen = false;
+    if (_skyMenuShown) {
+      _skyMenuShown = false;
+      Navigator.of(context).pop();
+    }
+    _personKey.currentState?.closeSheet();
     // the system share sheet goes too, with anything made for it
     unawaited(_share.dismiss());
     // a blessing file being asked about waits, unseen, until the next unlock
@@ -464,7 +499,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       _passing = await _store.list(ownership: Ownership.passingOn);
     } catch (_) {}
-    return _store.list(ownership: Ownership.forMe);
+    final (settings, _) = await _speechSetup;
+    final onRings = await _store.list(ownership: Ownership.forMe);
+    var people = const <Person>[];
+    try {
+      people = await _store.people();
+    } catch (e) {
+      debugPrint('family: $e');
+    }
+    _family = Family(people, onRings);
+    // the sky that was showing last
+    _ring = _family.known(settings.sky);
+    return _family.on(_ring);
   }
 
   Future<void> _reloadPassing() async {
@@ -670,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Put [list] in the sky with [focus] in focus, without moving the camera.
   void _setBlessings(List<Blessing> list, {required int focus}) {
     _blessings = list;
-    placement.apply(_blessings);
+    placement.apply(_blessings, begins: _begins);
     if (_locked) {
       // kept for when it is unlocked; nothing in the sky meanwhile
       _lockedFocus = math.max(0, focus);
@@ -794,7 +840,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _session.dispose();
     _session = RecordSession(recorder: _recorder, transcriber: _transcriber);
     _setUpSession(_session);
-    final draft = draftBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple);
+    // for whoever's sky is showing; locked, for the person's own until unlocked and said otherwise
+    final draft = draftBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple, personId: recordingPerson(locked: _locked, ring: _ring));
     _session.draft = draft;
     _placeDraft(draft);
     _engine.setView(SkyView.ready);
@@ -876,8 +923,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// The draft goes at the end of the line, the place for "now", and is the light in focus.
   void _placeDraft(Blessing draft) {
     // locked: only its own light; nothing of any earlier blessing
-    final all = _locked ? [draft] : [..._blessings, draft];
-    placement.apply(all, now: draft.utc);
+    final all = recordingLights(locked: _locked, blessings: _blessings, draft: draft);
+    placement.apply(all, now: draft.utc, begins: _locked ? null : _begins);
     _engine.setBlessings(all, focus: all.length - 1);
   }
 
@@ -950,7 +997,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final draft = _session.draft!;
     await _saved;
     if (!mounted) return null;
-    final list = [..._blessings, draft]..sort((a, b) => a.utc.compareTo(b.utc));
+    if (draft.personId != _ring) {
+      // recorded for another ring (one recorded while locked is the person's own): that sky shows
+      await _reloadFamily();
+      if (!mounted) return null;
+      _setRing(draft.personId);
+    }
+    final list = [..._blessings.where((b) => b.id != draft.id), draft]..sort((a, b) => a.utc.compareTo(b.utc));
     final i = list.indexOf(draft);
     _setBlessings(list, focus: i);
     return i;
@@ -1128,11 +1181,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // ---- passing it along ----
 
-  /// "For me" or "Passing it along" changed on the review page: the blessing joins or leaves the sky.
-  void _ownershipChanged(Ownership o) {
+  /// "Whose blessing" changed on the review page: the blessing joins or leaves the sky; put on
+  /// another ring, that ring's sky shows, with it in focus.
+  Future<void> _ownershipChanged(Whose w) async {
     final b = _reviewing;
     if (b == null || !mounted) return;
-    if (o == Ownership.passingOn) {
+    final ring = w.ring;
+    if (ring != null && ring != _ring) {
+      await _reloadFamily();
+      if (!mounted || !identical(b, _reviewing)) return;
+      _passing = _passing.where((x) => x.id != b.id).toList();
+      _aside = null;
+      _setRing(ring);
+      final list = [..._blessings.where((x) => x.id != b.id), b]..sort((a, b) => a.utc.compareTo(b.utc));
+      _setBlessings(list, focus: list.indexOf(b));
+      _engine.setView(_stage == Stage.read ? SkyView.read : SkyView.review);
+      _engine.lookAt(_engine.focus);
+      if (_readFrom == Stage.passing) _readFrom = Stage.home;
+      return setState(() {});
+    }
+    if (ring == null) {
       final i = _blessings.indexWhere((x) => x.id == b.id);
       if (i >= 0) {
         final list = [..._blessings]..removeAt(i);
@@ -1328,19 +1396,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // ---- shortcuts (share/share.dart, ShortcutPlace) ----
 
-  /// A shortcut may be followed now: exactly when a blessing file may be shown, as far as the lock
-  /// goes (unlocked, not asking, back in front), and with no first run, sheet or file in the way.
-  bool get _shortcutMayGo =>
-      _arrivalsOpen &&
-      !_away &&
-      _lock.ready &&
-      !_locked &&
-      !_lock.asking &&
-      !_receiving &&
-      !_arrivalBusy &&
-      !_recoveredSheet &&
-      _onboard == Onboard.none &&
-      _afterUnlock == null;
+  /// A shortcut may be followed now: back in front, with no first run, sheet or file in the way, and
+  /// as far as the lock goes (locked.dart): Open my blessings once unlocked, as a blessing file is
+  /// shown; Record a blessing also while locked, as the locked New blessing button (the sheets of
+  /// recovered drafts and arriving files are not shown while locked, so they are not in its way).
+  bool get _shortcutMayGo {
+    final place = _shortcut;
+    if (place == null || !shortcutPassesLock(place, locked: _locked, asking: _lock.asking)) return false;
+    return _arrivalsOpen &&
+        !_away &&
+        _lock.ready &&
+        (_locked || (!_receiving && !_recoveredSheet)) &&
+        !_arrivalBusy &&
+        _onboard == Onboard.none &&
+        _afterUnlock == null;
+  }
 
   /// Called after each frame while a shortcut waits.
   void _scheduleShortcut() {
@@ -1419,8 +1489,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// The sky turns to blessing [id], with its reading page.
   Future<void> _openReceived(String id) async {
-    final list = await _store.list(ownership: Ownership.forMe);
+    await _reloadFamily();
     if (!mounted || _locked) return;
+    // on whichever ring it is (a new one is the person's own)
+    final b = (await _store.get(id));
+    if (!mounted || _locked || b == null || b.ownership != Ownership.forMe) return;
+    _setRing(b.personId);
+    final list = _family.on(_ring);
     final i = list.indexWhere((b) => b.id == id);
     if (i < 0) return;
     _aside = null;
@@ -1782,6 +1857,163 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ];
   }
 
+  // ---- family members: a sky for each (people/) ----
+
+  /// The family members and every ring, read again from the store.
+  Future<void> _reloadFamily() async {
+    try {
+      _family = Family(await _store.people(), await _store.list(ownership: Ownership.forMe));
+    } catch (e) {
+      debugPrint('family: $e');
+    }
+  }
+
+  /// Show [ring]'s blessings in the sky (the newest in focus), without moving the camera, and
+  /// remember it for the next launch.
+  void _setRing(String ring) {
+    _ring = _family.known(ring);
+    unawaited(_settings?.setSky(_ring));
+    final list = _family.on(_ring);
+    _setBlessings(list, focus: list.length - 1);
+  }
+
+  /// Turn to [ring]'s sky: its ring, count line, ruler and list.
+  Future<void> _switchSky(String ring) async {
+    await _reloadFamily();
+    if (!mounted || _locked) return;
+    _aside = null;
+    _setRing(ring);
+    _engine.setView(SkyView.home);
+    _lookHome(_engine.focus);
+    setState(() {
+      _showNow();
+      _stage = Stage.home;
+    });
+  }
+
+  /// The capsule: the menu of skies, with Add a family member and Manage family. Never while
+  /// locked: nothing of any family member is shown or reachable then.
+  Future<void> _openSkyMenu(BuildContext anchor) async {
+    if (_locked || _stage != Stage.home || _skyMenuOpen || _recoveredSheet || _receiving) return;
+    _skyMenuOpen = true;
+    await _reloadFamily();
+    if (!mounted || _locked || !anchor.mounted) {
+      _skyMenuOpen = false;
+      return;
+    }
+    _skyMenuShown = true;
+    final code = await showPullDownItems(
+      anchor,
+      palette: widget.palette,
+      items: _family.menu(_ring),
+      width: 300,
+      align: PullDownAlign.start,
+      barrierLabel: Strings.close,
+    );
+    final open = _skyMenuOpen;
+    _skyMenuOpen = _skyMenuShown = false;
+    // closed by the lock: nothing chosen
+    if (!open || code == null || !mounted || _locked || _stage != Stage.home) return;
+    final ring = SkyMenu.ringOf(code);
+    if (ring != null) {
+      if (ring != _ring) await _switchSky(ring);
+    } else if (code == SkyMenu.add) {
+      _openPerson(null, from: Stage.home);
+    } else if (code == SkyMenu.manage) {
+      _openFamily();
+    }
+  }
+
+  /// "Manage family", over the dimmed sky.
+  void _openFamily() {
+    if (_locked) return;
+    _engine.setView(SkyView.settings);
+    setState(() {
+      _stage = Stage.family;
+      _list = false;
+    });
+  }
+
+  void _closeFamily() {
+    _engine.setView(SkyView.home);
+    _lookHome(_engine.focus);
+    setState(() {
+      _showNow();
+      _stage = Stage.home;
+    });
+  }
+
+  /// Adding a family member ([p] null), or changing one.
+  void _openPerson(Person? p, {required Stage from}) {
+    if (_locked) return;
+    _editing = p;
+    _personFrom = from;
+    _engine.setView(SkyView.settings);
+    setState(() {
+      _stage = Stage.person;
+      _list = false;
+    });
+  }
+
+  void _closePerson() {
+    if (_personFrom == Stage.family) return setState(() => _stage = Stage.family);
+    _closeFamily();
+  }
+
+  /// Add or Save: a new one's empty ring shows at once; a change goes back to Manage family.
+  Future<void> _savePerson(String name, Day? born) async {
+    final editing = _editing;
+    if (editing == null) {
+      final p = newPerson(name, born: born);
+      try {
+        await _store.addPerson(p);
+      } catch (e) {
+        return debugPrint('family: $e');
+      }
+      debugPrint('family: added ${p.id}');
+      return _switchSky(p.id);
+    }
+    try {
+      final p = editing.copy()
+        ..name = name
+        ..born = born;
+      await _store.updatePerson(p);
+    } catch (e) {
+      debugPrint('family: $e');
+    }
+    await _reloadFamily();
+    if (!mounted) return;
+    // their ring showing: placed again from the new birth date
+    if (_ring == editing.id) _setBlessings(_family.on(_ring), focus: _engine.focus);
+    setState(() => _stage = Stage.family);
+  }
+
+  /// Remove, confirmed: the family member and every blessing on their ring leave the phone; links
+  /// made from those blessings are stopped first, and if one cannot be (no internet), nothing is
+  /// removed and false is answered. Nothing of anyone else's is touched.
+  Future<bool> _removePerson() async {
+    final p = _editing;
+    if (p == null) return true;
+    final theirs = (await _store.list(ownership: Ownership.forMe)).where((b) => b.personId == p.id).toList();
+    final links = _links;
+    if (links != null) {
+      for (final b in theirs) {
+        if ((await links.liveOf(b.id)).isNotEmpty && await links.stopAllOf(b.id) != StopResult.stopped) return false;
+      }
+    }
+    await _store.removePerson(p.id);
+    debugPrint('family: removed ${p.id} with ${theirs.length} blessings');
+    await _reloadFamily();
+    if (!mounted) return true;
+    if (_ring == p.id) {
+      _setRing('');
+      _lookHome(_engine.focus);
+    }
+    _editing = null;
+    setState(() => _stage = Stage.family);
+    return true;
+  }
+
   // ---- reading ----
 
   /// Read the blessing in focus: the page rises and the sky frames its light alone.
@@ -1852,6 +2084,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case Stage.links:
         if (_linksKey.currentState?.closeSheet() ?? false) return;
         _closeLinks();
+      case Stage.family:
+        _closeFamily();
+      case Stage.person:
+        if (_personKey.currentState?.closeSheet() ?? false) return;
+        _closePerson();
     }
   }
 
@@ -2089,7 +2326,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onSave: _saveReview,
                     onBack: _closeReview,
                     onFinish: _finishReview,
-                    onOwnership: _ownershipChanged,
+                    onOwnership: (w) => unawaited(_ownershipChanged(w)),
+                    people: _locked ? const [] : _family.people,
                     onChanges: () {
                       final b = _reviewing;
                       if (b != null) openChanges(b, from: Stage.review);
@@ -2182,6 +2420,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
               ),
             ),
+            // Manage family, and adding or changing a family member: never built while locked
+            Positioned.fill(
+              child: Fade(
+                key: const Key('stage-family'),
+                on: _stage == Stage.family,
+                inDuration: inTime,
+                outDuration: outTime,
+                delay: delay,
+                child: _locked
+                    ? const SizedBox.shrink()
+                    : EdgeSwipeBack(
+                        enabled: _stage == Stage.family,
+                        onBack: _closeFamily,
+                        child: FamilyLayer(
+                          palette: p,
+                          people: _family.people,
+                          countLine: (x) => countLine(_family.on(x.id)),
+                          onBack: _closeFamily,
+                          onOpen: (x) => _openPerson(x, from: Stage.family),
+                          onAdd: () => _openPerson(null, from: Stage.family),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned.fill(
+              child: Fade(
+                key: const Key('stage-person'),
+                on: _stage == Stage.person,
+                inDuration: inTime,
+                outDuration: outTime,
+                delay: delay,
+                child: _locked
+                    ? const SizedBox.shrink()
+                    : EdgeSwipeBack(
+                        enabled: _stage == Stage.person,
+                        onBack: _closePerson,
+                        child: PersonLayer(
+                          key: _personKey,
+                          palette: p,
+                          on: _stage == Stage.person,
+                          person: _editing,
+                          countLine: _editing == null ? '' : countLine(_family.on(_editing!.id)),
+                          blessings: _editing == null ? 0 : _family.on(_editing!.id).length,
+                          onBack: _closePerson,
+                          onSave: (name, born) => unawaited(_savePerson(name, born)),
+                          onRemove: _removePerson,
+                        ),
+                      ),
+              ),
+            ),
             Positioned.fill(
               child: Fade(
                 key: const Key('stage-record'),
@@ -2201,6 +2489,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onAskAgain: () => _session.askAgain(),
                   active: _stage == Stage.record,
                   practice: _session.practice,
+                  // whose it will be, once there are family members; nothing of them while locked
+                  whose: _locked || _family.people.isEmpty || _session.practice || _session.draft == null ? null : _family.title(_session.draft!.personId),
                 ),
               ),
             ),
@@ -2286,8 +2576,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(Strings.forMe, style: serif(34, 38, p.ink, tracking: -.012)),
-              const SizedBox(height: 2),
+              // whose sky this is, and the way to the others; it never grows past the room beside the
+              // buttons, and a long name ends in an ellipsis
+              Transform.translate(
+                offset: const Offset(-6, -3),
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.6,
+                  child: Builder(
+                    builder: (context) => SkySwitch(
+                      key: const Key('sky-switch'),
+                      palette: p,
+                      label: _family.title(_ring),
+                      onTap: () => unawaited(_openSkyMenu(context)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
               // one line, so the list below never runs into it; at large text sizes it shrinks to fit
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -2398,7 +2703,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
               Expanded(
-                child: Ruler(key: const Key('ruler'), blessings: _blessings, focus: f, palette: p, now: DateTime.now(), onPick: _pick),
+                child: Ruler(key: const Key('ruler'), blessings: _blessings, focus: f, palette: p, now: DateTime.now(), onPick: _pick, begins: _begins),
               ),
               Transform.translate(
                 offset: const Offset(0, -6),
@@ -2433,31 +2738,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   /// No blessings yet: one line where the caption would be, and New blessing.
-  Widget _firstRun(Palette p) {
+  Widget _firstRun(Palette p) => EmptyRingFoot(
+        palette: p,
+        // a family member's empty ring names them
+        line: _ring.isEmpty || _family.person(_ring) == null ? Strings.firstRun : Strings.emptyRing(_family.person(_ring)!.name),
+        onNew: _openRecord,
+      );
+}
+
+/// An empty ring's foot: its line where the caption would be, and New blessing under it. The line
+/// keeps to the lower part of the screen at every text size (drawn smaller when it would not), so it
+/// never reaches the count line, the capsule or the status bar.
+class EmptyRingFoot extends StatelessWidget {
+  const EmptyRingFoot({super.key, required this.palette, required this.line, required this.onNew});
+  final Palette palette;
+  final String line;
+  final VoidCallback onNew;
+
+  /// The most of the screen's height the line may take.
+  static const share = .22;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: BalancedText(
-            Strings.firstRun,
+            line,
             textKey: const Key('first-run'),
             style: serif(26, 32, p.ink, tracking: -.01),
             textAlign: TextAlign.center,
+            maxHeight: MediaQuery.sizeOf(context).height * share,
           ),
         ),
         const SizedBox(height: 36),
-        NewBlessingButton(key: const Key('new'), palette: p, onTap: _openRecord),
+        NewBlessingButton(key: const Key('new'), palette: p, onTap: onNew),
       ],
     );
   }
-}
-
-/// "Five blessings since June 2024".
-String countLine(List<Blessing> blessings) {
-  if (blessings.isEmpty) return Strings.countLine(0, DateTime(0));
-  final first = blessings.map((b) => b.local).reduce((a, b) => a.isBefore(b) ? a : b);
-  return Strings.countLine(blessings.length, first);
 }
 
 /// "• 2 to review": a quiet gold pill under the count line while drafts wait.
@@ -2587,8 +2908,8 @@ class _NewBlessingButtonState extends State<NewBlessingButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 44,
-          padding: const EdgeInsets.only(left: 14, right: 20),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.only(left: 14, right: 20, top: 6, bottom: 6),
           decoration: BoxDecoration(
             color: p.ink.withValues(alpha: _down ? .15 : .09),
             borderRadius: BorderRadius.circular(22),
@@ -2611,7 +2932,15 @@ class _NewBlessingButtonState extends State<NewBlessingButton> {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(Strings.newBlessing, style: sans(15, 20, p.ink, weight: FontWeight.w500)),
+              // at the largest text it stops growing at 1.6×, as the capsule does, so it stays one line
+              // inside its pill on the narrowest phone
+              Flexible(
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.6,
+                  child: Text(Strings.newBlessing,
+                      key: const Key('new-text'), style: sans(15, 20, p.ink, weight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ),
             ],
           ),
         ),

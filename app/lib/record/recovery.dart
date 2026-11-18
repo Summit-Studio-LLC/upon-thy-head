@@ -26,6 +26,7 @@ class RecordingNote {
     required this.utcOffset,
     required this.place,
     required this.language,
+    this.personId = '',
   });
 
   final String id;
@@ -37,6 +38,10 @@ class RecordingNote {
 
   /// "en" or "es".
   final String language;
+
+  /// Whose ring it was being recorded for ('' for the person's own): a recording rebuilt at the
+  /// next launch belongs to whoever it was started for.
+  final String personId;
 
   static const suffix = '.recording.json';
 
@@ -50,6 +55,7 @@ class RecordingNote {
         utcOffset: draft.utcOffset,
         place: draft.place,
         language: draft.language,
+        personId: draft.personId,
       );
 
   Map<String, Object?> toJson() => {
@@ -60,6 +66,7 @@ class RecordingNote {
         'latitude': place.lat,
         'longitude': place.lon,
         'language': language,
+        if (personId.isNotEmpty) 'person': personId,
       };
 
   /// Null when [j] is not a note this app could have written.
@@ -74,6 +81,7 @@ class RecordingNote {
       utcOffset: Duration(minutes: offset),
       place: Place(lat.toDouble(), lon.toDouble()),
       language: j['language'] is String ? j['language'] as String : '',
+      personId: j['person'] is String && _plainId.hasMatch(j['person'] as String) ? j['person'] as String : '',
     );
   }
 
@@ -100,7 +108,7 @@ class RecordingNote {
   }
 
   /// The blessing this recording becomes: a draft, given when Begin was pressed, with [audio].
-  Blessing toBlessing({required String audio, required DateTime now}) => Blessing(
+  Blessing toBlessing({required String audio, required DateTime now, String? personId}) => Blessing(
         id: id,
         title: Strings.untitled,
         from: '',
@@ -108,6 +116,7 @@ class RecordingNote {
         utcOffset: utcOffset,
         place: place,
         ownership: Ownership.forMe,
+        personId: personId ?? this.personId,
         draft: true,
         audio: audio,
         language: language,
@@ -238,7 +247,9 @@ class Recovery {
         await RecordingNote.remove(audioDir, note.id);
         continue;
       }
-      final b = note.toBlessing(audio: audio, now: _now());
+      // the family member it was for, if they are still here; else the person's own
+      final people = {for (final x in await store.people()) x.id};
+      final b = note.toBlessing(audio: audio, now: _now(), personId: people.contains(note.personId) ? note.personId : '');
       await store.create(b);
       await RecordingNote.remove(audioDir, note.id);
       debugPrint('recovery: kept ${note.id} ($audio)');

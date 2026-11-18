@@ -33,7 +33,12 @@ class RecordLayer extends StatefulWidget {
     this.onAskAgain,
     this.active = true,
     this.practice = false,
+    this.whose,
   });
+
+  /// Whose blessing this will be ("For Emma"), shown under the title once there are family
+  /// members; null shows nothing (no family members, or locked).
+  final String? whose;
 
   /// The first run's rehearsal: marked as practice, with "Not now" as the way out and Amen from
   /// the start.
@@ -187,7 +192,8 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
             child: IgnorePointer(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Stack(alignment: Alignment.topCenter, children: [
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Stack(alignment: Alignment.topCenter, children: [
                   AnimatedOpacity(
                     opacity: live ? 0 : 1,
                     duration: const Duration(milliseconds: 500),
@@ -201,6 +207,13 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
                     delay: const Duration(milliseconds: 500),
                     child: Text(s.paused ? Strings.paused : (widget.practice ? Strings.practiceListening : Strings.listening),
                         key: const Key('listening'), style: serif(17, 24, p.ink3, italic: true), textAlign: TextAlign.center),
+                  ),
+                ]),
+                // whose blessing it will be, while recording too
+                if (widget.whose != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(widget.whose!, key: const Key('rec-whose'), style: sans(15, 20, p.light), textAlign: TextAlign.center),
                   ),
                 ]),
               ),

@@ -219,14 +219,17 @@ class WelcomeLayer extends StatelessWidget {
         children: [
           Arrive(delay: at(openingOut.inMilliseconds + 250), child: Text(Strings.welcome1, style: line)),
           const SizedBox(height: 18),
-          Arrive(delay: at(1700), child: Text(Strings.welcome2, style: line)),
+          // for children too (people/): one line, no screen of its own
+          Arrive(delay: at(1500), child: Text(Strings.welcomeFamily, key: const Key('welcome-family'), style: line)),
           const SizedBox(height: 18),
-          Arrive(delay: at(2700), child: Text(Strings.welcome3, style: line)),
+          Arrive(delay: at(2300), child: Text(Strings.welcome2, style: line)),
+          const SizedBox(height: 18),
+          Arrive(delay: at(3200), child: Text(Strings.welcome3, style: line)),
           const SizedBox(height: 28),
-          Arrive(delay: at(3500), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
+          Arrive(delay: at(3900), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
           const SizedBox(height: 36),
           Arrive(
-            delay: at(3900),
+            delay: at(4300),
             child: PillBtn(key: const Key('welcome-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
           ),
         ],

@@ -15,8 +15,9 @@ abstract class Placement {
 
   /// Sets [Blessing.ra], [Blessing.dec] and [Blessing.v] on every blessing.
   /// Pass every blessing in the sky at once: a rule may place each one by the
-  /// others. [now] is the end of the timeline (default: the clock).
-  void apply(List<Blessing> blessings, {DateTime? now});
+  /// others. [now] is the end of the timeline (default: the clock). [begins]: when the ring itself
+  /// begins (a family member's birth, people/person.dart), if before the first blessing.
+  void apply(List<Blessing> blessings, {DateTime? now, DateTime? begins});
 
   /// The faint line drawn through the lights.
   List<Vec3> line(List<Blessing> blessings);
@@ -29,7 +30,7 @@ class OverheadPlacement extends Placement {
   const OverheadPlacement();
 
   @override
-  void apply(List<Blessing> blessings, {DateTime? now}) {
+  void apply(List<Blessing> blessings, {DateTime? now, DateTime? begins}) {
     for (final b in blessings) {
       final z = zenith(b.utc, b.place);
       b.ra = z.ra;
@@ -78,9 +79,10 @@ class RingPlacement extends Placement {
 
   /// Degrees along the ring for each blessing (oldest first, as [sorted]),
   /// and for [now]: the end of the line, where a new recording goes.
-  static ({List<double> at, double end}) angles(List<Blessing> sorted, DateTime now) {
+  /// A ring that [begins] before its first blessing (a birth) starts there instead.
+  static ({List<double> at, double end}) angles(List<Blessing> sorted, DateTime now, {DateTime? begins}) {
     if (sorted.isEmpty) return (at: const [], end: 0);
-    final t0 = sorted.first.utc.millisecondsSinceEpoch;
+    final t0 = _start(sorted.first, begins).millisecondsSinceEpoch;
     double years(DateTime t) => (t.millisecondsSinceEpoch - t0) / _year;
     final span = math.max(years(now), years(sorted.last.utc));
     final scale = span * perYear <= full ? perYear : full / span;
@@ -103,13 +105,13 @@ class RingPlacement extends Placement {
   }
 
   @override
-  void apply(List<Blessing> blessings, {DateTime? now}) {
+  void apply(List<Blessing> blessings, {DateTime? now, DateTime? begins}) {
     if (blessings.isEmpty) return;
     final sorted = [...blessings]..sort(_byTime);
     final first = sorted.first;
-    final start = zenith(first.utc, first.place).ra;
+    final start = zenith(_start(first, begins), first.place).ra;
     final dec = first.place.lat * deg;
-    final a = angles(sorted, now ?? DateTime.now()).at;
+    final a = angles(sorted, now ?? DateTime.now(), begins: begins).at;
     for (var i = 0; i < sorted.length; i++) {
       final b = sorted[i];
       b.ra = ((start - a[i] * deg) % tau + tau) % tau;
@@ -117,6 +119,10 @@ class RingPlacement extends Placement {
       b.v = Vec3.radec(b.ra, b.dec);
     }
   }
+
+  /// The ring's start: [begins] when it is earlier than the first blessing.
+  static DateTime _start(Blessing first, DateTime? begins) =>
+      begins != null && begins.toUtc().isBefore(first.utc) ? begins.toUtc() : first.utc;
 
   static int _byTime(Blessing a, Blessing b) {
     final c = a.utc.compareTo(b.utc);

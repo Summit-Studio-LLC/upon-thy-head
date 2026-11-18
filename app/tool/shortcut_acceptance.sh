@@ -8,9 +8,10 @@
 #
 # The app (SEED_SAMPLES=true, so the five samples and no first run) is installed fresh, with Face ID
 # enrolled, so the lock is on as it is by default. Cases:
-#   1  cold start, locked → Record a blessing: still locked and asking; a face that does not match
-#      leaves it locked with no recording screen; a match → the recording start (Begin), nothing
-#      recording
+#   1  cold start, locked → Record a blessing: still locked while the phone asks for the face; a face
+#      that does not match leaves the app locked, and it goes to the recording start (Begin) as the
+#      locked New blessing button does (Noah, 2026-11-18): nothing recording, nothing of any
+#      blessing shown
 #   2  cold start, locked → Open my blessings: a match → home, the sky with its blessings
 #   3  warm, on a reading page → Record a blessing → the recording start
 #   4  warm, on the recording start → Open my blessings → home
@@ -116,10 +117,9 @@ via_spotlight "Record a blessing"; sleep 8
 expect 01a-cold-record-locked locked
 face nomatch; sleep 3
 tapper tap Cancel >/dev/null
-expect 01b-cold-record-face-refused locked
-tapper apptap Unlock >/dev/null; sleep 2; face match; sleep 4
+sleep 3
 answer
-expect 01c-cold-record-unlocked record
+expect 01b-cold-record-face-refused record
 
 echo "-- 2 cold, locked: Open my blessings"
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null; sleep 1

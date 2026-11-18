@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../people/person.dart';
 import '../polish/change.dart';
 import '../review/tags.dart';
 import '../sky/astro.dart';
@@ -13,8 +14,22 @@ import 'sent_link.dart';
 
 /// Where blessings are kept. The screens use only this; no SQL leaves this file.
 abstract class BlessingStore {
-  /// Every blessing, oldest given first; only those of [ownership] when it is set.
+  /// Every blessing, oldest given first; only those of [ownership] when it is set. "For me" here
+  /// means on a ring: the person's own and every family member's (see [Blessing.personId]).
   Future<List<Blessing>> list({Ownership? ownership});
+
+  /// The family members kept here, in the order they were added.
+  Future<List<Person>> people();
+
+  /// Adds [p].
+  Future<void> addPerson(Person p);
+
+  /// Writes [p]'s name and birth date over the stored one.
+  Future<void> updatePerson(Person p);
+
+  /// Removes the family member and every blessing on their ring, with their recordings, in one go.
+  /// Nothing of anyone else's is touched.
+  Future<void> removePerson(String id);
 
   Future<Blessing?> get(String id);
 
@@ -193,6 +208,19 @@ class SqliteBlessingStore implements BlessingStore {
       db.execute('CREATE INDEX links_by_blessing ON links (blessing_id)');
       db.execute('ALTER TABLE blessings ADD COLUMN sent_at_ms INTEGER');
     },
+    // 8: family members (people/person.dart), each with a ring of their own, and whose ring each
+    // blessing is on. Every blessing so far is the person's own ('').
+    (db) {
+      db.execute('''
+        CREATE TABLE people (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL CHECK (name != ''),
+          born TEXT,
+          created_at_ms INTEGER NOT NULL
+        ) STRICT''');
+      db.execute("ALTER TABLE blessings ADD COLUMN person_id TEXT NOT NULL DEFAULT ''");
+      db.execute('CREATE INDEX blessings_by_person ON blessings (person_id)');
+    },
   ];
 
   static void _insertChanges(Database db, String id, List<Change> changes) {
@@ -239,7 +267,8 @@ class SqliteBlessingStore implements BlessingStore {
       };
 
   static const _columns = 'id, title, giver, recipient, ownership, given_utc_minute, utc_offset_minutes, '
-      'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text, sent_at_ms';
+      'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text, sent_at_ms, '
+      'person_id';
 
   List<Object?> _values(Blessing b) => [
         b.id,
@@ -262,6 +291,8 @@ class SqliteBlessingStore implements BlessingStore {
         b.wordsStatus.code,
         b.firstText,
         b.sent?.millisecondsSinceEpoch,
+        // one passed along is on no ring
+        b.ownership == Ownership.passingOn ? '' : b.personId,
       ];
 
   Blessing _read(Row r, Map<String, List<String>> tags, Map<String, List<Change>> changes) {
@@ -272,6 +303,7 @@ class SqliteBlessingStore implements BlessingStore {
       from: r['giver'] as String,
       recipient: r['recipient'] as String,
       ownership: r['ownership'] == 'passing_on' ? Ownership.passingOn : Ownership.forMe,
+      personId: r['person_id'] as String,
       utc: DateTime.fromMillisecondsSinceEpoch((r['given_utc_minute'] as int) * 60000, isUtc: true),
       utcOffset: Duration(minutes: r['utc_offset_minutes'] as int),
       place: Place(r['latitude'] as double, r['longitude'] as double),
@@ -355,7 +387,7 @@ class SqliteBlessingStore implements BlessingStore {
   @override
   Future<void> create(Blessing b) async {
     _tx(_db, () {
-      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(20, '?').join(', ')})', _values(b));
+      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(21, '?').join(', ')})', _values(b));
       _writeTags(b);
       _writeChanges(b);
     });
@@ -372,7 +404,7 @@ class SqliteBlessingStore implements BlessingStore {
         'audio = ?, language = ?, words_state = ?, '
         // the first writing is kept as it was once there is one
         "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END, "
-        'sent_at_ms = ? '
+        'sent_at_ms = ?, person_id = ? '
         'WHERE id = ?',
         [...v.skip(1), b.id],
       );
@@ -380,6 +412,43 @@ class SqliteBlessingStore implements BlessingStore {
       _writeTags(b);
       _writeChanges(b);
     });
+  }
+
+  @override
+  Future<List<Person>> people() async => [
+        for (final r in _db.select('SELECT * FROM people ORDER BY created_at_ms, rowid'))
+          Person(
+            id: r['id'] as String,
+            name: r['name'] as String,
+            born: Day.parse(r['born'] as String?),
+            created: DateTime.fromMillisecondsSinceEpoch(r['created_at_ms'] as int, isUtc: true),
+          ),
+      ];
+
+  @override
+  Future<void> addPerson(Person p) async => _db.execute(
+        'INSERT INTO people (id, name, born, created_at_ms) VALUES (?, ?, ?, ?)',
+        [p.id, p.name, p.born?.code, p.created.millisecondsSinceEpoch],
+      );
+
+  @override
+  Future<void> updatePerson(Person p) async {
+    _db.execute('UPDATE people SET name = ?, born = ? WHERE id = ?', [p.name, p.born?.code, p.id]);
+    if (_db.updatedRows != 1) throw StateError('No family member ${p.id} to update');
+  }
+
+  @override
+  Future<void> removePerson(String id) async {
+    // never the person's own ring, whatever is asked
+    if (id.isEmpty) return;
+    final audio = [for (final r in _db.select('SELECT audio FROM blessings WHERE person_id = ?', [id])) r['audio'] as String];
+    _tx(_db, () {
+      _db.execute('DELETE FROM blessings WHERE person_id = ?', [id]);
+      _db.execute('DELETE FROM people WHERE id = ?', [id]);
+    });
+    for (final a in audio) {
+      await _deleteFile(a);
+    }
   }
 
   @override

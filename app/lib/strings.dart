@@ -352,6 +352,28 @@ class Strings {
   static String get microphoneRefusedAndroid => _w.microphoneRefusedAndroid;
   static String get microphoneSettingsAndroid => _w.microphoneSettingsAndroid;
   static String get allowMicrophone => _w.allowMicrophone;
+
+  // ---- family members: a ring for each (people/) ----
+  static String forPerson(String name) => _w.forPerson(name);
+  static String skySwitchLabel(String shown) => _w.skySwitchLabel(shown);
+  static String get addFamilyMember => _w.addFamilyMember;
+  static String get manageFamily => _w.manageFamily;
+  static String get addFamilyLede => _w.addFamilyLede;
+  static String get personName => _w.personName;
+  static String get born => _w.born;
+  static String get bornNotSet => _w.bornNotSet;
+  static String get bornNote => _w.bornNote;
+  static String get add => _w.add;
+  static String get noDate => _w.noDate;
+  static String emptyRing(String name) => _w.emptyRing(name);
+  static String get manageLede => _w.manageLede;
+  static String get manageNone => _w.manageNone;
+  static String removePerson(String name) => _w.removePerson(name);
+  static String removeTitle(String name) => _w.removeTitle(name);
+  static String removeBody(String name, int blessings) => _w.removeBody(name, blessings);
+  static String get welcomeFamily => _w.welcomeFamily;
+  static String bornOn(DateTime d) => _w.bornOn(d);
+  static String get editPersonLede => _w.editPersonLede;
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -624,6 +646,25 @@ extension WordsCatalogue on Words {
         'microphoneRefusedAndroid': microphoneRefusedAndroid,
         'microphoneSettingsAndroid': microphoneSettingsAndroid,
         'allowMicrophone': allowMicrophone,
+        'forPerson': forPerson('Emma'),
+        'skySwitchLabel': skySwitchLabel(forPerson('Emma')),
+        'addFamilyMember': addFamilyMember,
+        'manageFamily': manageFamily,
+        'addFamilyLede': addFamilyLede,
+        'personName': personName,
+        'born': born,
+        'bornNotSet': bornNotSet,
+        'bornNote': bornNote,
+        'add': add,
+        'noDate': noDate,
+        'emptyRing': emptyRing('Emma'),
+        'manageLede': manageLede,
+        'manageNone': manageNone,
+        'removePerson': removePerson('Emma'),
+        'removeTitle': removeTitle('Emma'),
+        'removeBody': removeBody('Emma', 7),
+        'welcomeFamily': welcomeFamily,
+        'editPersonLede': editPersonLede,
       };
 }
 
@@ -1077,6 +1118,43 @@ class Words {
   String get microphoneRefusedAndroid => 'The microphone is not allowed for Upon Thy Head.';
   String get microphoneSettingsAndroid => 'In Settings, tap Permissions, then Microphone.';
   String get allowMicrophone => 'Allow the microphone';
+
+  // ---- family members: a ring for each (people/) ----
+  /// The capsule at the top of home, and each row of its menu: "For Emma".
+  String forPerson(String name) => 'For $name';
+
+  /// What VoiceOver says of the capsule.
+  String skySwitchLabel(String shown) => '$shown. Choose whose blessings are shown';
+  String get addFamilyMember => 'Add a family member';
+  String get manageFamily => 'Manage family';
+  String get addFamilyLede => 'For a child, or anyone in your family. Their blessings are kept on this phone, on a ring of their own.';
+  String get personName => 'Name';
+  String get born => 'Born';
+  String get bornNotSet => 'Add the day';
+  String get bornNote => 'Optional. Their ring begins on this day.';
+  String get add => 'Add';
+  String get noDate => 'No date';
+
+  /// An empty ring: "When a blessing is recorded for Clara, a light appears here."
+  String emptyRing(String name) => 'When a blessing is recorded for $name, a light appears here.';
+  String get manageLede => 'Each has a ring of their own. Open one to change the name or birth date.';
+  String get manageNone => 'No family members yet.';
+  String removePerson(String name) => 'Remove $name';
+  String removeTitle(String name) => 'Remove $name?';
+
+  /// Says plainly what leaves the phone: "Seven blessings leave this phone with Emma's ring."
+  String removeBody(String name, int blessings) => switch (blessings) {
+        0 => "$name's ring leaves this phone. There are no blessings on it.",
+        1 => "One blessing leaves this phone with $name's ring. This cannot be undone.",
+        _ => "${count(blessings)} blessings leave this phone with $name's ring. This cannot be undone.",
+      };
+
+  /// The welcome's line about family members.
+  String get welcomeFamily => 'Keep blessings for yourself, and for your children.';
+
+  /// "Born August 3, 2008"
+  String bornOn(DateTime d) => 'Born ${months[d.month - 1]} ${d.day}, ${d.year}';
+  String get editPersonLede => 'Their ring begins on the day they were born, when it is given.';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -1832,6 +1910,52 @@ class _Spanish implements Words {
   String get microphoneSettingsAndroid => 'En Configuración, toca Permisos y luego Micrófono.';
   @override
   String get allowMicrophone => 'Permitir el micrófono';
+
+  // ---- familiares: un anillo para cada uno (people/) ----
+  @override
+  String forPerson(String name) => 'Para $name';
+  @override
+  String skySwitchLabel(String shown) => '$shown. Elige de quién son las bendiciones que se muestran';
+  @override
+  String get addFamilyMember => 'Agregar a un familiar';
+  @override
+  String get manageFamily => 'Administrar la familia';
+  @override
+  String get addFamilyLede => 'Para un hijo, una hija o cualquier persona de tu familia. Sus bendiciones se guardan en este teléfono, en un anillo propio.';
+  @override
+  String get personName => 'Nombre';
+  @override
+  String get born => 'Nació';
+  @override
+  String get bornNotSet => 'Agregar el día';
+  @override
+  String get bornNote => 'Opcional. Su anillo comienza ese día.';
+  @override
+  String get add => 'Agregar';
+  @override
+  String get noDate => 'Sin fecha';
+  @override
+  String emptyRing(String name) => 'Cuando se grabe una bendición para $name, una luz aparecerá aquí.';
+  @override
+  String get manageLede => 'Cada uno tiene su propio anillo. Abre uno para cambiar el nombre o la fecha de nacimiento.';
+  @override
+  String get manageNone => 'Todavía no hay familiares.';
+  @override
+  String removePerson(String name) => 'Quitar a $name';
+  @override
+  String removeTitle(String name) => '¿Quitar a $name?';
+  @override
+  String removeBody(String name, int blessings) => switch (blessings) {
+        0 => 'El anillo de $name se quitará de este teléfono. No tiene bendiciones.',
+        1 => 'La única bendición del anillo de $name se irá de este teléfono. Esto no se puede deshacer.',
+        _ => 'Las ${count(blessings).toLowerCase()} bendiciones del anillo de $name se irán de este teléfono. Esto no se puede deshacer.',
+      };
+  @override
+  String get welcomeFamily => 'Guarda bendiciones para ti y para tus hijos.';
+  @override
+  String bornOn(DateTime d) => 'Nació el ${d.day} de ${months[d.month - 1]} de ${d.year}';
+  @override
+  String get editPersonLede => 'Su anillo comienza el día en que nació, si se indica.';
 }
 
 /// A row's name inside a sentence: "Microphone" reads "microphone"; "Face ID" stays as it is.

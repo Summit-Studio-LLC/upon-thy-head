@@ -6,6 +6,8 @@ import 'package:flutter/material.dart' as m;
 
 import '../data/blessing.dart';
 import '../not_yet.dart';
+import '../people/person.dart';
+import '../people/whose_choice.dart';
 import '../polish/polish.dart';
 import '../record/model_offer.dart';
 import '../record/session.dart';
@@ -36,6 +38,7 @@ class ReviewLayer extends StatefulWidget {
     required this.onFinish,
     this.onChanges,
     this.onOwnership,
+    this.people = const [],
     this.audioPath,
     this.words,
     this.knownTags = const [],
@@ -68,7 +71,11 @@ class ReviewLayer extends StatefulWidget {
   final VoidCallback? onChanges;
 
   /// "For me" or "Passing it along" changed (already saved): the blessing joins or leaves the sky.
-  final ValueChanged<Ownership>? onOwnership;
+  final ValueChanged<Whose>? onOwnership;
+
+  /// The family members kept here: with any, "Whose blessing" is a row of their names
+  /// (people/whose_choice.dart); with none, For me | Passing it along as before.
+  final List<Person> people;
 
   /// How long typing rests before it is saved.
   static const saveAfter = Duration(milliseconds: 400);
@@ -195,6 +202,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     _title.text = Strings.isUntitled(b.title) ? '' : b.title;
     _from.text = b.from;
     _for.text = b.recipient;
+    _forFilled = null;
     _tag.text = '';
     _words.text = _writing ? '' : b.rawText;
     _tags = [...b.tags];
@@ -226,14 +234,25 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     _finishing = false;
   }
 
-  /// "For me" or "Passing it along": saved at once, and the sky follows.
-  Future<void> _setOwnership(Ownership o) async {
+  /// The "For" name as filled in from the family member chosen, while the field still holds just it
+  /// (forAfterWhose).
+  String? _forFilled;
+
+  /// "For me", a family member, or "Passing it along": saved at once, and the sky follows. An empty
+  /// "For" takes the family member's name.
+  Future<void> _setOwnership(Whose w) async {
     final b = _b;
-    if (b == null || b.ownership == o || !widget.on) return;
-    setState(() => b.ownership = o);
+    if (b == null || Whose.ofBlessing(b) == w || !widget.on) return;
+    final f = forAfterWhose(text: _for.text, filled: _forFilled, to: w, people: widget.people);
+    _forFilled = f.filled;
+    if (f.text != _for.text) {
+      _setQuietly(_for, f.text);
+      b.recipient = f.text.trim();
+    }
+    setState(() => w.apply(b));
     _dirty = true;
     await flush();
-    widget.onOwnership?.call(o);
+    widget.onOwnership?.call(w);
   }
 
   void _edited(void Function() write) {
@@ -522,7 +541,14 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               _rule(p),
               if (widget.onOwnership != null) ...[
                 const SizedBox(height: 14),
-                OwnershipChoice(palette: p, value: b.ownership, onChanged: _setOwnership),
+                if (widget.people.isEmpty)
+                  OwnershipChoice(
+                    palette: p,
+                    value: b.ownership,
+                    onChanged: (o) => _setOwnership(o == Ownership.passingOn ? Whose.passing : Whose.me),
+                  )
+                else
+                  WhoseChoice(palette: p, people: widget.people, value: Whose.ofBlessing(b), onChanged: _setOwnership),
                 const SizedBox(height: 14),
                 _rule(p),
               ],

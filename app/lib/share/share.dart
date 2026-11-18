@@ -198,7 +198,8 @@ class IncomingFile {
 }
 
 /// Where a shortcut opens the app: the recording start (as New blessing does; nothing is recorded
-/// until Begin), or home, the night sky. Reached only once the app is unlocked.
+/// until Begin), or home, the night sky. Home waits for the unlock; the recording start does not, as
+/// New blessing on the locked sky (home/locked.dart).
 enum ShortcutPlace {
   record,
   home;

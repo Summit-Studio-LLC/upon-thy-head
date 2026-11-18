@@ -46,6 +46,7 @@ class Blessing {
     required this.place,
     this.recipient = '',
     this.ownership = Ownership.forMe,
+    this.personId = '',
     this.rawText = '',
     this.firstText = '',
     List<Change>? changes,
@@ -71,6 +72,10 @@ class Blessing {
   String recipient;
 
   Ownership ownership;
+
+  /// The family member whose ring it is on (people/person.dart), or '' for the person keeping the
+  /// record. Always '' for one being passed along. Not part of what is sent.
+  String personId;
 
   /// The minute it was given; a draft's is set again when its recording begins.
   DateTime utc;
@@ -149,8 +154,8 @@ final _random = math.Random.secure();
 String newBlessingId() => List.generate(16, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 
 /// A new blessing as its recording starts: given now, at [place] ("the place blessings are given",
-/// place/where.dart), for me.
-Blessing draftBlessing(DateTime now, {required Place place}) => Blessing(
+/// place/where.dart), for me, or for the family member [personId].
+Blessing draftBlessing(DateTime now, {required Place place, String personId = ''}) => Blessing(
       id: newBlessingId(),
       title: Strings.untitled,
       from: '',
@@ -158,6 +163,7 @@ Blessing draftBlessing(DateTime now, {required Place place}) => Blessing(
       utcOffset: now.timeZoneOffset,
       place: place,
       ownership: Ownership.forMe,
+      personId: personId,
       draft: true,
     );
 
