@@ -64,6 +64,10 @@ cleanup() {
 trap cleanup EXIT
 
 FAILS=0
+# The rows Spotlight lists for "blessing" are the app's two Core Spotlight entries (Shortcuts.swift):
+# "Record a blessing" and this one, which opens home. Since those entries were added they take the
+# place of the App Shortcuts' own rows, so "Open my blessings" is no longer listed there.
+HOME_ROW="My priesthood blessings"
 shot() { xcrun simctl io "$UDID" screenshot "$OUT/$1.png" >/dev/null 2>&1; }
 labels() { tapper appall; }
 # where the app is: record (the Begin screen: shown only before Begin, so nothing is recording), home (the unlocked sky), locked, or other
@@ -104,7 +108,9 @@ START=$(date +%s); LISTED=""
 while (( $(date +%s) - START < 900 )); do
   tapper spotlight blessing >/dev/null
   r="$(tapper spotlightlabels)"; [[ "$r" != *"Record a blessing"* ]] && { tapper spotlightscroll >/dev/null; r="$(tapper spotlightlabels)"; }
-  [[ "$r" == *"Record a blessing"* && "$r" == *"Open my blessings"* ]] && { LISTED=yes; break; }
+  [[ "$r" == *"Record a blessing"* && "$r" == *"$HOME_ROW"* ]] && { LISTED=yes; break; }
+  # what Spotlight showed this time, so a run that never lists them can be read afterwards
+  echo "$(( $(date +%s) - START )) s: $(echo "$r" | tr '\n' '|' | cut -c1-700)" >> "$OUT/spotlight-polls.txt"
   tapper home >/dev/null; sleep 30
 done
 if [[ -z "$LISTED" ]]; then echo "FAIL Spotlight never listed the actions in 15 min"; shot spotlight-never; exit 1; fi
@@ -123,7 +129,7 @@ expect 01b-cold-record-face-refused record
 
 echo "-- 2 cold, locked: Open my blessings"
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null; sleep 1
-via_spotlight "Open my blessings"; sleep 8
+via_spotlight "$HOME_ROW"; sleep 8
 expect 02a-cold-home-locked locked
 face match; sleep 4
 expect 02b-cold-home-unlocked home
@@ -136,7 +142,7 @@ via_spotlight "Record a blessing"; sleep 5
 expect 03-warm-read-to-record record
 
 echo "-- 4 warm, on the recording start: Open my blessings"
-via_spotlight "Open my blessings"; sleep 5
+via_spotlight "$HOME_ROW"; sleep 5
 expect 04-warm-record-to-home home
 
 echo "-- 5 warm, in Settings: Record a blessing"

@@ -24,6 +24,9 @@ mkdir -p "$OUT_DIR"
 TMP="$(mktemp -d)"
 xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState discharging --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
 xcrun simctl ui "$UDID" content_size large || true
+# start from an empty app: another script's leftovers (a remembered Spanish recording language, for
+# which the simulator has no speech engine) once failed the last case here
+xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
 # start from phase 1
 DATA="$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data 2>/dev/null || true)"
 [[ -n "$DATA" ]] && rm -f "$DATA/Documents/recovery_test_phase"

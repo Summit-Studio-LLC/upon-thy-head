@@ -168,7 +168,9 @@ final class Tapper: XCTestCase {
   func spotlightTap(_ label: String) -> String {
     let sp = spotlightApp
     guard sp.state == .runningForeground else { return "nospotlight" }
-    let row = sp.cells.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    // an App Shortcut's row is labelled with its title alone; a Core Spotlight entry's with its title,
+    // a comma and its description
+    let row = sp.cells.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", label, label + ",")).firstMatch
     let moves: [CGFloat] = [0, 0.33, 0.33, 0.33, -0.33, -0.33, -0.33, -0.33, -0.33, -0.33]
     for m in moves {
       if m != 0 {
