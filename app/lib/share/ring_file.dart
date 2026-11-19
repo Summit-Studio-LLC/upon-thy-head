@@ -110,7 +110,7 @@ SharedRead _ring(Map<String, Object?> j, DateTime now) {
   if (version is! int || version < ringFormatVersion) return const SharedBad('ring version');
   if (version > ringFormatVersion) return const SharedNewer();
   final keptBy = j['keptBy'];
-  if (keptBy != null && (keptBy is! String || keptBy.length > BlessingLimits.name || keptBy.contains(RegExp(r'[\u0000-\u001f\u007f]')))) {
+  if (keptBy != null && (keptBy is! String || keptBy.length > BlessingLimits.name || !isCleanText(keptBy))) {
     return const SharedBad('keptBy');
   }
   final list = j['blessings'];

@@ -138,7 +138,8 @@ class AppLock extends ChangeNotifier {
       method = await api.method();
     } catch (e) {
       debugPrint('lock: $e');
-      method = LockMethod.none;
+      // fail closed when the lock is wanted and the channel could not answer
+      method = chosen ? LockMethod.passcode : LockMethod.none;
     }
     _locked = active && !startUnlocked && !unlocked;
     _ready = true;
@@ -191,6 +192,7 @@ class AppLock extends ChangeNotifier {
   /// The switch in Settings. Turning it off asks first; turning it on does not.
   Future<bool> setChosen(bool on) async {
     if (on == chosen) return true;
+    if (_asking) return false;
     if (!on && method != LockMethod.none) {
       _asking = true;
       notifyListeners();

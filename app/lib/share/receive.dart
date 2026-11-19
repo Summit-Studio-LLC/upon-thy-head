@@ -75,11 +75,11 @@ class ArrivalNotNow extends Arrival {
 }
 
 /// Read [file] strictly, and look for it among the blessings already kept ([find]).
-Future<Arrival> arrivalOf(IncomingFile file, Future<Blessing?> Function(String id) find) async {
+Future<Arrival> arrivalOf(IncomingFile file, Future<Blessing?> Function(String id) find, {DateTime? now}) async {
   final bytes = file.bytes;
   if (file.tooLarge) return const ArrivalUnreadable('over the size limit');
   if (bytes == null) return const ArrivalUnreadable('no bytes');
-  return arrivalOfShared(readShared(bytes), find);
+  return arrivalOfShared(readShared(bytes, now: now), find);
 }
 
 /// What was read ([readShared]), set beside the blessings already kept ([find]).
