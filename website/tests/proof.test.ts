@@ -401,3 +401,112 @@ test("the proof endpoints are rate-limited", async () => {
   for (let i = 0; i < 10; i++) await prove(w.deps, { ...w.json({}), client: "x" });
   assert.equal(error(await prove(w.deps, { ...w.json({}), client: "x" })), "slow_down");
 });
+
+test("a pass is also held to the daily byte limit across networks, and an expired pass does not burn bytes", async () => {
+  const w = world();
+  const pass = ((await w.passFor()).json as { pass: string }).pass;
+  const big = LIMITS.maxBytes;
+  const fit = Math.floor(LIMITS.createBytesDay[0] / big);
+  // first try with a bad pass on "home" — must answer 401 without spending home's 3 MiB/day
+  assert.equal((await w.make(pass.slice(0, -2) + "xx", "home", locked(big))).status, 401);
+  assert.equal((await w.make(null, "home", locked(big))).status, 201, "home still has its bytes");
+
+  // now rotate networks on every request with the same pass: create-pass-bytes-day still caps at 3 MiB
+  for (let i = 0; i < fit; i++) assert.equal((await w.make(pass, `rot${i}`, locked(big))).status, 201, `pass ring ${i + 1}`);
+  const over = await w.make(pass, "rot-extra", locked(big));
+  assert.deepEqual([over.status, error(over)], [429, "slow_down"]);
+});
+
+test("PlayDecoder deduplicates token fetches, returns null on 400, retries once on 401, and throws on 5xx/429", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const account = JSON.stringify({ client_email: "proof@example.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }) });
+  let oauthCalls = 0;
+  let mode: "ok" | "400" | "401-then-ok" | "503" = "ok";
+  let retried = false;
+  const fetcher = (async (url: string, init: RequestInit) => {
+    if (String(url).includes("oauth2")) {
+      oauthCalls++;
+      await new Promise((r) => setTimeout(r, 10));
+      return Response.json({ access_token: `ACCESS_${oauthCalls}`, expires_in: 3600 });
+    }
+    const auth = new Headers(init.headers).get("authorization");
+    if (mode === "400") return new Response("{}", { status: 400 });
+    if (mode === "401-then-ok" && !retried) {
+      retried = true;
+      assert.equal(auth, "Bearer ACCESS_1");
+      return new Response("{}", { status: 401 });
+    }
+    if (mode === "503") return new Response("{}", { status: 503 });
+    return Response.json({ tokenPayloadExternal: { auth } });
+  }) as typeof fetch;
+
+  const decoder = PlayDecoder.from(account, fetcher)!;
+  const now = Date.now();
+  // two concurrent decodes share one OAuth request
+  const [r1, r2] = await Promise.all([decoder.decode("T1", now), decoder.decode("T2", now)]);
+  assert.equal(oauthCalls, 1);
+  assert.deepEqual(r1, { auth: "Bearer ACCESS_1" });
+  assert.deepEqual(r2, { auth: "Bearer ACCESS_1" });
+
+  // 400 -> null (bad client token -> 400 proof)
+  mode = "400";
+  assert.equal(await decoder.decode("BAD", now), null);
+
+  // 401 -> clears cached access token and retries once with fresh token
+  mode = "401-then-ok";
+  assert.deepEqual(await decoder.decode("T3", now), { auth: "Bearer ACCESS_2" });
+  assert.equal(oauthCalls, 2);
+
+  // 503 -> throws so service.ts answers 503 unavailable instead of 400 proof
+  mode = "503";
+  await assert.rejects(() => decoder.decode("T4", now));
+  const w = world({ play: { project: "123456789012", decode: (t, n) => decoder.decode(t, n) } });
+  const c = (await w.fresh()).challenge;
+  const unavailable = await prove(w.deps, w.json({ platform: "android", challenge: c, token: "T4" }));
+  assert.deepEqual([unavailable.status, error(unavailable)], [503, "unavailable"]);
+});
+
+test("App Attest: refuses a CA leaf, missing attested-credential flag, or wrong ASN.1 tag in nonce", () => {
+  const now = soon();
+  const c = makeChallenge(SECRET, now).challenge;
+  // 1. Leaf with CA:TRUE
+  ssl("ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", "caleaf.key");
+  const jwk = createPublicKey(readFileSync(path.join(dir, "caleaf.key"))).export({ format: "jwk" }) as { x: string; y: string };
+  const keyId = sha(Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]));
+  const authData = Buffer.concat([
+    sha(PROOF.appleAppId), Buffer.from([0x40]), Buffer.alloc(4),
+    Buffer.concat([Buffer.from("appattest"), Buffer.alloc(7)]), Buffer.from([0, 32]), keyId, Buffer.from([0xa0]),
+  ]);
+  const nonce = sha(authData, sha(c));
+  ssl("req", "-new", "-key", "caleaf.key", "-subj", "/CN=ca leaf", "-out", "caleaf.csr");
+  writeFileSync(path.join(dir, "caleaf.ext"), `basicConstraints=critical,CA:TRUE\n1.2.840.113635.100.8.2=DER:3024A1220420${nonce.toString("hex")}\n`);
+  ssl("x509", "-req", "-in", "caleaf.csr", "-CA", "middle.pem", "-CAkey", "middle.key", "-CAcreateserial", "-days", "30", "-extfile", "caleaf.ext", "-out", "caleaf.pem");
+  const caAtt = new Uint8Array(cborOf({ fmt: "apple-appattest", attStmt: { x5c: [derOf("caleaf.pem"), middleDer] }, authData }));
+  assert.deepEqual(verifyAppAttest({ attestation: caAtt, keyId: keyId.toString("base64"), challenge: c, now, root: rootPem, allowDevelopment: false }), { ok: false, reason: "chain" });
+
+  // 2. Missing 0x40 attested-credential flag in authData[32]
+  const noFlagAuth = Buffer.from(authData);
+  noFlagAuth[32] = 0x01;
+  const noFlagNonce = sha(noFlagAuth, sha(c));
+  writeFileSync(path.join(dir, "noflag.ext"), `1.2.840.113635.100.8.2=DER:3024A1220420${noFlagNonce.toString("hex")}\n`);
+  ssl("x509", "-req", "-in", "caleaf.csr", "-CA", "middle.pem", "-CAkey", "middle.key", "-CAcreateserial", "-days", "30", "-extfile", "noflag.ext", "-out", "noflag.pem");
+  const noFlagAtt = new Uint8Array(cborOf({ fmt: "apple-appattest", attStmt: { x5c: [derOf("noflag.pem"), middleDer] }, authData: noFlagAuth }));
+  assert.deepEqual(verifyAppAttest({ attestation: noFlagAtt, keyId: keyId.toString("base64"), challenge: c, now, root: rootPem, allowDevelopment: false }), { ok: false, reason: "format" });
+
+  // 3. Wrong ASN.1 context tag (0xA2 instead of 0xA1) in NONCE_OID
+  writeFileSync(path.join(dir, "badtag.ext"), `1.2.840.113635.100.8.2=DER:3024A2220420${nonce.toString("hex")}\n`);
+  ssl("x509", "-req", "-in", "caleaf.csr", "-CA", "middle.pem", "-CAkey", "middle.key", "-CAcreateserial", "-days", "30", "-extfile", "badtag.ext", "-out", "badtag.pem");
+  const badTagAtt = new Uint8Array(cborOf({ fmt: "apple-appattest", attStmt: { x5c: [derOf("badtag.pem"), middleDer] }, authData }));
+  assert.deepEqual(verifyAppAttest({ attestation: badTagAtt, keyId: keyId.toString("base64"), challenge: c, now, root: rootPem, allowDevelopment: false }), { ok: false, reason: "nonce" });
+
+  // 4. Full 3-certificate x5c chain (leaf -> subCA -> middle -> root) verifies, and 5-cert x5c is refused
+  ssl("ecparam", "-name", "secp384r1", "-genkey", "-noout", "-out", "sub.key");
+  ssl("req", "-new", "-key", "sub.key", "-subj", "/CN=Sub CA", "-out", "sub.csr");
+  ssl("x509", "-req", "-in", "sub.csr", "-CA", "middle.pem", "-CAkey", "middle.key", "-CAcreateserial", "-days", "30", "-extfile", "middle.ext", "-out", "sub.pem");
+  writeFileSync(path.join(dir, "goodleaf.ext"), `1.2.840.113635.100.8.2=DER:3024A1220420${nonce.toString("hex")}\n`);
+  ssl("x509", "-req", "-in", "caleaf.csr", "-CA", "sub.pem", "-CAkey", "sub.key", "-CAcreateserial", "-days", "30", "-extfile", "goodleaf.ext", "-out", "goodleaf.pem");
+  const threeChain = new Uint8Array(cborOf({ fmt: "apple-appattest", attStmt: { x5c: [derOf("goodleaf.pem"), derOf("sub.pem"), middleDer] }, authData }));
+  assert.equal(verifyAppAttest({ attestation: threeChain, keyId: keyId.toString("base64"), challenge: c, now, root: rootPem, allowDevelopment: false }).ok, true);
+  const fiveChain = new Uint8Array(cborOf({ fmt: "apple-appattest", attStmt: { x5c: [derOf("goodleaf.pem"), derOf("sub.pem"), middleDer, middleDer, middleDer] }, authData }));
+  assert.deepEqual(verifyAppAttest({ attestation: fiveChain, keyId: keyId.toString("base64"), challenge: c, now, root: rootPem, allowDevelopment: false }), { ok: false, reason: "format" });
+});

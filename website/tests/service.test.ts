@@ -5,8 +5,9 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { type Answer, type Deps, LIMITS, Limiter, create, read, stop, sweep } from "../lib/links/service.ts";
+import { type Answer, type Deps, LIMITS, Limiter, create, positiveInt, read, status, stop, sweep } from "../lib/links/service.ts";
 import { neon } from "@neondatabase/serverless";
+import { bearerMatches, bodyOf } from "../app/api/b/http.ts";
 import { FileStore, MemoryStore, PostgresStore, type Store, UpstashStore } from "../lib/links/store.ts";
 
 const DAY = 86400000;
@@ -190,6 +191,36 @@ function fakeUpstash(clock: { now: number }) {
       case "SCAN":
         result = ["0", [...strings.keys()].filter((k) => k.startsWith("b:"))];
         break;
+      case "PTTL": {
+        const e = live(c[1]);
+        result = !e ? -2 : e.pxat === undefined ? -1 : e.pxat - clock.now;
+        break;
+      }
+      case "HMGET": {
+        const h = hashes.get(c[1]) ?? {};
+        result = c.slice(2).map((field) => (h[field] === undefined ? null : String(h[field])));
+        break;
+      }
+      case "HGETALL": {
+        const h = hashes.get(c[1]) ?? {};
+        result = Object.entries(h).flatMap(([k, v]) => [k, String(v)]);
+        break;
+      }
+      case "EVAL": {
+        const key = c[3];
+        const [dl, db, maxLinks, maxBytes] = c.slice(4, 8).map(Number);
+        const h = hashes.get(key) ?? {};
+        const l = h.links ?? 0, b = h.bytes ?? 0;
+        if (l + dl > maxLinks || b + db > maxBytes) {
+          result = [0, l, b];
+        } else {
+          h.links = l + dl;
+          h.bytes = b + db;
+          hashes.set(key, h);
+          result = [1, h.links, h.bytes];
+        }
+        break;
+      }
       case "HINCRBY": {
         const h = hashes.get(c[1]) ?? {};
         h[c[2]] = (h[c[2]] ?? 0) + Number(c[3]);
@@ -212,8 +243,17 @@ const stores: Record<string, (clock: { now: number }) => Promise<{ store: Store;
   memory: async () => ({ store: new MemoryStore(), done: async () => {}, raw: async () => "" }),
   file: async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "uth-links-"));
-    const raw = async () => (await Promise.all((await readdir(dir)).map((f) => readFile(path.join(dir, f), "utf8")))).join("\n");
-    return { store: new FileStore(dir), done: () => rm(dir, { recursive: true, force: true }), raw };
+    const store = new FileStore(dir);
+    const raw = async () =>
+      (await Promise.all((await readdir(dir)).filter((f) => !f.endsWith(".tmp")).map((f) => readFile(path.join(dir, f), "utf8")))).join("\n");
+    return {
+      store,
+      done: async () => {
+        await store.flush();
+        await rm(dir, { recursive: true, force: true });
+      },
+      raw,
+    };
   },
   "upstash (against a stand-in)": async (clock) => {
     const fake = fakeUpstash(clock);
@@ -230,6 +270,7 @@ if (process.env.TEST_DATABASE_URL) {
     const drop = async () => {
       await sql.query("DROP TABLE IF EXISTS linktest_copies", []);
       await sql.query("DROP TABLE IF EXISTS linktest_days", []);
+      await sql.query("DROP TABLE IF EXISTS linktest_counts", []);
     };
     await drop();
     const store = new PostgresStore(async (text, values) => {
@@ -285,4 +326,128 @@ test("one client's bytes in a day are limited, so one network cannot spend the d
   assert.deepEqual([refused.status, error(refused)], [429, "slow_down"]);
   // another network is not held by it
   assert.equal((await make(locked(big), "b")).status, 201);
+});
+
+test("a refused 503 full request does not burn the day's remaining bytes, and status never writes", async () => {
+  for (const [name, open] of Object.entries(stores)) {
+    const clock = { now: START };
+    const { store, done } = await open(clock);
+    try {
+      const deps: Deps = { store, limiter: new Limiter(), now: () => clock.now };
+      // status on an untouched day leaves nothing written
+      assert.equal((await status(deps)).status, 200);
+      assert.deepEqual(await store.spent("2026-11-16"), { links: 0, bytes: 0 }, `${name}: read-only status`);
+
+      await store.spend("2026-11-16", 0, LIMITS.dayBytes - 500);
+      // 1,000 bytes is over the remaining 500 -> 503 full, and the remaining 500 stays available
+      const over = await create(deps, { contentType: OCTETS, body: locked(1000), client: "big" });
+      assert.deepEqual([over.status, error(over)], [503, "full"], `${name}: oversize refused`);
+      assert.deepEqual(await store.spent("2026-11-16"), { links: 0, bytes: LIMITS.dayBytes - 500 }, `${name}: nothing burned`);
+
+      const fits = await create(deps, { contentType: OCTETS, body: locked(400), client: "small" });
+      assert.equal(fits.status, 201, `${name}: smaller link still fits`);
+      assert.deepEqual(await store.spent("2026-11-16"), { links: 1, bytes: LIMITS.dayBytes - 100 });
+    } finally {
+      await done();
+    }
+  }
+});
+
+test("when every id attempt collides, the day's budget is refunded", async () => {
+  const store = new MemoryStore();
+  const fixed = () => new Uint8Array(32).fill(7);
+  const deps: Deps = { store, limiter: new Limiter(), now: () => START, random: fixed };
+  assert.equal((await create(deps, { contentType: OCTETS, body: locked(400), client: "a" })).status, 201);
+  // same random bytes -> all 3 attempts collide with the first id -> 503 and refunded back to 1 link
+  const second = await create(deps, { contentType: OCTETS, body: locked(400), client: "b" });
+  assert.deepEqual([second.status, error(second)], [503, "unavailable"]);
+  assert.deepEqual(await store.spent("2026-11-16"), { links: 1, bytes: 400 });
+});
+
+test("positiveInt falls back cleanly on NaN, empty, zero, negative, or non-integer env values", () => {
+  assert.equal(positiveInt(undefined, 1000), 1000);
+  assert.equal(positiveInt("", 1000), 1000);
+  assert.equal(positiveInt("   ", 1000), 1000);
+  assert.equal(positiveInt("12MB", 1000), 1000);
+  assert.equal(positiveInt("0", 1000), 1000);
+  assert.equal(positiveInt("-50", 1000), 1000);
+  assert.equal(positiveInt("3.5", 1000), 1000);
+  assert.equal(positiveInt("Infinity", 1000), 1000);
+  assert.equal(positiveInt("250", 1000), 250);
+  assert.equal(positiveInt(" 250 ", 1000), 250);
+});
+
+test("unexpected storage failures answer 503 unavailable, and Postgres tolerates a 23505 DDL race", async () => {
+  const boom = async (): Promise<never> => {
+    throw new Error("db unreachable");
+  };
+  const broken: Store = { put: boom, get: boom, remove: boom, sweep: boom, spent: boom, spend: boom, trySpend: boom, count: boom, counts: boom };
+  const deps: Deps = { store: broken, limiter: new Limiter(), now: () => START };
+  assert.equal((await create(deps, { contentType: OCTETS, body: locked(400), client: "a" })).status, 503);
+  assert.equal((await read(deps, { id: "A".repeat(22), client: "a" })).status, 503);
+  assert.equal((await stop(deps, { id: "A".repeat(22), authorization: `Bearer ${"A".repeat(43)}`, client: "a" })).status, 503);
+  assert.equal((await status(deps)).status, 503);
+  assert.equal((await sweep(deps)).status, 503);
+
+  let raced = false;
+  const pg = new PostgresStore(async (sql) => {
+    if (sql.startsWith("CREATE TABLE") && !raced) {
+      raced = true;
+      throw Object.assign(new Error("duplicate key value violates unique constraint pg_type_typname_nsp_index"), { code: "23505" });
+    }
+    if (sql.startsWith("INSERT INTO link_days") && sql.includes("SELECT")) return [];
+    if (sql.startsWith("SELECT links, bytes")) return [{ links: 1000, bytes: 500 }];
+    return [];
+  });
+  const res = await pg.trySpend("2026-11-16", 1, 400, 1000, 10000);
+  assert.deepEqual(res, { ok: false, spent: { links: 1000, bytes: 500 } });
+});
+
+test("bodyOf catches a broken request stream without throwing, and bearerMatches checks secrets safely", async () => {
+  const brokenStream = new ReadableStream<Uint8Array>({
+    pull() {
+      throw new Error("connection reset");
+    },
+  });
+  const req = new Request("https://uponthyhead.app/api/b", { method: "POST", body: brokenStream, duplex: "half" } as RequestInit);
+  const body = await bodyOf(req);
+  assert.equal(body, "bad_stream");
+  const { deps } = world();
+  const ans = await create(deps, { contentType: OCTETS, body, client: "a" });
+  assert.equal(ans.status, 400);
+
+  assert.equal(bearerMatches("Bearer s3cr3t", "s3cr3t"), true);
+  assert.equal(bearerMatches("Bearer s3cr3t-longer", "s3cr3t"), false);
+  assert.equal(bearerMatches("Bearer ", ""), false);
+  assert.equal(bearerMatches(null, "s3cr3t"), false);
+});
+
+test("status and sweep routes rate-limit failed bearer guesses while letting the owner through", async () => {
+  const prevStatus = process.env.STATUS_SECRET;
+  const prevCron = process.env.CRON_SECRET;
+  const prevLocal = process.env.LINKS_LOCAL_DIR;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "uth-admin-"));
+  process.env.STATUS_SECRET = "owner-status-secret";
+  process.env.CRON_SECRET = "owner-cron-secret";
+  process.env.LINKS_LOCAL_DIR = dir;
+  try {
+    const { GET: getStatus } = await import("../app/api/status/route.ts");
+    const { GET: getSweep } = await import("../app/api/sweep/route.ts");
+    for (let i = 0; i < 10; i++) {
+      const r = await getStatus(new Request("https://uponthyhead.app/api/status", { headers: { authorization: `Bearer wrong-${i}` } }));
+      assert.equal(r.status, 401);
+    }
+    const throttled = await getSweep(new Request("https://uponthyhead.app/api/sweep", { headers: { authorization: "Bearer wrong-10" } }));
+    assert.equal(throttled.status, 429);
+    // valid secret still works even while wrong guesses are throttled
+    const okStatus = await getStatus(new Request("https://uponthyhead.app/api/status", { headers: { authorization: "Bearer owner-status-secret" } }));
+    assert.equal(okStatus.status, 200);
+    const okSweep = await getSweep(new Request("https://uponthyhead.app/api/sweep", { headers: { authorization: "Bearer owner-cron-secret" } }));
+    assert.equal(okSweep.status, 200);
+  } finally {
+    if (prevStatus === undefined) delete process.env.STATUS_SECRET; else process.env.STATUS_SECRET = prevStatus;
+    if (prevCron === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prevCron;
+    if (prevLocal === undefined) delete process.env.LINKS_LOCAL_DIR; else process.env.LINKS_LOCAL_DIR = prevLocal;
+    await rm(dir, { recursive: true, force: true });
+  }
 });

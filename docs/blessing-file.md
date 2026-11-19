@@ -33,7 +33,7 @@ UTF-8 JSON, indented, one object, keys in this order:
 | `language` | string | the words' language (`"en"`, `"es"`, `"pt-BR"`), at most 20 |
 | `words` | string | the spoken words, exactly as spoken, at most 200,000 characters |
 | `place` | object, optional | where it was given, `{"lat": 40.8, "lon": -111.9}`, to a tenth of a degree as the app keeps it (about 11 km). Missing or null in a file made before 2026-11-16 |
-| `changes` | object[] | the polish changes, in order: `at` (character offset in `words`), `was`, `now`, `kind` (`filler`, `repeat`, `restart`, `grammar`, `punctuation`), `source`, `kept` (bool). At most 5,000 |
+| `changes` | object[] | the polish changes, in order: `at` (character offset in `words`), `was`, `now`, `kind` (`filler`, `repeat`, `reworded`, `restart`, `grammar`, `punctuation`), `source`, `kept` (bool). At most 5,000 |
 | `precision` | string, optional (version 2) | how much of the date is known: `"day"` (the default when missing), `"month"` or `"year"`. `given` then holds noon local time on the 15th of the month, or on July 2 of the year: where the light sits. Shown as "August 1998" or "1998" |
 | `entered` | bool, optional (version 2) | `true` when the words were typed or pasted from a written copy, not recorded. Shown as "Entered from a written copy, not recorded." The words are kept exactly as entered, and each line break starts a paragraph |
 
@@ -59,7 +59,9 @@ from N changes", and can open the changes screen and restore any change to the s
   `1`: the field is optional, and an older app ignores it.
 - No control characters anywhere except line breaks and tabs in `words`, `was`, `now`; no broken
   surrogate pairs.
-- `given` a real calendar minute between 1900 and two days from now.
+- `given` a real calendar minute from 1900 on, and no later than two days from now (for `precision`
+  `"month"` or `"year"`, where `given` sits on the 15th or on July 2, its local month or year no
+  later than that limit's).
 - Each change must stand on the words (`words.substring(at, at + was.length) == was`), in order, not
   overlapping, of a known kind. One bad change refuses the file: a half-right file is not shown.
 - Nothing in it is fetched, run, or turned into a link.

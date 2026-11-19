@@ -145,13 +145,25 @@ function text(j, key, max, { required = false, lines = false } = {}) {
   return v;
 }
 
-function given(v, now) {
+function given(v, now, precision = "day", offset = 0) {
   const m = typeof v === "string" && /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})Z$/.exec(v);
   if (!m) throw bad("given");
   const [y, mo, d, h, mi] = m.slice(1).map(Number);
   const t = new Date(Date.UTC(y, mo - 1, d, h, mi));
   if (t.getUTCFullYear() !== y || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d || t.getUTCHours() !== h || t.getUTCMinutes() !== mi) throw bad("given");
-  if (y < 1900 || t.getTime() > now.getTime() + 2 * 86400000) throw bad("given out of range");
+  if (y < 1900) throw bad("given out of range");
+  const limit = new Date(now.getTime() + 2 * 86400000);
+  if (precision === "day") {
+    if (t.getTime() > limit.getTime()) throw bad("given out of range");
+  } else {
+    const local = new Date(t.getTime() + offset * 60000);
+    if (
+      local.getUTCFullYear() > limit.getUTCFullYear() ||
+      (precision === "month" && local.getUTCFullYear() === limit.getUTCFullYear() && local.getUTCMonth() > limit.getUTCMonth())
+    ) {
+      throw bad("given out of range");
+    }
+  }
   return t;
 }
 
@@ -209,8 +221,10 @@ function recordOf(j, now) {
   const id = text(j, "id", LIMITS.id, { required: true });
   if (!/^[A-Za-z0-9_-]+$/.test(id)) throw bad("id");
   const title = text(j, "title", LIMITS.title).trim();
-  const when = given(j.given, now);
-  if (!Number.isInteger(j.offset) || Math.abs(j.offset) > 18 * 60) throw bad("offset");
+  const precision = j.precision == null ? "day" : j.precision;
+  if (!["day", "month", "year"].includes(precision)) throw bad("precision");
+  if (!Number.isInteger(j.offset) || j.offset < -1080 || j.offset > 1080) throw bad("offset");
+  const when = given(j.given, now, precision, j.offset);
   const from = text(j, "from", LIMITS.name).trim();
   const recipient = text(j, "for", LIMITS.name).trim();
   const language = text(j, "language", LIMITS.language);
@@ -241,8 +255,6 @@ function recordOf(j, now) {
       changes.push({ at: c.at, was, now: now0, kept: c.kept });
     }
   }
-  const precision = j.precision == null ? "day" : j.precision;
-  if (!["day", "month", "year"].includes(precision)) throw bad("precision");
   if (j.entered != null && typeof j.entered !== "boolean") throw bad("entered");
   const entered = j.entered === true;
   return { id, title, given: when, offset: j.offset, from, for: recipient, language, words, changes, precision, entered };

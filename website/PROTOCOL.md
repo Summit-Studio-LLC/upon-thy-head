@@ -57,9 +57,8 @@ one whose date is known only to the month or the year; the page shows "August 19
 - The words shown are the spoken words with each change whose `kept` is true applied in order
   (`applyChanges` in `app/lib/polish/change.dart`).
 
-One thing to settle in the app: `docs/blessing-file.md` lists the change kinds as
-`filler, repeat, restart, grammar, punctuation`, and `app/lib/polish/change.dart` has `reworded`
-where the document has `restart`. The page accepts all six.
+Change `kind` may be `reworded` (as `app/lib/polish/change.dart` writes) or `restart`, alongside
+`filler`, `repeat`, `grammar`, `punctuation`; a reader accepts all six.
 
 ## 3. The locked copy
 
@@ -95,7 +94,9 @@ Opening, in this order (the error names are the ones in `protocol-vectors.json`)
 2. Fewer than 31 or more than 524,288 bytes, or byte 0 is `0x00`: `damaged`.
 3. Byte 0 is greater than `0x01`: `newer`.
 4. AES-GCM does not authenticate (wrong key, any byte changed, cut short): `locked`.
-5. The plaintext is not a valid record: `record`, or `newer` if its `version` is above 2.
+5. The plaintext is not a valid blessing or ring record: `record`, or `newer` if its `version` is
+   higher than this reader knows (above 2 for a single blessing, above 3 for a `"kind": "ring"`
+   record).
 
 ## 4. The service
 
@@ -215,11 +216,12 @@ never need a pass. Until `LINKS_REQUIRE_PROOF=1` is set, a link without a pass i
 | 503 | `not_set_up` | an Android proof while Play Integrity is not set up |
 | 503 | `unavailable` | no secret set, storage not reachable, or Google not reachable |
 
-A valid pass is limited like a network: 10 links in 10 minutes and 40 a day per pass id, on top of
-the network's own limits. Challenges: 20 per network in 10 minutes; proofs: 10; both under a shared
-ceiling of 300 a minute.
+A valid pass is limited like a network: 10 links in 10 minutes, 40 a day and 3 MiB a day per pass
+id, on top of the network's own limits. Challenges: 20 per network in 10 minutes; proofs: 10; both
+under a shared ceiling of 300 a minute.
 
-**`GET /api/status`**, with `Authorization: Bearer <CRON_SECRET>`, for the owner: today's and
+**`GET /api/status`**, with `Authorization: Bearer <STATUS_SECRET>` (or `<CRON_SECRET>` when
+`STATUS_SECRET` is unset), for the owner: today's and
 yesterday's links and bytes, the allowance and the share of it used, and the day's counts:
 `links:proven`, `links:unproven`, `links:refused_no_proof`, `pass:refused`, `proof:ios:ok`,
 `proof:ios:failed`, `proof:ios:failed:<reason>` (`challenge`, `format`, `chain`, `nonce`, `key`,
@@ -234,8 +236,10 @@ counts only. It is sent after the link's answer has gone, and a failure to send 
 
 For each link, exactly three things: the locked bytes, the expiry, and the SHA-256 of the stop
 token. Nothing else: no address, no device, no account, no time of reading, no count of reads.
-The copy is erased when it is stopped, when it is asked for after its expiry, by the store itself
-at the moment of expiry, and by a clean-up that runs once a day.
+The copy is erased when it is stopped, when it is asked for after its expiry, and by the clean-up
+(`/api/sweep`) that runs once a day (Upstash Redis also erases a key at the moment of expiry; Neon
+Postgres does not erase rows by itself, so an expired copy nobody asks for waits there—never
+served—until that daily clean-up).
 
 Per UTC day it also keeps two totals for everyone together (how many links, how many bytes), to
 enforce the day's budget, and the named counts listed under `GET /api/status`. They carry no
