@@ -111,6 +111,24 @@ test("refuses a precision or entered that is not one of the known ones", async (
   assert.equal(await code(() => readRecord(v2Record({ entered: "yes" }))), "record");
 });
 
+test("current-year and current-month blessings open in January or on the 1st, while future years and months are refused", async () => {
+  const jan10 = new Date("2026-01-10T18:00:00Z");
+  // "Year only: 2026" sits at July 2, 2026 noon local; shared on Jan 10, 2026 it must succeed
+  const year2026 = readRecord(v2Record({ precision: "year", entered: true, given: "2026-07-02T19:00Z", offset: -420 }), jan10);
+  assert.equal(year2026.precision, "year");
+  // future year 2027 is still refused
+  assert.equal(await code(() => readRecord(v2Record({ precision: "year", entered: true, given: "2027-07-02T19:00Z", offset: -420 }), jan10)), "record");
+
+  // "Month & year: Jan 2026" (Jan 15 noon local) shared on Jan 1, 2026 and "Nov 2026" on Nov 1, 2026 succeed
+  const jan1 = new Date("2026-01-01T18:00:00Z");
+  assert.equal(readRecord(v2Record({ precision: "month", entered: true, given: "2026-01-15T19:00Z", offset: -420 }), jan1).precision, "month");
+  const nov1 = new Date("2026-11-01T18:00:00Z");
+  assert.equal(readRecord(v2Record({ precision: "month", entered: true, given: "2026-11-15T19:00Z", offset: -420 }), nov1).precision, "month");
+  // future month Feb 2026 on Jan 10, 2026 is refused; day-precision Jan 15 on Jan 10 is refused
+  assert.equal(await code(() => readRecord(v2Record({ precision: "month", entered: true, given: "2026-02-15T19:00Z", offset: -420 }), jan10)), "record");
+  assert.equal(await code(() => readRecord(v2Record({ precision: "day", entered: true, given: "2026-01-15T19:00Z", offset: -420 }), jan10)), "record");
+});
+
 test("entered words: each line break ends a paragraph; a recording's only a blank line", () => {
   assert.deepEqual(paragraphs("One.\nTwo.\n\nThree.", true), ["One.", "Two.", "Three."]);
   assert.deepEqual(paragraphs("One.\nTwo.\n\nThree."), ["One.\nTwo.", "Three."]);

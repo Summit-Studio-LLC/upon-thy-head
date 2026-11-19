@@ -184,12 +184,19 @@ const children = (body: Uint8Array) => {
 
 /** The value (inside its OCTET STRING) of the extension `oid` (DER bytes), or null. */
 export function extensionOf(certificate: Uint8Array, oid: Uint8Array): Uint8Array | null {
-  const tbs = children(der(certificate, 0).body)[0];
+  const cert = der(certificate, 0);
+  if (cert.tag !== 0x30) return null;
+  const tbs = children(cert.body)[0];
+  if (!tbs || tbs.tag !== 0x30) return null;
   const extensions = children(tbs.body).find((c) => c.tag === 0xa3);
   if (!extensions) return null;
-  for (const ext of children(children(extensions.body)[0]?.body ?? new Uint8Array())) {
+  const extSeq = children(extensions.body)[0];
+  if (!extSeq || extSeq.tag !== 0x30) return null;
+  for (const ext of children(extSeq.body)) {
+    if (ext.tag !== 0x30) continue;
     const parts = children(ext.body);
-    if (parts[0]?.tag === 0x06 && same(parts[0].body, oid)) return parts[parts.length - 1].body;
+    const value = parts[parts.length - 1];
+    if (parts[0]?.tag === 0x06 && same(parts[0].body, oid) && value?.tag === 0x04) return value.body;
   }
   return null;
 }
@@ -198,6 +205,8 @@ export function extensionOf(certificate: Uint8Array, oid: Uint8Array): Uint8Arra
 const NONCE_OID = Uint8Array.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x63, 0x64, 0x08, 0x02]);
 const AAGUID_PRODUCTION = Buffer.concat([Buffer.from("appattest"), Buffer.alloc(7)]);
 const AAGUID_DEVELOPMENT = Buffer.from("appattestdevelop");
+let cachedAppleRoot: X509Certificate | null = null;
+const rootOf = (pem: string) => (pem === APPLE_APP_ATTEST_ROOT ? (cachedAppleRoot ??= new X509Certificate(APPLE_APP_ATTEST_ROOT)) : new X509Certificate(pem));
 
 export type Verdict = { ok: true; what: string } | { ok: false; reason: string };
 
@@ -225,24 +234,24 @@ export function verifyAppAttest(input: {
   const statement = object.get("attStmt"), authData = object.get("authData");
   if (!(statement instanceof Map) || !(authData instanceof Uint8Array)) return fail("format");
   const x5c = statement.get("x5c");
-  if (!Array.isArray(x5c) || x5c.length < 2 || !x5c.every((c) => c instanceof Uint8Array)) return fail("format");
+  if (!Array.isArray(x5c) || x5c.length < 2 || x5c.length > 4 || !x5c.every((c) => c instanceof Uint8Array)) return fail("format");
 
   // 1. The certificates lead to Apple's App Attest root, and each is in date.
-  let leaf: X509Certificate, middle: X509Certificate, root: X509Certificate;
+  let chain: X509Certificate[], root: X509Certificate;
   try {
-    leaf = new X509Certificate(x5c[0] as Uint8Array);
-    middle = new X509Certificate(x5c[1] as Uint8Array);
-    root = new X509Certificate(input.root);
+    chain = (x5c as Uint8Array[]).map((c) => new X509Certificate(c));
+    root = rootOf(input.root);
   } catch {
     return fail("chain");
   }
-  const inDate = (c: X509Certificate) => Date.parse(c.validFrom) <= input.now && input.now <= Date.parse(c.validTo);
-  if (
-    !middle.ca ||
-    !leaf.checkIssued(middle) || !leaf.verify(middle.publicKey) ||
-    !middle.checkIssued(root) || !middle.verify(root.publicKey) ||
-    ![leaf, middle, root].every(inDate)
-  ) return fail("chain");
+  const leaf = chain[0];
+  if (leaf.ca || !root.ca) return fail("chain");
+  for (let i = 0; i < chain.length; i++) {
+    const issuer = i + 1 < chain.length ? chain[i + 1] : root;
+    if (!issuer.ca || !chain[i].checkIssued(issuer) || !chain[i].verify(issuer.publicKey)) return fail("chain");
+  }
+  const inDate = (c: X509Certificate, skewMs = 0) => Date.parse(c.validFrom) <= input.now + skewMs && input.now <= Date.parse(c.validTo);
+  if (!inDate(leaf, 60_000) || !chain.slice(1).every((c) => inDate(c)) || !inDate(root)) return fail("chain");
 
   // 2–4. The nonce in the leaf certificate is SHA-256(authData ‖ SHA-256(challenge)).
   const nonce = sha256(authData, sha256(input.challenge));
@@ -250,7 +259,16 @@ export function verifyAppAttest(input: {
   try {
     const ext = extensionOf(new Uint8Array(leaf.raw), NONCE_OID);
     // SEQUENCE { [1] { OCTET STRING nonce } }
-    if (ext) inCert = der(der(der(ext, 0).body, 0).body, 0).body;
+    if (ext) {
+      const seq = der(ext, 0);
+      if (seq.tag === 0x30 && seq.end === ext.length) {
+        const tagged = children(seq.body).find((c) => c.tag === 0xa1);
+        if (tagged) {
+          const inner = der(tagged.body, 0);
+          if (inner.tag === 0x04 && inner.end === tagged.body.length) inCert = inner.body;
+        }
+      }
+    }
   } catch {}
   if (!inCert || !same(inCert, nonce)) return fail("nonce");
 
@@ -262,7 +280,7 @@ export function verifyAppAttest(input: {
   if (!same(keyId, given)) return fail("key");
 
   // authData: rpIdHash(32) flags(1) counter(4) aaguid(16) credentialIdLength(2) credentialId …
-  if (authData.length < 55) return fail("format");
+  if (authData.length < 55 || (authData[32] & 0x40) === 0) return fail("format");
   // 6. The app id hash is this app's.
   if (!same(authData.subarray(0, 32), sha256(input.appId ?? PROOF.appleAppId))) return fail("app");
   // 7. The counter is zero.
@@ -314,6 +332,7 @@ export class PlayDecoder {
   private account: ServiceAccount;
   private fetcher: typeof fetch;
   private access: { token: string; until: number } | null = null;
+  private inFlight: Promise<string> | null = null;
 
   constructor(account: ServiceAccount, fetcher: typeof fetch = fetch) {
     this.account = account;
@@ -332,8 +351,15 @@ export class PlayDecoder {
     return null;
   }
 
-  private async accessToken(now: number): Promise<string> {
-    if (this.access && this.access.until > now) return this.access.token;
+  private accessToken(now: number): Promise<string> {
+    if (this.access && this.access.until > now) return Promise.resolve(this.access.token);
+    this.inFlight ??= this.fetchAccessToken(now).finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  private async fetchAccessToken(now: number): Promise<string> {
     const iat = Math.floor(now / 1000);
     const aud = this.account.token_uri ?? "https://oauth2.googleapis.com/token";
     const part = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -351,17 +377,26 @@ export class PlayDecoder {
     return j.access_token;
   }
 
-  /** The decoded verdict (tokenPayloadExternal), or null if Google would not decode it. */
-  async decode(token: string, now: number): Promise<unknown | null> {
-    const access = await this.accessToken(now);
-    const response = await this.fetcher(`https://playintegrity.googleapis.com/v1/${PROOF.androidPackage}:decodeIntegrityToken`, {
+  private callDecode(access: string, token: string) {
+    return this.fetcher(`https://playintegrity.googleapis.com/v1/${PROOF.androidPackage}:decodeIntegrityToken`, {
       method: "POST",
       headers: { authorization: `Bearer ${access}`, "content-type": "application/json" },
       body: JSON.stringify({ integrity_token: token }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!response.ok) return null;
+  }
+
+  /** The decoded verdict (tokenPayloadExternal), or null if Google refused the token itself. */
+  async decode(token: string, now: number): Promise<unknown | null> {
+    let response = await this.callDecode(await this.accessToken(now), token);
+    if (response.status === 401) {
+      this.access = null;
+      response = await this.callDecode(await this.accessToken(now), token);
+    }
+    if (response.status === 400) return null;
+    if (!response.ok) throw new Error(`google play integrity answered ${response.status}`);
     const j = (await response.json().catch(() => null)) as { tokenPayloadExternal?: unknown } | null;
-    return j?.tokenPayloadExternal ?? null;
+    if (!j) throw new Error("google play integrity sent unreadable json");
+    return j.tokenPayloadExternal ?? null;
   }
 }

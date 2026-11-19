@@ -1,7 +1,7 @@
 // What the route handlers share: the service's dependencies, the headers every answer carries,
 // and how a request's sender is counted without being remembered.
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { resendAlert } from "../../../lib/links/alerts.ts";
 import { APPLE_APP_ATTEST_ROOT, PlayDecoder } from "../../../lib/links/proof.ts";
 import { type Answer, type Deps, type Proof, Limiter, LIMITS } from "../../../lib/links/service.ts";
@@ -95,22 +95,36 @@ export function respond(answer: Answer): Response {
   return new Response(JSON.stringify(answer.json), { status: answer.status, headers });
 }
 
+export const hasType = (header: string | null, wanted: string) => (header ?? "").split(";")[0].trim().toLowerCase() === wanted;
+
+/** Constant-length check for "Authorization: Bearer <secret>" (never leaks the secret's length). */
+export function bearerMatches(header: string | null, secret: string): boolean {
+  if (!secret.trim()) return false;
+  const given = createHash("sha256").update(header ?? "").digest();
+  const wanted = createHash("sha256").update(`Bearer ${secret}`).digest();
+  return timingSafeEqual(given, wanted);
+}
+
 /** The body, read no further than one byte past the cap. */
-export async function bodyOf(request: Request, cap: number = LIMITS.maxBytes): Promise<Uint8Array | "too_big"> {
+export async function bodyOf(request: Request, cap: number = LIMITS.maxBytes): Promise<Uint8Array | "too_big" | "bad_stream"> {
   if (Number(request.headers.get("content-length") ?? 0) > cap) return "too_big";
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.length;
-    if (size > cap) {
-      await reader.cancel();
-      return "too_big";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > cap) {
+        await reader.cancel().catch(() => {});
+        return "too_big";
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    return "bad_stream";
   }
   const out = new Uint8Array(size);
   let at = 0;
