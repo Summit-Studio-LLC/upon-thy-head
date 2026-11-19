@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../not_yet.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -201,7 +202,12 @@ class PhoneCheckPageState extends State<PhoneCheckPage> implements CheckHost {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Phone check', key: const Key('check-title'), style: serif(34, 38, pal.ink, tracking: -.012)),
               const SizedBox(height: 10),
-              Text('Checks what only a real iPhone can answer. This page is only in test builds.', style: hint),
+              Text(
+                Phone.android
+                    ? 'Checks what only a real phone can answer. This page is only in test builds.'
+                    : 'Checks what only a real iPhone can answer. This page is only in test builds.',
+                style: hint,
+              ),
               const SizedBox(height: 24),
               hairline(),
               for (final r in _rows) ...[

@@ -1,6 +1,7 @@
 package dev.summitstudio.uponthyhead
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -25,17 +26,24 @@ import java.util.concurrent.Executors
  *  - `release`: let go of the model and the decoded audio (the queue is empty)
  * Events (Android → Dart): `model` {the describe map}, as the download moves.
  */
-class WordsChannel(private val context: Context) : MethodChannel.MethodCallHandler {
+class WordsChannel private constructor(private val context: Context) : MethodChannel.MethodCallHandler {
     companion object {
         private const val TAG = "words"
         var channel: MethodChannel? = null
+        @Volatile private var current: WordsChannel? = null
+
+        @Synchronized
+        fun get(context: Context): WordsChannel =
+            current ?: WordsChannel(context.applicationContext).also { current = it }
     }
 
     private val main = Handler(Looper.getMainLooper())
     private val work = Executors.newSingleThreadExecutor { r -> Thread(r, "words") }
+    private val control = Executors.newSingleThreadExecutor { r -> Thread(r, "words-control") }
     private val models = ModelStore(context) { d -> channel?.invokeMethod("model", d) }
     @Volatile private var spec: ModelStore.Spec? = null
     private val engine: SpeechEngine = WhisperEngine(context) { spec?.let { models.ready(it) } }
+    private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     private fun specOf(call: MethodCall): ModelStore.Spec? {
         val m = call.argument<Map<String, Any?>>("model") ?: return null
@@ -48,11 +56,12 @@ class WordsChannel(private val context: Context) : MethodChannel.MethodCallHandl
         when (call.method) {
             "model" -> if (s == null) result.error("args", "model", null) else result.success(models.describe(s))
             "download" -> if (s == null) result.error("args", "model", null) else { models.download(s); result.success(models.describe(s)) }
-            "cancel" -> if (s == null) result.error("args", "model", null) else work.execute {
+            "cancel" -> if (s == null) result.error("args", "model", null) else control.execute {
                 models.cancel(s)
                 main.post { result.success(models.describe(s)) }
             }
-            "remove" -> if (s == null) result.error("args", "model", null) else work.execute {
+            "remove" -> if (s == null) result.error("args", "model", null) else control.execute {
+                if (WhisperNative.problem == null) WhisperNative.abort(true)
                 engine.release()
                 models.remove(s)
                 main.post { result.success(models.describe(s)) }
@@ -62,11 +71,20 @@ class WordsChannel(private val context: Context) : MethodChannel.MethodCallHandl
                 val language = call.argument<String>("language") ?: "en"
                 engine.cannot(language)?.let { return result.error(it, "cannot write $language now", null) }
                 work.execute {
+                    engine.cannot(language)?.let { code ->
+                        main.post { result.error(code, "cannot write $language now", null) }
+                        return@execute
+                    }
                     val r = runCatching { engine.prepare(File(path)) }
                     main.post {
                         r.fold(
                             { p -> result.success(mapOf("seconds" to p.seconds, "stretches" to p.stretches.map { it.toDouble() })) },
-                            { e -> Log.e(TAG, "prepare: $e"); result.error("failed", e.toString(), null) },
+                            { e ->
+                                val code = engine.cannot(language)
+                                    ?: if (e.message == "later" || e.message == "unavailable") e.message!! else "failed"
+                                if (code == "failed") Log.e(TAG, "prepare: ${e.javaClass.simpleName}")
+                                result.error(code, e.toString(), null)
+                            },
                         )
                     }
                 }
@@ -85,7 +103,12 @@ class WordsChannel(private val context: Context) : MethodChannel.MethodCallHandl
                         Thread.sleep(250)
                         waited += 250
                     }
-                    if (waited > 0) Log.i(TAG, "waited ${waited} ms for a recording to end")
+                    if (waited > 0 && debuggable) Log.i(TAG, "waited ${waited} ms for a recording to end")
+                    engine.cannot(language)?.let { code ->
+                        main.post { result.error(code, "cannot write $language now", null) }
+                        return@execute
+                    }
+                    if (WhisperNative.problem == null) WhisperNative.abort(false)
                     val r = runCatching {
                         val p = engine.prepare(File(path))
                         engine.piece(p, start, end, language, temperature)
@@ -93,7 +116,12 @@ class WordsChannel(private val context: Context) : MethodChannel.MethodCallHandl
                     main.post {
                         r.fold(
                             { p -> result.success(mapOf("text" to p.text, "noSpeech" to p.noSpeech.toDouble(), "ms" to p.ms)) },
-                            { e -> Log.e(TAG, "piece: $e"); result.error("failed", e.toString(), null) },
+                            { e ->
+                                val code = engine.cannot(language)
+                                    ?: if (e.message == "later" || e.message == "unavailable") e.message!! else "failed"
+                                if (code == "failed") Log.e(TAG, "piece: ${e.javaClass.simpleName}")
+                                result.error(code, e.toString(), null)
+                            },
                         )
                     }
                 }

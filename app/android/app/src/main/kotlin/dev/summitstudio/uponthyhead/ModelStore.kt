@@ -14,6 +14,8 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The speech model, downloaded only after the person taps Download (docs/android-plan.md 3.5).
@@ -45,6 +47,7 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
     @Volatile private var thread: Thread? = null
+    @Volatile private var activeConn: HttpURLConnection? = null
     @Volatile private var stopping = false
     @Volatile private var state = "absent"
     @Volatile private var problem: String? = null
@@ -126,6 +129,7 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
     @Synchronized
     fun cancel(spec: Spec) {
         stopping = true
+        runCatching { activeConn?.disconnect() }
         thread?.interrupt()
         prefs.edit().clear().apply()
         thread?.join(3000)
@@ -146,10 +150,12 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
 
     private fun run(spec: Spec) {
         var wait = 2000L
+        var restarts = 0
         try {
             while (!stopping) {
                 try {
                     if (fetch(spec)) break
+                    if (++restarts > 3) throw ServerException("range restart loop")
                     wait = 2000L
                 } catch (e: RoomException) {
                     problem = "room"
@@ -184,15 +190,15 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
 
     /** Sleeps until a network with the internet is there (at most [ms], then tries anyway). */
     private fun waitForNetwork(ms: Long) {
-        val lock = Object()
+        val latch = CountDownLatch(1)
         val cb = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = synchronized(lock) { lock.notifyAll() }
+            override fun onAvailable(network: Network) = latch.countDown()
         }
-        runCatching { connectivity.registerDefaultNetworkCallback(cb) }
+        val registered = runCatching { connectivity.registerDefaultNetworkCallback(cb); true }.getOrDefault(false)
         try {
-            synchronized(lock) { lock.wait(ms) }
+            latch.await(ms, TimeUnit.MILLISECONDS)
         } finally {
-            runCatching { connectivity.unregisterNetworkCallback(cb) }
+            if (registered) runCatching { connectivity.unregisterNetworkCallback(cb) }
         }
     }
 
@@ -210,6 +216,7 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
             val free = freeBytes()
             if (free < needed) throw RoomException("$free free, $needed needed")
             val c = URL(spec.url).openConnection() as HttpURLConnection
+            activeConn = c
             c.connectTimeout = 15_000
             c.readTimeout = 20_000
             c.instanceFollowRedirects = true
@@ -218,6 +225,18 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
             try {
                 val code = c.responseCode
                 Log.i(TAG, "GET ${c.url.host} → $code from byte $have")
+                if (code == 416 && part.length() < spec.bytes) {
+                    part.delete()
+                    return false
+                }
+                if (code == 206 && have > 0) {
+                    val cr = c.getHeaderField("Content-Range")?.trim().orEmpty()
+                    if (!cr.startsWith("bytes $have-", ignoreCase = true)) {
+                        Log.w(TAG, "unexpected Content-Range '$cr' for offset $have; restarting")
+                        part.delete()
+                        return false
+                    }
+                }
                 val append = when {
                     code == 206 && have > 0 -> true
                     code == 200 -> { have = 0; false } // the server would not resume: start again
@@ -243,6 +262,7 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
                     }
                 }
             } finally {
+                if (activeConn === c) activeConn = null
                 c.disconnect()
             }
             if (part.length() < spec.bytes) throw IOException("ended at ${part.length()} of ${spec.bytes}")
@@ -250,10 +270,11 @@ class ModelStore(private val context: Context, private val changed: (Map<String,
         state = "checking"
         send(spec, true)
         val sha = sha256(part)
-        if (part.length() != spec.bytes || !sha.equals(spec.sha256, ignoreCase = true)) {
+        val actualLen = part.length()
+        if (actualLen != spec.bytes || !sha.equals(spec.sha256, ignoreCase = true)) {
             part.delete()
             prefs.edit().clear().apply()
-            throw ChecksumException("${part.length()} bytes, SHA-256 $sha; expected ${spec.bytes}, ${spec.sha256}")
+            throw ChecksumException("$actualLen bytes, SHA-256 $sha; expected ${spec.bytes}, ${spec.sha256}")
         }
         if (!part.renameTo(file(spec))) throw IOException("could not put the model in place")
         prefs.edit().clear().apply()

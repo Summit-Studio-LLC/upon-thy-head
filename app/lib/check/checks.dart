@@ -15,9 +15,12 @@ import '../data/audio.dart';
 import '../data/blessing.dart';
 import '../data/samples.dart';
 import '../data/store.dart';
+import '../not_yet.dart';
 import '../place/where.dart';
+import '../record/android_words.dart';
 import '../record/speech.dart';
 import '../record/transcriber.dart';
+import '../record/words_model.dart';
 import '../sky/placement.dart';
 import '../sky/sky_engine.dart';
 import '../sky/sky_painter.dart';
@@ -107,6 +110,7 @@ String _gb(num bytes) => bytes < 0 ? 'unknown' : '${(bytes / 1e9).toStringAsFixe
 
 Future<CheckOutcome> _thisPhone() async {
   final d = (await _check.invokeMethod<Map<Object?, Object?>>('device'))!;
+  if (Phone.android) return _thisPhoneAndroid(d);
   final sim = d['simulated'] as String;
   final id = sim.isNotEmpty ? sim : d['machine'] as String;
   final name = _models[id];
@@ -163,6 +167,7 @@ String _recognizerWords(String? s) => switch (s) {
 String _engineName(String e) => e == 'analyzer' ? 'Apple\'s new engine' : 'the older recogniser';
 
 Future<CheckOutcome> _engines() async {
+  if (Phone.android) return _enginesAndroid();
   final e = await _Engines.read();
   final lines = <String>[
     if (!e.present) 'Apple\'s new engine: not on this version of iOS (it needs iOS 26).'
@@ -233,6 +238,7 @@ Future<String> _write(String lang, String path, String engine) async {
 }
 
 Future<CheckOutcome> _recordings() async {
+  if (Phone.android) return _recordingsAndroid();
   final e = await _Engines.read();
   final audio = await _audio();
   final speech = await _check.invokeMethod<String>('speechAuth');
@@ -284,6 +290,7 @@ String _permWords(String s) => switch (s) {
     };
 
 Future<CheckOutcome> _permissions() async {
+  if (Phone.android) return _permissionsAndroid();
   final perms = await NativeSpeech.instance.permissions();
   final speech = (await _check.invokeMethod<String>('speechAuth'))!;
   final location = await NativeLocator().status();
@@ -341,7 +348,13 @@ Future<String> _tmp(String name) async {
 
 Future<CheckOutcome> _microphone() async {
   final mic = await _check.invokeMethod<String>('askMicrophone');
-  if (mic != 'granted') return CheckOutcome(['The microphone is refused, so nothing could be recorded. Allow it in iPhone Settings > Apps > Upon Thy Head.']);
+  if (mic != 'granted') {
+    return CheckOutcome([
+      Phone.android
+          ? 'The microphone is refused, so nothing could be recorded. Allow it in Settings > Apps > Upon Thy Head.'
+          : 'The microphone is refused, so nothing could be recorded. Allow it in iPhone Settings > Apps > Upon Thy Head.',
+    ]);
+  }
   final path = await _tmp('microphone.m4a');
   final rec = NativeSpeech.instance;
   await rec.start(path);
@@ -490,6 +503,15 @@ Future<String> _measure(CheckHost host, SkyAssets assets, List<Blessing> list, S
 
 Future<CheckOutcome> _lockMethod() async {
   final m = await _lock.invokeMethod<String>('method');
+  if (Phone.android) {
+    return CheckOutcome([
+      switch (m) {
+        'fingerprint' => 'The phone unlocks with a fingerprint or screen lock. The app lock will ask for either.',
+        'passcode' => 'The phone unlocks with a screen lock (a PIN, pattern or password). The app lock will ask for it.',
+        _ => 'The phone has no screen lock, so the app cannot lock. Settings says to set one.',
+      },
+    ]);
+  }
   return CheckOutcome([
     switch (m) {
       'faceID' => 'The phone unlocks with Face ID, and the passcode when Face ID fails. The app lock will ask for Face ID.',
@@ -532,6 +554,7 @@ Future<CheckOutcome> _location() async {
 // ---- 10. storage ----
 
 Future<CheckOutcome> _storage() async {
+  if (Phone.android) return _storageAndroid();
   final dir = await defaultAudioDir();
   final excluded = await _check.invokeMethod<bool>('backupExcluded', {'path': dir});
   final path = await SqliteBlessingStore.defaultPath();
@@ -540,6 +563,147 @@ Future<CheckOutcome> _storage() async {
       true => 'The audio folder is marked as excluded from iCloud and computer backups.',
       false => 'The audio folder is NOT marked as excluded from backups.',
       _ => 'The audio folder does not exist yet (nothing has been recorded into it), so its backup setting could not be read.',
+    },
+  ];
+  if (!File(path).existsSync()) {
+    lines.add('The blessings file does not exist yet.');
+  } else {
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    try {
+      final v = db.userVersion;
+      final n = db.select('SELECT count(*) AS n FROM blessings').first['n'];
+      lines.add('The blessings file is at schema version $v${v == SqliteBlessingStore.schemaVersion ? ', the version this build writes' : '; this build writes ${SqliteBlessingStore.schemaVersion}'}. It holds $n blessing${n == 1 ? '' : 's'}.');
+    } finally {
+      db.close();
+    }
+  }
+  return CheckOutcome(lines);
+}
+
+// ---- Android: the same ten checks, against this phone's own pieces ----
+
+Future<CheckOutcome> _thisPhoneAndroid(Map<Object?, Object?> d) async {
+  final sim = d['simulated'] as String? ?? '';
+  final renderer = ui.ImageFilter.isShaderFilterSupported ? 'Impeller' : 'Skia';
+  return CheckOutcome([
+    if (sim.isNotEmpty)
+      'This is an emulator ("${d['simulatorName']}", ${d['name']}), not a real phone.'
+    else
+      'Phone: ${d['machine']}.',
+    'Software: ${d['system']}. Processor: ${d['abi']}. Speech library: ${d['whisperLib']}.',
+    'Build: $buildMode${kDebugMode ? ' (slow on purpose; speeds below are not real)' : ''}. Drawing with $renderer.',
+    'Screen: up to ${d['fps']} frames a second.',
+    'Storage: ${_gb(d['free'] as num)} free of ${_gb(d['total'] as num)}. Memory: ${_gb(d['memory'] as num)}.',
+  ]);
+}
+
+Future<CheckOutcome> _enginesAndroid() async {
+  final s = await WordsModel.instance.refresh();
+  final lines = <String>[
+    'Writing the words uses Whisper on this phone (whisper.cpp), for English and Spanish. Nothing is sent away.',
+    switch (s.state) {
+      ModelState.ready => 'The 60 MB speech model (ggml-base-q5_1) is on the phone and checked.',
+      ModelState.downloading => 'The 60 MB speech model is downloading (${(s.fraction * 100).round()}%).',
+      ModelState.waiting => 'The 60 MB speech model is waiting for a connection.',
+      ModelState.checking => 'The 60 MB speech model arrived and is being checked.',
+      ModelState.failed => 'The 60 MB speech model stopped (${s.problem.name}).',
+      _ => 'The 60 MB speech model is not on the phone yet.',
+    },
+  ];
+  return CheckOutcome(lines, [if (!s.ready) _downloadModel()]);
+}
+
+CheckAction _downloadModel() => CheckAction('Download the 60 MB speech model', (say) async {
+      await WordsModel.instance.download();
+      final end = DateTime.now().add(const Duration(minutes: 15));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        final now = WordsModel.instance.status;
+        if (now.ready) return say('Downloaded.');
+        if (now.state == ModelState.failed) return say('The download failed: ${now.problem.name}');
+        if (now.state == ModelState.waiting) {
+          say('Waiting for a connection.');
+        } else {
+          say('Downloading: ${(now.fraction * 100).round()}%');
+        }
+      }
+      say('Still not finished after 15 minutes; stopped watching.');
+    }, rerun: [2, 3]);
+
+Future<String> _writeWhisper(String lang, String path) async {
+  final said = lang == 'en' ? spokenEnglish : spokenSpanish;
+  final label = '${_langName[lang]}, Whisper';
+  final sw = Stopwatch()..start();
+  try {
+    final t = await AndroidWords.instance.transcribe(path, SpeechLanguage.fromCode(lang)).timeout(const Duration(minutes: 4));
+    if (t.later) return '$label: the speech model is not on the phone yet, so this was not written.';
+    if (t.unavailable) return '$label: this phone cannot write ${_langName[lang]}.';
+    final info = await _check.invokeMethod<Map<Object?, Object?>>('inspect', {'path': path});
+    final secs = (info?['seconds'] as num?)?.toDouble() ?? 0;
+    final w = wordErrors(said, t.text);
+    final paras = t.text.split(RegExp(r'\n\s*\n')).where((s) => s.trim().isNotEmpty).length;
+    final um = lang == 'en' ? (words(t.text).contains('um') ? '"um" kept' : '"um" dropped') : 'no "um" in this recording';
+    return '$label: ${w.errors} words wrong out of ${w.spoken}; '
+        '${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s to write ${secs.toStringAsFixed(1)} s of audio; '
+        '$paras paragraph${paras == 1 ? '' : 's'}; $um. It wrote: "${_first(t.text, 200)}"';
+  } on TimeoutException {
+    return '$label: no answer after 4 minutes; stopped waiting.';
+  } catch (e) {
+    return '$label: failed: $e';
+  }
+}
+
+Future<CheckOutcome> _recordingsAndroid() async {
+  final s = await WordsModel.instance.refresh();
+  if (!s.ready) {
+    return CheckOutcome(
+      ['The speech model is not on the phone yet, so the prepared recordings were not written.'],
+      [_downloadModel()],
+    );
+  }
+  AndroidWords.useAudioFolder(await defaultAudioDir());
+  final audio = await _audio();
+  final lines = <String>[];
+  for (final lang in _locales.keys) {
+    lines.add(await _writeWhisper(lang, audio[lang]!));
+  }
+  return CheckOutcome(lines);
+}
+
+Future<CheckOutcome> _permissionsAndroid() async {
+  final perms = await NativeSpeech.instance.permissions();
+  final raw = await const MethodChannel('upon_thy_head/speech').invokeMethod<Map<Object?, Object?>>('permissions');
+  final notes = raw?['notifications'] as String? ?? 'undetermined';
+  final location = await NativeLocator().status();
+  String w(Permission x) => switch (x) { Permission.granted => 'allowed', Permission.denied => 'refused', _ => 'not asked yet' };
+  final lines = [
+    'Microphone: ${w(perms.microphone)}.',
+    'Notifications: ${_permWords(notes)}.',
+    'Approximate location: ${_permWords(location.name)}.',
+  ];
+  final actions = <CheckAction>[];
+  if (perms.microphone == Permission.undetermined || notes == 'undetermined') {
+    actions.add(CheckAction('Ask for the microphone and notifications', (say) async {
+      final p = await NativeSpeech.instance.requestPermissions();
+      final again = await const MethodChannel('upon_thy_head/speech').invokeMethod<Map<Object?, Object?>>('permissions');
+      say('Microphone ${w(p.microphone)}, notifications ${_permWords(again?['notifications'] as String? ?? 'undetermined')}.');
+    }, rerun: [4, 5, 6]));
+  }
+  return CheckOutcome(lines, actions);
+}
+
+Future<CheckOutcome> _storageAndroid() async {
+  final dir = await defaultAudioDir();
+  final excluded = await _check.invokeMethod<bool>('backupExcluded', {'path': dir});
+  final path = await SqliteBlessingStore.defaultPath();
+  // Recordings live in the app's files folder. allowBackup is off for the whole app, and the
+  // backup rules exclude everything; the no-backup folder is the second guard (models, the
+  // silence finder). The channel's true means this path is inside that folder.
+  final lines = <String>[
+    switch (excluded) {
+      true => 'The audio folder is inside the no-backup folder, and the app allows no backup.',
+      false => 'The audio folder is not inside the no-backup folder. The app allows no backup (allowBackup is off, and the backup rules exclude everything), so recordings are not copied off the phone.',
+      _ => 'The audio folder\'s backup setting could not be read.',
     },
   ];
   if (!File(path).existsSync()) {

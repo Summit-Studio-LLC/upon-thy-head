@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
@@ -35,10 +36,10 @@ import java.util.concurrent.Executors
  *    `seconds` {path}: as on iPhone (SegmentRecorder, Adts)
  *  - `engine` → null, `describe`: the words are written through `upon_thy_head/words` (WordsChannel)
  *  - `transcribe`: not used on Android; see below
- *  - `debugInterrupt` {began}, `debugFeed` {path}: tests only, as on iPhone
+ *  - `debugInterrupt` {began}, `debugFeed` {path}, `debugLevel` {db}: tests only, as on iPhone
  *  - `debugState` → {"recording", "service"}: tests only
  * Events (Android → Dart): `paused` {bool}, while the system has the microphone (a call, ringing,
- * another app).
+ * another app); `level` {double}, microphone loudness in dBFS while listening on screen.
  */
 class SpeechChannel(private val activity: () -> Activity?, private val context: Context) : MethodChannel.MethodCallHandler {
     companion object {
@@ -47,31 +48,37 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
         private const val ASK_NOTIFICATIONS = 7102
 
         /** One recorder for the process: it outlives the screen (the service keeps it running). */
-        var recorder: SegmentRecorder? = null
+        @Volatile var recorder: SegmentRecorder? = null
             private set
 
+        @Synchronized
         fun recorder(context: Context): SegmentRecorder =
             recorder ?: SegmentRecorder(context.applicationContext).also { recorder = it }
 
         /** The channel of the engine now showing, for the `paused` event. */
         var channel: MethodChannel? = null
 
-        private val waiting = HashMap<Int, () -> Unit>()
+        private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "speech-io") }
+        private val waiting = HashMap<Int, (Boolean) -> Unit>()
 
         /** From MainActivity.onRequestPermissionsResult. */
-        fun answered(code: Int) {
-            waiting.remove(code)?.invoke()
+        fun answered(code: Int, permissions: Array<out String>) {
+            waiting.remove(code)?.invoke(permissions.isNotEmpty())
         }
     }
 
     private val main = Handler(Looper.getMainLooper())
-    private val io = Executors.newSingleThreadExecutor()
     private val prefs = context.getSharedPreferences("permissions", Context.MODE_PRIVATE)
+    private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     init {
-        recorder(context).onPaused = { paused ->
+        val r = recorder(context)
+        r.onPaused = { paused ->
             channel?.invokeMethod("paused", paused)
             RecordingService.refresh(context, paused)
+        }
+        r.onLevel = { db ->
+            channel?.invokeMethod("level", db)
         }
     }
 
@@ -104,11 +111,23 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
     private fun ask(p: String, code: Int, done: () -> Unit) {
         val a = activity()
         if (a == null || !canAsk(p)) return done()
-        prefs.edit().putBoolean(p, true).apply()
-        waiting.remove(code)?.invoke()
-        waiting[code] = done
-        LockChannel.prompting = true
-        a.requestPermissions(arrayOf(p), code)
+        val existing = waiting[code]
+        if (existing != null) {
+            waiting[code] = { answered -> existing(answered); done() }
+            return
+        }
+        waiting[code] = { answered ->
+            if (answered) prefs.edit().putBoolean(p, true).apply()
+            done()
+        }
+        LockChannel.promptStart("perm:$code")
+        try {
+            a.requestPermissions(arrayOf(p), code)
+        } catch (_: Exception) {
+            waiting.remove(code)
+            LockChannel.promptEnd("perm:$code", a)
+            done()
+        }
     }
 
     private fun askMicrophone(done: () -> Unit) = ask(Manifest.permission.RECORD_AUDIO, ASK_MICROPHONE, done)
@@ -155,7 +174,8 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
                     RecordingService.start(context)
                     result.success(null)
                 } catch (e: Exception) {
-                    Log.e(TAG, "recording: could not start: $e")
+                    Log.e(TAG, "recording: could not start: ${e.javaClass.simpleName}")
+                    runCatching { rec.cancel() }
                     RecordingService.stop(context)
                     result.error("record", e.toString(), null)
                 }
@@ -163,10 +183,7 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
             "stop" -> rec.stop { r ->
                 RecordingService.stop(context)
                 r.fold(
-                    { f ->
-                        Log.i(TAG, "recording: joined ${f.name}, ${"%.2f".format(Adts.seconds(f))} s")
-                        result.success(f.path)
-                    },
+                    { f -> result.success(f.path) },
                     { e -> result.error("record", e.toString(), null) },
                 )
             }
@@ -197,6 +214,10 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
             "transcribe" -> transcribe(path, call.argument<String>("language") ?: "en", result)
             "debugInterrupt" -> {
                 rec.debugInterrupt(call.argument<Boolean>("began") ?: true)
+                result.success(null)
+            }
+            "debugLevel" -> {
+                channel?.invokeMethod("level", call.argument<Double>("db") ?: -160.0)
                 result.success(null)
             }
             "debugFeed" -> {
@@ -235,11 +256,12 @@ class SpeechChannel(private val activity: () -> Activity?, private val context: 
             target.delete()
             return null
         }
-        target.delete()
         Adts.join(heard, target)
         parts.forEach { it.delete() }
         val s = Adts.seconds(target)
-        Log.i(TAG, "recovery: joined ${heard.size} part(s) into ${target.name}, ${"%.2f".format(s)} s")
+        if (debuggable) {
+            Log.i(TAG, "recovery: joined ${heard.size} part(s) into ${target.name}, ${"%.2f".format(s)} s")
+        }
         return target to s
     }
 }

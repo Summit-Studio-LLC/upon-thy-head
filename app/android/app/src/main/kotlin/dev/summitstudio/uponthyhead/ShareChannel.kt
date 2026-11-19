@@ -50,7 +50,7 @@ import kotlin.math.min
  *
  * Android's share sheet is another activity. It is started for a result, so the app hears when it
  * closes and can close it itself ([dismiss]); while it is up, losing focus to it is not leaving the
- * app ([LockChannel.prompting]), as on iPhone, where the sheet is part of the app. Files made for a
+ * app ([LockChannel.isPrompting]), as on iPhone, where the sheet is part of the app. Files made for a
  * share stay until the next share or the next launch: the app that received one may read it later
  * (Gmail reads an attachment when the mail is sent), so they are not removed when the sheet closes.
  */
@@ -63,8 +63,10 @@ object ShareChannel {
     const val MAX_BYTES = 512 * 1024
 
     var channel: MethodChannel? = null
+    private var appContext: Context? = null
     private var answer: MethodChannel.Result? = null
-    private var chosen = false
+    private var shareId = 0
+    @Volatile private var chosenId = 0
     private var showing = false
     private var lastItems: List<Map<String, Any?>> = emptyList()
 
@@ -123,7 +125,8 @@ object ShareChannel {
                 }
                 "dismiss" -> {
                     activity()?.finishActivity(REQUEST)
-                    closed()
+                    closed(context)
+                    clean(context)
                     result.success(null)
                 }
                 "clean" -> {
@@ -132,7 +135,7 @@ object ShareChannel {
                 }
                 "debugShowing" -> result.success(showing)
                 "debugPaper" -> result.success(if (SharedPdf.usesLetter()) "letter" else "a4")
-                "debugItems" -> result.success(lastItems)
+                "debugItems" -> result.success(if (debuggable(context)) lastItems else emptyList<Map<String, Any?>>())
                 "debugReceivedLeft" -> result.success(
                     context.filesDir.parentFile?.walkTopDown()?.filter { it.isFile && it.name.endsWith(".blessing", true) }
                         ?.map { it.path }?.toList() ?: emptyList<String>(),
@@ -148,8 +151,39 @@ object ShareChannel {
 
     private fun debuggable(c: Context) = (c.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-    /** A name with no folder in it. */
-    private fun safeName(n: String?, fallback: String) = n?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: fallback
+    /** A clean file name: no path separators or control characters, UTF-8 length <= 200 bytes, extension preserved. */
+    private fun safeName(n: String?, fallback: String): String {
+        val raw = n?.filter { it != '/' && it != '\\' && it.code >= 0x20 && it.code != 0x7F }?.trim()
+            ?: return fallback
+        if (raw.isEmpty() || raw == "." || raw == "..") return fallback
+        val fallbackExt = "." + fallback.substringAfterLast('.')
+        val (stem, ext) = when {
+            raw.endsWith(fallbackExt, ignoreCase = true) ->
+                raw.substring(0, raw.length - fallbackExt.length) to fallbackExt
+            raw.endsWith(".pdf", ignoreCase = true) ->
+                raw.substring(0, raw.length - 4) to ".pdf"
+            raw.endsWith(".blessing", ignoreCase = true) ->
+                raw.substring(0, raw.length - 9) to ".blessing"
+            else -> raw to fallbackExt
+        }
+        val cleanStem = stem.trim()
+        if (cleanStem.isEmpty() || cleanStem.all { it == '.' }) return fallback
+        val maxStemBytes = 200 - ext.toByteArray(Charsets.UTF_8).size
+        if (cleanStem.toByteArray(Charsets.UTF_8).size <= maxStemBytes) return cleanStem + ext
+        val sb = StringBuilder()
+        var used = 0
+        val it = cleanStem.codePoints().iterator()
+        while (it.hasNext()) {
+            val cp = it.nextInt()
+            val ch = String(Character.toChars(cp))
+            val b = ch.toByteArray(Charsets.UTF_8).size
+            if (used + b > maxStemBytes) break
+            sb.append(ch)
+            used += b
+        }
+        val cut = sb.toString().trimEnd('.', ' ')
+        return if (cut.isEmpty()) fallback else cut + ext
+    }
 
     private fun plain(text: String, title: String) = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
@@ -173,19 +207,32 @@ object ShareChannel {
     private fun send(a: Activity?, result: MethodChannel.Result, i: Intent, item: Map<String, Any?>) {
         if (a == null) return result.error("share", "no window", null)
         close()
-        lastItems = listOf(item)
-        // what Android's share sheet is handed: the type and, for a file, its content address; never
-        // the text (a link holds its key); debug builds only (a file's address holds its title)
-        if (debuggable(a)) Log.i(TAG, "handed ${i.type}: ${item["kind"]}" + (item["uri"]?.let { ", $it" } ?: "") +
-            (item["length"]?.let { ", $it characters" } ?: ""))
-        chosen = false
-        val back = Intent(CHOSEN).setPackage(a.packageName)
+        val id = ++shareId
+        lastItems = if (debuggable(a)) listOf(item) else emptyList()
+        // what Android's share sheet is handed: the type and, for a file, the provider root without
+        // the blessing's filename; never the text (a link holds its key); debug builds only
+        if (debuggable(a)) {
+            val where = if (item["kind"] == "file") ", content://${BlessingFiles.authority(a)}/share/" else ""
+            val len = item["length"]?.let { ", $it characters" } ?: ""
+            Log.i(TAG, "handed ${i.type}: ${item["kind"]}$where$len")
+        }
+        val back = Intent(CHOSEN).setPackage(a.packageName).putExtra("id", id)
         val pi = PendingIntent.getBroadcast(a, 0, back, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val chooser = Intent.createChooser(i, null, pi.intentSender)
         answer = result
         showing = true
-        LockChannel.prompting = true
-        a.startActivityForResult(chooser, REQUEST)
+        LockChannel.promptStart("share")
+        try {
+            @Suppress("DEPRECATION")
+            a.startActivityForResult(chooser, REQUEST)
+        } catch (e: Exception) {
+            answer = null
+            showing = false
+            LockChannel.promptEnd("share", a)
+            clean(a)
+            Log.w(TAG, "share: ${e.javaClass.simpleName}")
+            result.error("share", e.javaClass.simpleName, null)
+        }
     }
 
     private const val CHOSEN = "dev.summitstudio.uponthyhead.SHARE_CHOSEN"
@@ -193,29 +240,41 @@ object ShareChannel {
     /** A target was picked in the share sheet (Android says which; nothing of it is kept). */
     class Chosen : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            chosen = true
+            chosenId = intent.getIntExtra("id", shareId)
         }
     }
 
     fun register(c: Context) {
-        c.applicationContext.registerReceiver(Chosen(), IntentFilter(CHOSEN), Context.RECEIVER_NOT_EXPORTED)
+        val app = c.applicationContext
+        appContext = app
+        app.registerReceiver(Chosen(), IntentFilter(CHOSEN), Context.RECEIVER_NOT_EXPORTED)
     }
 
     /** MainActivity.onActivityResult: the share sheet has gone. The chosen broadcast may come just
      *  after it, so the answer waits a moment for it. */
-    fun closed() {
-        if (!showing && answer == null) return
-        showing = false
-        LockChannel.prompting = false
+    fun closed(c: Context? = appContext) {
+        val hadShowing = showing
         val a = answer
+        showing = false
         answer = null
-        Handler(Looper.getMainLooper()).postDelayed({ a?.success(chosen) }, 300)
+        LockChannel.promptEnd("share", MainActivity.liveActivity())
+        LockChannel.questionGone(MainActivity.liveActivity())
+        if (!hadShowing && a == null) return
+        val id = shareId
+        val ctx = c?.applicationContext ?: appContext
+        Handler(Looper.getMainLooper()).postDelayed({
+            val wasChosen = chosenId == id
+            a?.success(wasChosen)
+            if (!wasChosen && shareId == id && ctx != null) clean(ctx)
+        }, 300)
     }
 
     /** An earlier sheet's answer, given now (a new one is starting). */
     private fun close() {
         val a = answer
+        showing = false
         answer = null
+        LockChannel.promptEnd("share", MainActivity.liveActivity())
         a?.success(false)
     }
 
@@ -225,27 +284,46 @@ object ShareChannel {
 
     // ---- receiving ----
 
-    /** A blessing link or file this intent carries, read; null when it carries neither. */
+    /** A blessing link or file this intent carries, read; false when it carries neither. */
     fun incoming(a: Activity, i: Intent?, link: String?): Boolean {
         if (link != null) {
             deliver(mapOf("link" to link))
             return true
         }
         if (i == null) return false
-        val uri: Uri = when (i.action) {
-            Intent.ACTION_VIEW -> i.data?.takeIf { it.scheme == "content" || it.scheme == "file" }
-            Intent.ACTION_SEND -> @Suppress("DEPRECATION") (i.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+        val rawUri: Uri? = when (i.action) {
+            Intent.ACTION_VIEW -> i.data
+            Intent.ACTION_SEND -> i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                ?: i.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
             else -> null
-        } ?: return false
+        }
+        val uri = rawUri?.takeIf { it.scheme == "content" && it.authority != BlessingFiles.authority(a) }
+            ?: return false
         val cr = a.contentResolver
-        Thread {
+        // Open synchronously on the Activity thread while the intent's temporary URI grant is active.
+        val name = try {
+            cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: uri.lastPathSegment
+        val stream = try {
+            cr.openInputStream(uri)
+        } catch (e: Exception) {
+            Log.w(TAG, "receive: ${e.javaClass.simpleName}")
+            null
+        }
+        val mime = i.type ?: "none"
+        val debug = debuggable(a)
+        if (stream == null) {
+            if (debug) Log.i(TAG, "receive: a file (unreadable, type $mime)")
+            deliver(mapOf("unreadable" to true))
+            return true
+        }
+        Thread({
             val item: Map<String, Any?> = try {
-                val name = try {
-                    cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
-                } catch (e: Exception) {
-                    null
-                } ?: uri.lastPathSegment
-                cr.openInputStream(uri)?.use { s ->
+                stream.use { s ->
                     val buf = java.io.ByteArrayOutputStream()
                     val chunk = ByteArray(16 * 1024)
                     var over = false
@@ -256,21 +334,23 @@ object ShareChannel {
                         if (buf.size() > MAX_BYTES) { over = true; break }
                     }
                     if (over) mapOf("tooLarge" to true) else mapOf("bytes" to buf.toByteArray(), "name" to name)
-                } ?: mapOf("unreadable" to true)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "receive: ${e.javaClass.simpleName}")
                 mapOf("unreadable" to true)
             }
-            Log.i(TAG, "receive: a file (${if (item.containsKey("bytes")) "read" else item.keys.first()}, type ${i.type ?: "none"})")
+            if (debug) {
+                Log.i(TAG, "receive: a file (${if (item.containsKey("bytes")) "read" else item.keys.first()}, type $mime)")
+            }
             Handler(Looper.getMainLooper()).post { deliver(item) }
-        }.start()
+        }, "share-in").start()
         return true
     }
 
     /** A launcher shortcut opened the app ("record" or "home"): handed to Dart the way a link is,
      *  waiting until it is ready. Only the place: nothing else is in it. */
     fun shortcut(place: String) {
-        Log.i(TAG, "receive: shortcut $place")
+        if (appContext?.let(::debuggable) == true) Log.i(TAG, "receive: shortcut $place")
         deliver(mapOf("shortcut" to place))
     }
 

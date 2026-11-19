@@ -36,14 +36,15 @@ class LocationChannel(private val activity: () -> Activity?, private val context
         const val ASK = 41
         private const val LIMIT_MS = 6000L
         private const val RECENT_MS = 10 * 60 * 1000L
-        private var waiting: (() -> Unit)? = null
+        private val waiting = ArrayList<(Boolean) -> Unit>()
 
         /** From MainActivity.onRequestPermissionsResult. */
-        fun answered(code: Int) {
+        fun answered(code: Int, permissions: Array<out String>) {
             if (code != ASK) return
-            val w = waiting
-            waiting = null
-            w?.invoke()
+            val asked = permissions.isNotEmpty()
+            val all = waiting.toList()
+            waiting.clear()
+            all.forEach { it(asked) }
         }
     }
 
@@ -64,14 +65,23 @@ class LocationChannel(private val activity: () -> Activity?, private val context
             "status" -> result.success(status())
             "request" -> {
                 val a = activity()
-                if (granted() || a == null || waiting != null) return result.success(status())
-                prefs.edit().putBoolean(Manifest.permission.ACCESS_COARSE_LOCATION, true).apply()
-                LockChannel.prompting = true
-                waiting = {
-                    LockChannel.prompting = false
+                if (granted() || a == null) return result.success(status())
+                val first = waiting.isEmpty()
+                waiting.add { asked ->
+                    if (asked) prefs.edit().putBoolean(Manifest.permission.ACCESS_COARSE_LOCATION, true).apply()
                     result.success(status())
                 }
-                a.requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), ASK)
+                if (first) {
+                    LockChannel.promptStart("perm:$ASK")
+                    try {
+                        a.requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), ASK)
+                    } catch (_: Exception) {
+                        val all = waiting.toList()
+                        waiting.clear()
+                        LockChannel.promptEnd("perm:$ASK", a)
+                        all.forEach { it(false) }
+                    }
+                }
             }
             "locate" -> locate(result)
             else -> result.notImplemented()
@@ -87,39 +97,47 @@ class LocationChannel(private val activity: () -> Activity?, private val context
         }
         var done = false
         val signals = mutableListOf<CancellationSignal>()
+        var timeoutRunnable: Runnable? = null
         val settle = { l: Location? ->
             if (!done) {
                 done = true
-                signals.forEach { it.cancel() }
+                timeoutRunnable?.let { main.removeCallbacks(it) }
+                signals.forEach { runCatching { it.cancel() } }
                 Log.i(TAG, "located: ${if (l == null) "none" else "a place"} in ${SystemClock.elapsedRealtime() - started} ms")
                 result.success(l?.let { mapOf("lat" to it.latitude, "lon" to it.longitude) })
             }
         }
+        val available = runCatching { m.allProviders }.getOrDefault(emptyList())
         val providers = listOf(LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
-            .filter { m.allProviders.contains(it) && m.isProviderEnabled(it) }
-        try {
-            // a recent place the phone already knows, for when no current one comes in time
-            val now = SystemClock.elapsedRealtimeNanos()
-            val recent = providers.mapNotNull { m.getLastKnownLocation(it) }
-                .filter { (now - it.elapsedRealtimeNanos) / 1_000_000 < RECENT_MS }
-                .maxByOrNull { it.elapsedRealtimeNanos }
-            if (providers.isEmpty()) return settle(recent)
-            // asked of each at once, the first place to come is used: with approximate permission
-            // the fused provider stays at low power and never turns on GPS, so a phone without
-            // network location (or the emulator) answers only through GPS
-            var left = providers.size
-            for (p in providers) {
-                val sig = CancellationSignal()
-                signals.add(sig)
+            .filter { p -> p in available && runCatching { m.isProviderEnabled(p) }.getOrDefault(false) }
+        // a recent place the phone already knows, for when no current one comes in time
+        val now = SystemClock.elapsedRealtimeNanos()
+        val recent = providers.mapNotNull { p -> runCatching { m.getLastKnownLocation(p) }.getOrNull() }
+            .filter { (now - it.elapsedRealtimeNanos) / 1_000_000 < RECENT_MS }
+            .maxByOrNull { it.elapsedRealtimeNanos }
+        if (providers.isEmpty()) return settle(recent)
+        // asked of each at once, the first place to come is used: with approximate permission
+        // the fused provider stays at low power and never turns on GPS, so a phone without
+        // network location (or the emulator) answers only through GPS
+        var left = providers.size
+        var startedAny = 0
+        for (p in providers) {
+            val sig = CancellationSignal()
+            try {
                 m.getCurrentLocation(p, sig, context.mainExecutor) { l ->
                     left--
-                    if (l != null) settle(l) else if (left == 0) settle(recent)
+                    if (l != null) settle(l) else if (left <= 0) settle(recent)
                 }
+                signals.add(sig)
+                startedAny++
+            } catch (e: Exception) {
+                Log.w(TAG, "$p: ${e.javaClass.simpleName}")
+                left--
             }
-            main.postDelayed({ settle(recent) }, LIMIT_MS)
-        } catch (e: SecurityException) {
-            Log.w(TAG, "$e")
-            settle(null)
         }
+        if (startedAny == 0 || left <= 0) return settle(recent)
+        val r = Runnable { settle(recent) }
+        timeoutRunnable = r
+        main.postDelayed(r, LIMIT_MS)
     }
 }

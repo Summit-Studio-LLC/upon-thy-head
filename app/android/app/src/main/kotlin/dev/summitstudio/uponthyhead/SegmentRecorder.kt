@@ -2,6 +2,7 @@ package dev.summitstudio.uponthyhead
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
@@ -18,7 +19,10 @@ import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.util.concurrent.Executors
+import kotlin.math.log10
+import kotlin.math.sqrt
 
 /**
  * Records the microphone to AAC in ADTS parts, the Android twin of the iPhone's `SegmentRecorder`
@@ -51,8 +55,9 @@ class SegmentRecorder(private val context: Context) {
         const val RATE = 32_000
         const val BITRATE = 24_000
 
-        /** Samples read from the microphone at a time: 20 ms. */
+        /** Samples read from the microphone at a time: 20 ms; loudness sent every three (60 ms). */
         private const val CHUNK = RATE / 50
+        private const val LEVEL_SAMPLES = CHUNK * 3
 
         fun partFile(target: File, n: Int): File = File(target.parentFile, "${target.nameWithoutExtension}.part$n.aac")
 
@@ -70,8 +75,16 @@ class SegmentRecorder(private val context: Context) {
     /** True while the system has the microphone; false when it gives it back. Main thread. */
     var onPaused: ((Boolean) -> Unit)? = null
 
+    /** Microphone loudness in dBFS while on screen and listening, about 16 times a second. Main thread. */
+    var onLevel: ((Double) -> Unit)? = null
+
+    /** Repeated disk write failure on the recording thread. Main thread. */
+    var onError: ((Exception) -> Unit)? = null
+
     /** Tests: at [stop], the finished file is replaced by a copy of this one. */
     var feed: File? = null
+
+    private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     /**
      * Tests, in a debuggable build only: when `files/debug_mic.pcm` (32 kHz mono 16-bit, little
@@ -82,7 +95,6 @@ class SegmentRecorder(private val context: Context) {
      * in the room goes on through a call; past its end, silence.
      */
     private fun debugSource(): java.io.InputStream? {
-        val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         val f = File(context.filesDir, "debug_mic.pcm")
         if (!debuggable || !f.exists()) return null
         Log.i(TAG, "recording: the microphone's samples come from ${f.name} (tests)")
@@ -96,19 +108,18 @@ class SegmentRecorder(private val context: Context) {
      * it again in real time (tool/android_words.py). Release builds never look for it.
      */
     private fun debugFed(): File? {
-        val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         val f = File(context.filesDir, "debug_feed.m4a")
         return if (debuggable && f.exists()) f.also { Log.i(TAG, "recording: replaced at Amen by ${it.name} (tests)") } else null
     }
 
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(AudioManager::class.java)
-    private val io = Executors.newSingleThreadExecutor()
+    private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "segment-join") }
 
     @Volatile private var target: File? = null
     @Volatile private var running = false
     private var thread: Thread? = null
-    private var record: AudioRecord? = null
+    @Volatile private var record: AudioRecord? = null
 
     /** Why the recording is silenced now; paused while any is true. */
     @Volatile private var silenced = false
@@ -148,7 +159,12 @@ class SegmentRecorder(private val context: Context) {
             throw IllegalStateException("the microphone could not be opened")
         }
         builtInMic()?.let { r.preferredDevice = it }
-        val encoder = newEncoder()
+        val encoder = try {
+            newEncoder()
+        } catch (e: Exception) {
+            r.release()
+            throw e
+        }
         try {
             r.startRecording()
         } catch (e: Exception) {
@@ -169,7 +185,7 @@ class SegmentRecorder(private val context: Context) {
         paused = inCall
         running = true
         watch(true)
-        Log.i(TAG, "recording: started at ${System.currentTimeMillis()} into ${file.name}")
+        if (debuggable) Log.i(TAG, "recording: started at ${System.currentTimeMillis()} into ${file.name}")
         val source = debugSource()
         thread = Thread({ loop(r, encoder, file, source) }, "recording").apply {
             priority = Thread.MAX_PRIORITY
@@ -185,9 +201,14 @@ class SegmentRecorder(private val context: Context) {
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, CHUNK * 2 * 4)
         }
         val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
-        c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        c.start()
-        return c
+        try {
+            c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            c.start()
+            return c
+        } catch (e: Exception) {
+            runCatching { c.release() }
+            throw e
+        }
     }
 
     private fun builtInMic(): AudioDeviceInfo? =
@@ -200,6 +221,9 @@ class SegmentRecorder(private val context: Context) {
         val info = MediaCodec.BufferInfo()
         var fed = 0L // samples given to the encoder: its clock, which skips the time paused
         var wasPaused = false
+        var levelSq = 0.0
+        var levelCount = 0
+        var writeFailures = 0
         // frames that came out of the encoder while no part was open (just after a pause)
         val waiting = ArrayList<ByteArray>()
         val adtsHeader = Adts.header(RATE, 1)
@@ -209,7 +233,7 @@ class SegmentRecorder(private val context: Context) {
                 partCount += 1
                 FileOutputStream(partFile(file, partCount)).also {
                     out = it
-                    Log.i(TAG, "recording: part $partCount")
+                    if (debuggable) Log.i(TAG, "recording: part $partCount")
                     for (w in waiting) it.write(adtsHeader(w))
                     waiting.clear()
                 }
@@ -226,7 +250,23 @@ class SegmentRecorder(private val context: Context) {
                         val b = encoder.getOutputBuffer(i)!!
                         b.position(info.offset); b.limit(info.offset + info.size)
                         val frame = ByteArray(info.size).also { b.get(it) }
-                        try { write(frame) } catch (e: Exception) { Log.e(TAG, "recording: could not write: $e") }
+                        try {
+                            write(frame)
+                            writeFailures = 0
+                        } catch (e: IOException) {
+                            writeFailures++
+                            out?.let { runCatching { it.close() } }
+                            out = null
+                            Log.e(TAG, "recording: could not write ($writeFailures): ${e.javaClass.simpleName}")
+                            if (writeFailures >= 5) {
+                                encoder.releaseOutputBuffer(i, false)
+                                running = false
+                                main.post { onError?.invoke(e) }
+                                return
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "recording: could not write: ${e.javaClass.simpleName}")
+                        }
                     }
                     encoder.releaseOutputBuffer(i, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
@@ -239,9 +279,10 @@ class SegmentRecorder(private val context: Context) {
             while (running) {
                 val n = r.read(pcm, 0, pcm.size)
                 if (n < 0) {
-                    Log.e(TAG, "recording: the microphone failed ($n)")
+                    if (running) Log.e(TAG, "recording: the microphone failed ($n)")
                     break
                 }
+                if (!running) break
                 if (source != null && n > 0) {
                     var got = 0
                     while (got < n * 2) { val k = source.read(raw, got, n * 2 - got); if (k <= 0) break; got += k }
@@ -255,16 +296,46 @@ class SegmentRecorder(private val context: Context) {
                         // the part so far is complete on disk, whatever happens next
                         out?.let { try { it.close() } catch (_: Exception) {} }
                         out = null
-                        Log.i(TAG, "recording: paused; $partCount part(s) kept")
+                        levelSq = 0.0
+                        levelCount = 0
+                        main.post { onLevel?.invoke(-160.0) }
+                        if (debuggable) Log.i(TAG, "recording: paused; $partCount part(s) kept")
                     } else {
-                        Log.i(TAG, "recording: listening again")
+                        if (debuggable) Log.i(TAG, "recording: listening again")
                     }
                 }
                 if (nowPaused || n == 0) { drain(false); continue }
+                if (MainActivity.visible) {
+                    var sq = 0.0
+                    for (k in 0 until n) {
+                        val s = pcm[k].toDouble()
+                        sq += s * s
+                    }
+                    levelSq += sq
+                    levelCount += n
+                    if (levelCount >= LEVEL_SAMPLES) {
+                        val rms = sqrt(levelSq / levelCount) / 32768.0
+                        val db = if (rms > 1e-8) 20.0 * log10(rms) else -160.0
+                        levelSq = 0.0
+                        levelCount = 0
+                        main.post { onLevel?.invoke(db) }
+                    }
+                } else {
+                    levelSq = 0.0
+                    levelCount = 0
+                }
                 var off = 0
-                while (off < n) {
+                val inputLimit = SystemClock.elapsedRealtime() + 2000
+                while (off < n && running) {
                     val i = encoder.dequeueInputBuffer(10_000)
-                    if (i < 0) { drain(false); continue }
+                    if (i < 0) {
+                        drain(false)
+                        if (SystemClock.elapsedRealtime() > inputLimit) {
+                            Log.w(TAG, "recording: encoder input stalled")
+                            break
+                        }
+                        continue
+                    }
                     val buf = encoder.getInputBuffer(i)!!
                     buf.clear()
                     val count = minOf(n - off, buf.capacity() / 2)
@@ -277,18 +348,33 @@ class SegmentRecorder(private val context: Context) {
                 drain(false)
             }
             // the end: what is still inside the encoder goes into the last part
-            val i = encoder.dequeueInputBuffer(100_000)
-            if (i >= 0) encoder.queueInputBuffer(i, 0, 0, fed * 1_000_000L / RATE, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            if (!paused) drain(true)
+            val eos = encoder.dequeueInputBuffer(100_000)
+            if (eos >= 0) encoder.queueInputBuffer(eos, 0, 0, fed * 1_000_000L / RATE, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+            drain(true)
+            if (waiting.isNotEmpty()) {
+                try {
+                    val o = out ?: run {
+                        partCount += 1
+                        FileOutputStream(partFile(file, partCount)).also {
+                            out = it
+                            if (debuggable) Log.i(TAG, "recording: part $partCount")
+                        }
+                    }
+                    for (w in waiting) o.write(adtsHeader(w))
+                    waiting.clear()
+                } catch (e: Exception) {
+                    Log.e(TAG, "recording: could not flush waiting frames: ${e.javaClass.simpleName}")
+                }
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "recording: $e")
+            Log.e(TAG, "recording: ${e.javaClass.simpleName}")
         } finally {
             out?.let { try { it.close() } catch (_: Exception) {} }
             out = null
             try { encoder.stop() } catch (_: Exception) {}
-            encoder.release()
+            runCatching { encoder.release() }
             try { r.stop() } catch (_: Exception) {}
-            r.release()
+            runCatching { r.release() }
             try { source?.close() } catch (_: Exception) {}
         }
     }
@@ -301,7 +387,7 @@ class SegmentRecorder(private val context: Context) {
             val mine = configs.firstOrNull { it.clientAudioSessionId == session } ?: return
             if (mine.isClientSilenced != silenced) {
                 silenced = mine.isClientSilenced
-                Log.i(TAG, "recording: silenced by the system: $silenced")
+                if (debuggable) Log.i(TAG, "recording: silenced by the system: $silenced")
                 update()
             }
         }
@@ -311,7 +397,7 @@ class SegmentRecorder(private val context: Context) {
         val call = isCallMode(mode)
         if (call != inCall) {
             inCall = call
-            Log.i(TAG, "recording: phone mode $mode")
+            if (debuggable) Log.i(TAG, "recording: phone mode $mode")
             update()
         }
     }
@@ -322,7 +408,7 @@ class SegmentRecorder(private val context: Context) {
         override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) = keepBuiltIn("removed", removed)
         private fun keepBuiltIn(what: String, d: Array<out AudioDeviceInfo>) {
             if (d.none { it.isSource }) return
-            Log.i(TAG, "recording: input $what (${d.filter { it.isSource }.joinToString { "${it.type}" }})")
+            if (debuggable) Log.i(TAG, "recording: input $what (${d.filter { it.isSource }.joinToString { "${it.type}" }})")
             builtInMic()?.let { record?.preferredDevice = it }
         }
     }
@@ -340,9 +426,9 @@ class SegmentRecorder(private val context: Context) {
             audio.addOnModeChangedListener(context.mainExecutor, modeListener)
             audio.registerAudioDeviceCallback(deviceCallback, main)
         } else {
-            audio.unregisterAudioRecordingCallback(recordingCallback)
-            audio.removeOnModeChangedListener(modeListener)
-            audio.unregisterAudioDeviceCallback(deviceCallback)
+            runCatching { audio.unregisterAudioRecordingCallback(recordingCallback) }
+            runCatching { audio.removeOnModeChangedListener(modeListener) }
+            runCatching { audio.unregisterAudioDeviceCallback(deviceCallback) }
         }
     }
 
@@ -366,28 +452,32 @@ class SegmentRecorder(private val context: Context) {
     private fun halt(): File? {
         val t = target ?: return null
         running = false
+        watch(false)
+        // Stop AudioRecord before joining so a blocked read() returns immediately instead of stalling UI.
+        runCatching { record?.stop() }
         thread?.join(3000)
         thread = null
         record = null
         target = null
         paused = false
-        watch(false)
         return t
     }
 
     /** Amen: the parts joined into the one file. [done] runs on the main thread. */
     fun stop(done: (Result<File>) -> Unit) {
         val t = halt() ?: return done(Result.failure(IllegalStateException("not recording")))
-        Log.i(TAG, "recording: stopped at ${System.currentTimeMillis()}")
+        if (debuggable) Log.i(TAG, "recording: stopped at ${System.currentTimeMillis()}")
         val fed = feed ?: debugFed()
         io.execute {
             val r = runCatching {
                 val parts = partsOnDisk(t).filter { it.length() > 0 }
-                t.delete()
                 Adts.join(parts, t)
                 partsOnDisk(t).forEach { it.delete() }
                 // tests: the words they expect, in place of the room's
-                if (fed != null) { t.delete(); fed.copyTo(t) }
+                if (fed != null) fed.copyTo(t, overwrite = true)
+                if (debuggable) {
+                    Log.i(TAG, "recording: joined ${t.name}, ${"%.2f".format(Adts.seconds(t))} s")
+                }
                 t
             }
             main.post { done(r) }
@@ -403,6 +493,8 @@ class SegmentRecorder(private val context: Context) {
 
     /** The app is going away (swiped from recent apps): close the part; recovery finds it. */
     fun abandon() {
-        halt()?.let { Log.i(TAG, "recording: abandoned; recovery will join ${partsOnDisk(it).size} part(s)") }
+        halt()?.let {
+            if (debuggable) Log.i(TAG, "recording: abandoned; recovery will join ${partsOnDisk(it).size} part(s)")
+        }
     }
 }

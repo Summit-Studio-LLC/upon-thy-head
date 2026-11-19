@@ -586,8 +586,9 @@ class Run:
         cases = {
             'its own type (content)': ("-a android.intent.action.VIEW -d content://x/y -t application/vnd.uponthyhead.blessing", True),
             'octet-stream (content)': ("-a android.intent.action.VIEW -d content://x/y -t application/octet-stream", True),
-            'no type, a name ending .blessing (file)': ("-a android.intent.action.VIEW -d 'file:///sdcard/Download/A%20b.blessing'", True),
+            'no type, a name ending .blessing (file refused)': ("-a android.intent.action.VIEW -d 'file:///sdcard/Download/A%20b.blessing'", False),
             'no type, a name ending .blessing (content)': ("-a android.intent.action.VIEW -d 'content://p/Download/A b, March 3, 2026.blessing'", True),
+            'no type, many dots ending .blessing (content)': ("-a android.intent.action.VIEW -d 'content://p/Download/A.b.c.d.blessing'", True),
             'share into the app, its own type': ("-a android.intent.action.SEND -t application/vnd.uponthyhead.blessing", True),
             'a picture': ("-a android.intent.action.VIEW -d content://x/y -t image/jpeg", False),
             'a PDF': ("-a android.intent.action.VIEW -d content://x/y -t application/pdf", False),

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.StandardIntegrityManager.PrepareIntegrityTokenRequest
+import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityTokenProvider
 import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityTokenRequest
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -15,22 +16,56 @@ import java.security.MessageDigest
  * standard request, bound to the service's challenge by requestHash = SHA-256(challenge) as
  * base64url without padding. The Cloud project number comes from the service with the challenge;
  * with none (Play Integrity not set up yet) no proof is asked for. The pass the service gives back
- * is kept in this app's private preferences (never backed up: res/xml/backup_rules.xml).
- * Nothing here logs a challenge, token or pass.
+ * is locked with an Android Keystore key and kept in this app's private preferences (never backed
+ * up: res/xml/backup_rules.xml). Nothing here logs a challenge, token or pass.
  *
  *  - `prove` {challenge, project} → {platform: "android", token}, or null
  *  - `passGet` → the kept pass or null; `passPut` {value} keeps it (null forgets it)
  */
 class ProofChannel(private val context: Context) : MethodChannel.MethodCallHandler {
+    companion object {
+        private const val ALIAS = "upon_thy_head.proof"
+        private val providers = HashMap<Long, StandardIntegrityTokenProvider>()
+
+        @Synchronized
+        private fun cachedProvider(number: Long): StandardIntegrityTokenProvider? = providers[number]
+
+        @Synchronized
+        private fun putProvider(number: Long, provider: StandardIntegrityTokenProvider) {
+            providers[number] = provider
+        }
+
+        @Synchronized
+        private fun clearProvider(number: Long, failed: StandardIntegrityTokenProvider) {
+            if (providers[number] === failed) providers.remove(number)
+        }
+    }
+
     private val prefs get() = context.getSharedPreferences("proof", Context.MODE_PRIVATE)
+    private val secrets = KeystoreSecrets(ALIAS)
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "prove" -> prove(call.argument<String>("challenge"), call.argument<String>("project"), result)
-            "passGet" -> result.success(prefs.getString("pass", null))
+            "passGet" -> {
+                val kept = prefs.getString("pass", null)
+                if (kept == null) {
+                    result.success(null)
+                } else {
+                    val opened = secrets.unwrap(kept)?.toString(Charsets.UTF_8)
+                    if (opened == null) prefs.edit().remove("pass").apply()
+                    result.success(opened)
+                }
+            }
             "passPut" -> {
                 val value = call.argument<String>("value")
-                prefs.edit().apply { if (value == null) remove("pass") else putString("pass", value) }.apply()
+                if (value == null) {
+                    prefs.edit().remove("pass").apply()
+                } else {
+                    val wrapped = runCatching { secrets.wrap(value.toByteArray(Charsets.UTF_8)) }.getOrNull()
+                    if (wrapped != null) prefs.edit().putString("pass", wrapped).apply()
+                    else prefs.edit().remove("pass").apply()
+                }
                 result.success(null)
             }
             else -> result.notImplemented()
@@ -50,16 +85,38 @@ class ProofChannel(private val context: Context) : MethodChannel.MethodCallHandl
             answered = true
             result.success(value)
         }
-        try {
+        val req = StandardIntegrityTokenRequest.builder().setRequestHash(hash).build()
+        fun prepareAndRequest() {
             IntegrityManagerFactory.createStandard(context.applicationContext)
                 .prepareIntegrityToken(PrepareIntegrityTokenRequest.builder().setCloudProjectNumber(number).build())
                 .addOnSuccessListener { provider ->
-                    provider.request(StandardIntegrityTokenRequest.builder().setRequestHash(hash).build())
+                    putProvider(number, provider)
+                    provider.request(req)
                         .addOnSuccessListener { token -> answer(mapOf("platform" to "android", "token" to token.token())) }
-                        .addOnFailureListener { answer(null) }
+                        .addOnFailureListener { clearProvider(number, provider); answer(null) }
+                        .addOnCanceledListener { answer(null) }
                 }
                 .addOnFailureListener { answer(null) }
-        } catch (e: Exception) {
+                .addOnCanceledListener { answer(null) }
+        }
+        try {
+            val cached = cachedProvider(number)
+            if (cached != null) {
+                cached.request(req)
+                    .addOnSuccessListener { token -> answer(mapOf("platform" to "android", "token" to token.token())) }
+                    .addOnFailureListener {
+                        clearProvider(number, cached)
+                        try {
+                            prepareAndRequest()
+                        } catch (_: Exception) {
+                            answer(null)
+                        }
+                    }
+                    .addOnCanceledListener { answer(null) }
+            } else {
+                prepareAndRequest()
+            }
+        } catch (_: Exception) {
             answer(null)
         }
     }

@@ -19,6 +19,8 @@ import android.view.View
 import android.view.ViewGroup
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.lang.ref.WeakReference
+import java.util.WeakHashMap
 
 /**
  * The app lock and the recent-apps cover, for lib/lock/lock.dart, on `upon_thy_head/lock` (the
@@ -48,13 +50,42 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
     companion object {
         private const val TAG = "lock"
         var channel: MethodChannel? = null
+
         /** The cover is wanted (the lock is on). */
         var coverOn = false
-        /** The unlock prompt or one of Android's permission questions is up: losing the screen to it
-         *  is not leaving the app, and it is never covered. */
-        var prompting = false
-        /** The unlock prompt itself is up (set only by [authenticate]). */
+
+        /** Active system dialogs (biometric prompt, permission questions, share sheet): losing focus
+         *  to one is not leaving the app, and overlapping dialogs never clear one another early. */
+        private val prompts = HashSet<String>()
+
+        val isPrompting: Boolean
+            @Synchronized get() = prompts.isNotEmpty()
+
+        @Synchronized
+        fun promptStart(tag: String) {
+            prompts.add(tag)
+        }
+
+        fun promptEnd(tag: String, a: Activity? = MainActivity.liveActivity()) {
+            val empty = synchronized(this) {
+                prompts.remove(tag)
+                prompts.isEmpty()
+            }
+            if (empty) questionGone(a)
+        }
+
+        /** The unlock prompt itself is up (set only by [authenticateOn]). */
         private var promptUp = false
+
+        /** Elapsed realtime when the person last authenticated: an onStop caused by Android's own
+         *  credential screen before that moment must not re-lock the app on return. */
+        private var lastAuthAt = 0L
+
+        /** Absence observed if onStart ran before ConfirmDeviceCredentialActivity delivered its result. */
+        private var pendingAwayMs: Long? = null
+
+        private var authSignal: CancellationSignal? = null
+        private var authActivity: WeakReference<Activity>? = null
 
         /**
          * An unlock asked for while one of Android's questions (or the share sheet) was up: held back,
@@ -62,15 +93,16 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
          * and the app has the screen again ([questionGone]). The locked return asks automatically,
          * so without this the person had to tap Unlock after answering the question.
          */
-        private var heldBack: (() -> Unit)? = null
+        private var heldBack: Pair<String, MethodChannel.Result>? = null
 
         /** The question is gone and the window has focus: open a held-back unlock prompt. */
-        fun questionGone(a: Activity) {
+        fun questionGone(a: Activity? = MainActivity.liveActivity()) {
             Handler(Looper.getMainLooper()).post {
-                if (prompting || !a.hasWindowFocus()) return@post
-                val p = heldBack ?: return@post
+                val act = a?.takeIf { !it.isFinishing && !it.isDestroyed } ?: MainActivity.liveActivity() ?: return@post
+                if (isPrompting || !act.hasWindowFocus()) return@post
+                val pending = heldBack ?: return@post
                 heldBack = null
-                p()
+                authenticateOn(act, pending.first, pending.second)
             }
         }
 
@@ -79,13 +111,15 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
         /** When the app went out of sight (elapsed realtime), or null. */
         private var leftAt: Long? = null
         private var cover: View? = null
+        private var coverActivity: WeakReference<Activity>? = null
+        private val hiddenSiblings = WeakHashMap<View, Int>()
         private const val GROUND = 0xFF0B0907.toInt()
 
         /**
          * MainActivity.onStop: the activity is truly off the screen. Always counted as leaving, even
-         * with a permission question or the unlock prompt up (those only pause the activity or take
-         * its focus; they never stop it, so [prompting] is not consulted here). Otherwise Home pressed
-         * over Android's location question left the app open, uncovered, for as long as it was away.
+         * with a permission question up (those only pause the activity or take its focus; they never
+         * stop it). ConfirmDeviceCredentialActivity can stop the activity; [lastAuthAt] and [promptUp]
+         * ensure a successful credential entry never immediately re-locks the app.
          */
         fun left(a: Activity) {
             leftAt = SystemClock.elapsedRealtime()
@@ -97,8 +131,17 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             blurred = false
             val at = leftAt ?: return lift()
             leftAt = null
+            if (lastAuthAt >= at) {
+                lift()
+                return
+            }
+            val awayMs = SystemClock.elapsedRealtime() - at
+            if (promptUp) {
+                pendingAwayMs = awayMs
+                return
+            }
             debugSlow = slowActive(a)
-            tell((SystemClock.elapsedRealtime() - at) / 1000.0, true)
+            tell(awayMs / 1000.0, true)
         }
 
         /**
@@ -110,7 +153,7 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
          */
         fun focus(a: Activity, has: Boolean) {
             if (!has) {
-                if (prompting || !coverOn) return
+                if (isPrompting || !coverOn) return
                 blurred = true
                 place(a)
                 return
@@ -118,7 +161,7 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             questionGone(a)
             if (!blurred) return
             blurred = false
-            if (leftAt == null) tell(0.0, false)
+            if (leftAt == null && !promptUp) tell(0.0, false)
         }
 
         /**
@@ -134,7 +177,7 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
 
         private fun slowActive(a: Activity): Long {
             if ((a.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) return 0
-            return try { java.io.File(a.filesDir, "slow_active").readText().trim().toLong() } catch (e: Exception) { 0 }
+            return try { java.io.File(a.filesDir, "slow_active").readText().trim().toLong() } catch (_: Exception) { 0 }
         }
 
         /** Which answer to Dart's `active` was the last asked; an older one never lifts a newer cover. */
@@ -182,9 +225,19 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             main.postDelayed({ unanswered() }, 1500)
         }
 
-        /** The plain ground over everything, invisible to accessibility. */
+        /** The plain ground over everything, hiding siblings from TalkBack as well. */
         private fun place(a: Activity) {
-            if (!coverOn || cover != null) return
+            if (!coverOn) return
+            if (cover != null && coverActivity?.get() === a) return
+            if (cover != null) detachCover()
+            val content = a.findViewById<ViewGroup>(android.R.id.content)
+            if (content != null) {
+                for (i in 0 until content.childCount) {
+                    val child = content.getChildAt(i) ?: continue
+                    hiddenSiblings[child] = child.importantForAccessibility
+                    child.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                }
+            }
             val v = View(a).apply {
                 setBackgroundColor(GROUND)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -192,16 +245,101 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             }
             a.addContentView(v, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             cover = v
+            coverActivity = WeakReference(a)
         }
 
-        private fun lift() {
-            val v = cover ?: return
-            (v.parent as? ViewGroup)?.removeView(v)
+        private fun detachCover() {
+            for ((view, prev) in hiddenSiblings) {
+                view.importantForAccessibility = prev
+            }
+            hiddenSiblings.clear()
+            val v = cover
             cover = null
+            coverActivity = null
+            (v?.parent as? ViewGroup)?.removeView(v)
+        }
+
+        private fun lift() = detachCover()
+
+        /** MainActivity.onDestroy: never retain a destroyed Activity's cover or biometric prompt. */
+        fun destroyed(a: Activity) {
+            if (coverActivity?.get() === a) detachCover()
+            if (authActivity?.get() === a) {
+                authActivity = null
+                authSignal?.cancel()
+                authSignal = null
+            }
         }
 
         /** Applied again to each new activity (MainActivity.onCreate). */
-        fun apply(a: Activity) = a.setRecentsScreenshotEnabled(!coverOn)
+        fun apply(a: Activity) {
+            a.setRecentsScreenshotEnabled(!coverOn)
+            if (coverOn && (leftAt != null || mayLockUnanswered != 0 || blurred)) {
+                place(a)
+            }
+        }
+
+        private fun authenticateOn(a: Activity?, reason: String, result: MethodChannel.Result) {
+            val act = a?.takeIf { !it.isFinishing && !it.isDestroyed } ?: return result.success(false)
+            val secure = act.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
+            if (!secure || promptUp) return result.success(false)
+            if (isPrompting) {
+                // a permission question or share sheet is up: ask once it is answered, never over it
+                if (heldBack != null) {
+                    result.success(false)
+                } else {
+                    heldBack = reason to result
+                }
+                return
+            }
+            val sig = CancellationSignal()
+            authSignal = sig
+            authActivity = WeakReference(act)
+            promptStart("auth")
+            promptUp = true
+            var answered = false
+            val answer = { ok: Boolean ->
+                if (!answered) {
+                    answered = true
+                    authSignal = null
+                    authActivity = null
+                    promptUp = false
+                    if (ok) {
+                        lastAuthAt = SystemClock.elapsedRealtime()
+                        leftAt = null
+                        pendingAwayMs = null
+                        if (MainActivity.visible && mayLockUnanswered == 0) lift()
+                    } else {
+                        val awayMs = pendingAwayMs
+                        pendingAwayMs = null
+                        if (awayMs != null && MainActivity.visible) {
+                            MainActivity.liveActivity()?.let { debugSlow = slowActive(it) }
+                            tell(awayMs / 1000.0, true)
+                        }
+                    }
+                    promptEnd("auth", MainActivity.liveActivity())
+                    result.success(ok)
+                }
+            }
+            val prompt = BiometricPrompt.Builder(act)
+                .setTitle(reason)
+                .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
+                .build()
+            try {
+                prompt.authenticate(sig, act.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) = answer(true)
+                    override fun onAuthenticationError(code: Int, message: CharSequence) {
+                        Log.i(TAG, "prompt ended: $code")
+                        answer(false)
+                    }
+                    // a wrong fingerprint: the prompt stays up and Android counts; nothing to do here
+                    override fun onAuthenticationFailed() { Log.i(TAG, "not recognised") }
+                })
+            } catch (e: Exception) {
+                Log.w(TAG, "prompt: ${e.javaClass.simpleName}")
+                answer(false)
+            }
+        }
     }
 
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
@@ -229,10 +367,10 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
                     "passcode" to secure(),
                 ),
             )
-            "authenticate" -> authenticate(call.argument<String>("reason") ?: "Unlock", result)
+            "authenticate" -> authenticateOn(activity() ?: MainActivity.liveActivity(), call.argument<String>("reason") ?: "Unlock", result)
             "cover" -> {
                 coverOn = call.argument<Boolean>("on") ?: false
-                activity()?.let(::apply)
+                (activity() ?: MainActivity.liveActivity())?.let(::apply)
                 if (!coverOn) lift()
                 result.success(null)
             }
@@ -255,47 +393,6 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
             // the iPhone's Face ID question; Android has none (the first run proves the lock with one unlock)
             "askBiometrics" -> onMethodCall(MethodCall("biometry", null), result)
             else -> result.notImplemented()
-        }
-    }
-
-    private fun authenticate(reason: String, result: MethodChannel.Result) {
-        val a = activity()
-        if (a == null || !secure() || promptUp) return result.success(false)
-        if (prompting) {
-            // a permission question is up: ask once it is answered, never over it
-            heldBack?.let { result.success(false) } ?: run {
-                heldBack = { authenticate(reason, result) }
-            }
-            return
-        }
-        var answered = false
-        val answer = { ok: Boolean ->
-            if (!answered) {
-                answered = true
-                prompting = false
-                promptUp = false
-                result.success(ok)
-            }
-        }
-        val prompt = BiometricPrompt.Builder(a)
-            .setTitle(reason)
-            .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
-            .build()
-        prompting = true
-        promptUp = true
-        try {
-            prompt.authenticate(CancellationSignal(), a.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) = answer(true)
-                override fun onAuthenticationError(code: Int, message: CharSequence) {
-                    Log.i(TAG, "prompt ended: $code $message")
-                    answer(false)
-                }
-                // a wrong fingerprint: the prompt stays up and Android counts; nothing to do here
-                override fun onAuthenticationFailed() { Log.i(TAG, "not recognised") }
-            })
-        } catch (e: Exception) {
-            Log.w(TAG, "prompt: $e")
-            answer(false)
         }
     }
 }
