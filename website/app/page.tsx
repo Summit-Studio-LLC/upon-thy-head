@@ -113,13 +113,29 @@ export default function Page() {
               <h2 id="sky-heading">{c.sky.heading}</h2>
             </Reveal>
             {c.sky.body.map((p, i) => (
-              <Reveal key={p} order={i + 1}>
+              <Reveal key={i} order={i + 1}>
                 <p>{p}</p>
               </Reveal>
             ))}
           </div>
           <Reveal order={1} wrap className="shot-wrap lamp">
             <Shot name="sky" content={c} sizes="(min-width: 760px) 340px, 72vw" />
+          </Reveal>
+        </section>
+
+        <section className="wrap pair pair-flipped" aria-labelledby="family-heading">
+          <div className="pair-words">
+            <Reveal>
+              <h2 id="family-heading">{c.family.heading}</h2>
+            </Reveal>
+            {c.family.body.map((p, i) => (
+              <Reveal key={i} order={i + 1}>
+                <p>{p}</p>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal order={1} wrap className="shot-wrap">
+            <Shot name="family" content={c} sizes="(min-width: 760px) 340px, 72vw" />
           </Reveal>
         </section>
 
@@ -175,6 +191,22 @@ export default function Page() {
                 {c.words.hint}
               </p>
             </>
+          </Reveal>
+        </section>
+
+        <section className="wrap pair" aria-labelledby="past-heading">
+          <div className="pair-words">
+            <Reveal>
+              <h2 id="past-heading">{c.past.heading}</h2>
+            </Reveal>
+            {c.past.body.map((p, i) => (
+              <Reveal key={i} order={i + 1}>
+                <p>{p}</p>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal order={1} wrap className="shot-wrap">
+            <Shot name="entry" content={c} sizes="(min-width: 760px) 340px, 72vw" />
           </Reveal>
         </section>
 

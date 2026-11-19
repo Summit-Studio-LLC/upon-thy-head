@@ -8,49 +8,56 @@ export const en = {
   meta: {
     title: "Upon Thy Head",
     description:
-      "A written record of the blessings given to you. The words stay on your phone. Free, and coming soon to iPhone and Android.",
+      "Record a priesthood blessing and keep its words, for yourself and for your children. Everything stays on your phone. Free, and coming soon to iPhone and Android.",
   },
   hero: {
     name: "Upon Thy Head",
-    sentence: "A written record of the blessings given to you, kept on your own phone.",
+    sentence: "Record a priesthood blessing and keep its words, for yourself and for your children. Everything stays on your phone.",
     note: "Free. No ads. No account.",
   },
   // The held scene under the name: the arc of lights draws away into a halo that turns.
   journey: {
-    one: "Each blessing is a light.",
-    two: "Touch one, and the blessing opens to read.",
+    one: "Keep every blessing you are given.",
+    two: "Keep your children’s until they are grown.",
   },
   sky: {
-    heading: "A life becomes a line of lights",
+    heading: "Every blessing, where you can find it",
     body: [
-      "The first thing you see is the night sky. Each blessing you have received is one small, warm light on a ring that crosses overhead.",
-      "The lights gather over the years, each one where it was given. Touch one, and the blessing opens to read.",
+      "Home is a night sky with one light for each blessing, in the order they were given. Touch a light and the blessing opens to read.",
+      "Looking for one from years ago? Slide along the dates at the bottom, or open the list.",
+    ],
+  },
+  family: {
+    heading: "For you, and for your children",
+    body: [
+      "Add each of your children and keep their blessings beside your own. A father’s blessing before a new school year goes on that child’s own sky, not yours.",
+      "When they are grown, hand it all over. One link, and every blessing you kept for them is on their own phone.",
     ],
   },
   steps: {
-    heading: "From the blessing to the page",
+    heading: "How it works",
     items: [
       {
         shot: "recording",
-        title: "A blessing is given",
-        body: "A father’s blessing, a blessing of comfort, a blessing before surgery. Someone sets a phone nearby, and it listens while the words are spoken.",
+        title: "Record the blessing",
+        body: "Set the phone nearby and press Begin. It listens while the blessing is given, and keeps listening with the screen locked.",
       },
       {
         shot: "changes",
-        title: "The words are written",
-        body: "The phone writes down what was said. It does the work itself; nothing is sent away to be written down.",
+        title: "The phone writes the words",
+        body: "The writing is done on the phone itself. Nothing is sent anywhere to be written down.",
       },
       {
         shot: "reading",
-        title: "They are kept",
-        body: "Read the words through once. Then the recording is erased and the writing stays, yours to open again whenever you need it.",
+        title: "Read it and keep it",
+        body: "Read the words through and correct anything misheard. Then the recording is erased and the writing stays.",
       },
     ],
   },
   // The demonstration. Plain strings are kept as spoken; { cut } marks a word the tidy-up leaves out.
   words: {
     heading: "Word for word",
-    body: "Nothing is summarised. Nothing is reworded. If you ask, the app leaves out an “um” or a word said twice. It shows you every change, and each one can be undone.",
+    body: "Nothing is summarised or reworded. If you ask, the app leaves out an “um” or a word said twice, shows you every change, and lets you undo each one.",
     sample: [
       "Emma, I lay my hands upon your head,",
       { cut: "um," },
@@ -64,24 +71,35 @@ export const en = {
     count: "Words left out:",
     hint: "Touch a crossed-out word to put it back.",
   },
+  past: {
+    heading: "Blessings you already have",
+    body: [
+      "Have a blessing typed up years ago, or written in a journal? Type it or paste it in, with the date it was given.",
+      "If you only remember the year, that is enough. It takes its place among the others.",
+    ],
+  },
   promises: {
-    heading: "What it promises",
+    heading: "Private, and yours",
     items: [
       {
-        title: "The words stay on your phone.",
-        body: "The recording is turned into writing on the phone itself, and there is no account. When you share a blessing, a locked copy is kept for 30 days so the person you sent it to can open it. We cannot read it.",
+        title: "Everything stays on your phone.",
+        body: "The recording is written down on the phone itself. There is no account, and no copy of your blessings on our servers.",
       },
       {
         title: "The recording is erased.",
-        body: "Once you have reviewed the words, the recording is erased. The writing stays.",
+        body: "Once you have read the words through, the recording is erased. The writing stays.",
       },
       {
         title: "Your blessings are locked.",
         body: "They open with Face ID, or with your fingerprint or screen lock.",
       },
       {
-        title: "It is free.",
-        body: "No ads. In English and Spanish.",
+        title: "Shared only when you choose.",
+        body: "If you send a blessing as a link, a locked copy is kept for 30 days so the other person can open it. The key is in the link itself, so we cannot read it.",
+      },
+      {
+        title: "Free.",
+        body: "No ads and no account. In English and Spanish, on iPhone, iPad and Android.",
       },
     ],
   },
@@ -219,7 +237,15 @@ export const en = {
   shots: {
     sky: {
       label: "The sky",
-      alt: "The app’s home screen: the night sky, with one warm light for each blessing on a ring overhead.",
+      alt: "The app’s home screen: a night sky with one light for each blessing, the newest named at the bottom above a row of dates.",
+    },
+    family: {
+      label: "Family",
+      alt: "The menu on the home screen: For me, For Emma, Add a family member, Manage family.",
+    },
+    entry: {
+      label: "A past blessing",
+      alt: "The page for entering a past blessing: the date it was given, who gave it, and its words pasted in.",
     },
     recording: {
       label: "Recording",
