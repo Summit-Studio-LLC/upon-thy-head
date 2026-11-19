@@ -62,9 +62,17 @@ enum Playback {
       }
       if !observing {
         observing = true
-        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { n in
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { n in
           guard let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                 AVAudioSession.InterruptionType(rawValue: raw) == .began, let p = player, p.isPlaying else { return }
+          p.pause()
+          channel?.invokeMethod("stopped", arguments: ["position": p.currentTime])
+        }
+        nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) { n in
+          guard let raw = n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable,
+                let p = player, p.isPlaying else { return }
           p.pause()
           channel?.invokeMethod("stopped", arguments: ["position": p.currentTime])
         }
@@ -111,7 +119,10 @@ enum Playback {
 
   final class Delegate: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully flag: Bool) {
-      channel?.invokeMethod("stopped", arguments: ["position": p.duration])
+      let end = p.duration
+      DispatchQueue.main.async {
+        channel?.invokeMethod("stopped", arguments: ["position": end])
+      }
     }
   }
 }

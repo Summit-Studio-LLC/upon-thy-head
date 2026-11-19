@@ -46,17 +46,62 @@ enum OnDeviceSpeech {
   /// A silence at least this long between words starts a new paragraph.
   static let paragraphGap: Double = 2.0
 
-  /// Log every step (the harness turns this on).
-  nonisolated(unsafe) static var verbose = false
+  private static let traceLock = NSLock()
+  nonisolated(unsafe) private static var _verbose = false
+  nonisolated(unsafe) private static var _trace: [String] = []
+
+  /// Log every step (debug builds and the harness only; release builds never log spoken words).
+  static var verbose: Bool {
+    get {
+      #if DEBUG
+      traceLock.lock()
+      defer { traceLock.unlock() }
+      return _verbose
+      #else
+      return false
+      #endif
+    }
+    set {
+      #if DEBUG
+      traceLock.lock()
+      _verbose = newValue
+      traceLock.unlock()
+      #endif
+    }
+  }
 
   /// What happened during the last transcription, when [verbose].
-  nonisolated(unsafe) static var trace: [String] = []
+  static var trace: [String] {
+    get {
+      #if DEBUG
+      traceLock.lock()
+      defer { traceLock.unlock() }
+      return _trace
+      #else
+      return []
+      #endif
+    }
+    set {
+      #if DEBUG
+      traceLock.lock()
+      _trace = newValue
+      traceLock.unlock()
+      #endif
+    }
+  }
 
   static func log(_ s: @autoclosure () -> String) {
-    guard verbose else { return }
+    #if DEBUG
+    traceLock.lock()
+    let on = _verbose
+    traceLock.unlock()
+    guard on else { return }
     let line = s()
-    trace.append(line)
+    traceLock.lock()
+    _trace.append(line)
+    traceLock.unlock()
     print("[speech] \(line)")
+    #endif
   }
 
   static func bcp47(_ id: String) -> String { id.replacingOccurrences(of: "_", with: "-") }
@@ -161,6 +206,7 @@ enum OnDeviceSpeech {
       }
       return parts
     }
+    defer { collect.cancel() }
     if let end = try await analyzer.analyzeSequence(from: file) {
       try await analyzer.finalizeAndFinish(through: end)
     } else {
@@ -288,13 +334,16 @@ extension OnDeviceSpeech {
       let prevEnd = segs[i - 1].timestamp + segs[i - 1].duration
       if segs[i].timestamp - prevEnd >= paragraphGap {
         let cut = segs[i].substringRange.location
+        guard cut >= from, cut <= s.length else { continue }
         out.append((startTime, prevEnd, s.substring(with: NSRange(location: from, length: cut - from))))
         from = cut
         startTime = segs[i].timestamp
       }
     }
     let last = segs[segs.count - 1]
-    out.append((startTime, last.timestamp + last.duration, s.substring(from: from)))
+    if from <= s.length {
+      out.append((startTime, last.timestamp + last.duration, s.substring(from: from)))
+    }
     return out
   }
 }
