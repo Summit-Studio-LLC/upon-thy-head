@@ -31,6 +31,10 @@ upload=0
 # it puts a dialog on the Mac's screen that the login password cannot answer.
 SIGNING="$HOME/.appstoreconnect/hivecycle-signing"
 if [ -f "$SIGNING/keychain-password" ]; then
+  # Lock it first. The keychain locks itself when the Mac sleeps, and after that (or after a password
+  # dialog for it has been on screen) the Mac can refuse the right password with "The user name or
+  # passphrase you entered is not correct". Locking it outright clears that; then the unlock works.
+  security lock-keychain "$SIGNING/distribution.keychain-db" 2>/dev/null || true
   security unlock-keychain -p "$(cat "$SIGNING/keychain-password")" "$SIGNING/distribution.keychain-db"
 fi
 # Signing waits for ever, with nothing printed, while such a dialog goes unanswered. Sign a scrap
