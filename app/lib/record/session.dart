@@ -74,6 +74,10 @@ class RecordSession extends ChangeNotifier {
   bool get sheet => _sheet;
   bool _sheet = false;
 
+  /// The microphone could not start when Begin was pressed (a call, or another app holding it).
+  bool get startFailed => _startFailed;
+  bool _startFailed = false;
+
   /// The language the blessing is spoken in; fixed once Begin is pressed.
   SpeechLanguage language;
 
@@ -88,6 +92,11 @@ class RecordSession extends ChangeNotifier {
   bool get paused => _paused;
   bool _paused = false;
   StreamSubscription<bool>? _pausedSub;
+
+  /// Current voice level from the microphone, 0 (silence or paused) to 1 (full voice).
+  /// Kept on its own notifier so the sky can follow it without rebuilding the screens.
+  final ValueNotifier<double> level = ValueNotifier(0);
+  StreamSubscription<double>? _levelSub;
 
   final Stopwatch _clock = Stopwatch();
 
@@ -109,44 +118,75 @@ class RecordSession extends ChangeNotifier {
   WordsState _wordsState = WordsState.none;
   Transcript? transcript;
 
-  String get _path => p.join(audioDir, '${draft!.id}.m4a');
+  String get _path => p.join(audioDir, '${draft?.id ?? 'practice'}.m4a');
 
   /// Look up the permissions, and ask for any not yet asked. Called as the ready screen opens.
   Future<void> checkPermissions({bool ask = true}) async {
+    _startFailed = false;
     var now = await recorder.permissions();
-    if (ask && now.anyUndetermined && !now.anyDenied) now = await recorder.requestPermissions();
+    if (_disposed) return;
+    if (ask && now.anyUndetermined && !now.anyDenied) {
+      now = await recorder.requestPermissions();
+      if (_disposed) return;
+    }
     _permissions = now;
     notifyListeners();
   }
 
   /// Android: the microphone was refused once and the phone will still ask: ask it again now.
   Future<void> askAgain() async {
-    _permissions = await recorder.requestPermissions();
+    _startFailed = false;
+    final now = await recorder.requestPermissions();
+    if (_disposed) return;
+    _permissions = now;
     notifyListeners();
   }
 
   void setLanguage(SpeechLanguage l) {
-    if (live || l == language) return;
+    if (live || _disposed || l == language) return;
     language = l;
     notifyListeners();
   }
 
+  Future<void> _rollbackStart({required bool cancelled}) async {
+    _state = RecordState.ready;
+    _sheet = false;
+    _paused = false;
+    _clock
+      ..stop()
+      ..reset();
+    if (!_disposed) level.value = 0;
+    KeepAwake.set(false);
+    await forget();
+    _startFailed = !cancelled;
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> begin() async {
-    if (live || !canBegin) return;
+    if (live || _disposed || !canBegin || (!practice && draft == null)) return;
+    _startFailed = false;
     _state = RecordState.live;
     _sheet = false;
     _paused = false;
+    level.value = 0;
     _clock
       ..reset()
       ..start();
     KeepAwake.set(true);
     notifyListeners();
     _pausedSub ??= recorder.paused.listen(_onPaused);
+    _levelSub ??= recorder.level.listen(_onLevel);
     if (practice) {
       try {
         await recorder.start(_path);
       } catch (e) {
         debugPrint('record: could not start the practice: $e');
+        await _rollbackStart(cancelled: !live || _disposed);
+        return;
+      }
+      if (!live || _disposed) {
+        await recorder.cancel();
+        return;
       }
       return;
     }
@@ -160,19 +200,31 @@ class RecordSession extends ChangeNotifier {
       debugPrint('record: could not write the recording note: $e');
     }
     // discarded while the note was being written
-    if (!live || _noted != d.id) return;
+    if (!live || _disposed || _noted != d.id) return;
     try {
       await recorder.start(_path);
     } catch (e) {
       debugPrint('record: could not start: $e');
+      await _rollbackStart(cancelled: !live || _disposed || _noted != d.id);
+      return;
+    }
+    if (!live || _disposed || _noted != d.id) {
+      await recorder.cancel();
+      return;
     }
   }
 
   void _onPaused(bool on) {
-    if (!live || on == _paused) return;
+    if (!live || _disposed || on == _paused) return;
     _paused = on;
+    if (on) level.value = 0;
     on ? _clock.stop() : _clock.start();
     notifyListeners();
+  }
+
+  void _onLevel(double db) {
+    if (!live || _paused || _disposed) return;
+    level.value = voiceLevelFromDb(db);
   }
 
   /// The id whose recording note is on disk, until the blessing is in the store or thrown away.
@@ -187,11 +239,14 @@ class RecordSession extends ChangeNotifier {
 
   /// Throw the recording away. Back to ready, with nothing kept: the audio and the note are deleted.
   void discard() {
+    if (_disposed) return;
     if (live) recorder.cancel();
     forget();
+    _startFailed = false;
     _state = RecordState.ready;
     _sheet = false;
     _paused = false;
+    level.value = 0;
     _clock
       ..stop()
       ..reset();
@@ -201,10 +256,11 @@ class RecordSession extends ChangeNotifier {
 
   /// Amen: stop listening. The finished file's path, or null if nothing could be kept.
   Future<String?> finish() async {
-    if (!live) return null;
+    if (!live || _disposed) return null;
     _state = RecordState.ready;
     _sheet = false;
     _paused = false;
+    level.value = 0;
     _clock.stop();
     KeepAwake.set(false);
     _wordsState = WordsState.writing;
@@ -215,6 +271,7 @@ class RecordSession extends ChangeNotifier {
       debugPrint('record: could not stop: $e');
       audioPath = null;
     }
+    if (_disposed) return null;
     return audioPath;
   }
 
@@ -227,7 +284,9 @@ class RecordSession extends ChangeNotifier {
     }
     try {
       await debugHoldWords();
+      if (_disposed) return;
       final t = await transcriber.transcribe(path, language);
+      if (_disposed) return;
       transcript = t;
       words = t.text;
       _settle(t.later ? WordsState.later : t.unavailable ? WordsState.unavailable : WordsState.done);
@@ -243,7 +302,7 @@ class RecordSession extends ChangeNotifier {
   }
 
   void showSheet(bool on) {
-    if (_sheet == on) return;
+    if (_sheet == on || _disposed) return;
     _sheet = on;
     notifyListeners();
   }
@@ -258,7 +317,9 @@ class RecordSession extends ChangeNotifier {
       KeepAwake.set(false);
     }
     _pausedSub?.cancel();
+    _levelSub?.cancel();
     _disposed = true;
+    level.dispose();
     super.dispose();
   }
 }

@@ -106,12 +106,37 @@ class SkyEngine extends ChangeNotifier {
   /// Engine clock when the glow's breath began; the breath restarts with each recording.
   double breathT0 = 0;
 
+  /// Voice heard by the microphone (0..1), and the smoothed envelope drawn in the recording glow.
+  double get voice => _voice;
+  double _voice = 0, voiceShown = 0;
+  set voice(double v) {
+    if (v == _voice) return;
+    _voice = v;
+    _wake();
+  }
+
+  /// True while a live recording is paused by the system (a call); dims and stills the glow.
+  bool get recordingPaused => _recordingPaused;
+  bool _recordingPaused = false;
+  set recordingPaused(bool v) {
+    if (v == _recordingPaused) return;
+    _recordingPaused = v;
+    _wake();
+  }
+  double pausedMix = 0;
+
   /// Seconds since the sky started.
   double clock = 0;
 
   /// Held still: the first run's opening while the app cannot be seen (a system question over it,
   /// Control Centre, the app switcher), so it is not over before anyone sees it.
-  bool frozen = false;
+  bool get frozen => _frozen;
+  bool _frozen = false;
+  set frozen(bool v) {
+    if (v == _frozen) return;
+    _frozen = v;
+    if (!v) _wake();
+  }
 
   // Camera, eased every frame toward the goal.
   double ra = 0, dec = 0;
@@ -119,7 +144,58 @@ class SkyEngine extends ChangeNotifier {
 
   /// The overhead circle is drawn from the left edge across to the right, over [lineFor] seconds
   /// from [lineFrom] (the opening's sweep); 0 draws it whole.
-  double lineFrom = 0, lineFor = 0;
+  double lineFrom = 0;
+  double get lineFor => _lineFor;
+  double _lineFor = 0;
+  set lineFor(double v) {
+    if (v == _lineFor) return;
+    _lineFor = v;
+    _wake();
+  }
+
+  final Set<VoidCallback> _wakers = {};
+
+  /// Wakes the sky's ticker whenever camera goals, voice or lights change (without rebuilding home).
+  void addWakeListener(VoidCallback f) => _wakers.add(f);
+  void removeWakeListener(VoidCallback f) => _wakers.remove(f);
+  void _wake() {
+    for (final f in [..._wakers]) {
+      f();
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    _wake();
+    super.notifyListeners();
+  }
+
+  /// True when nothing in the sky is moving, gliding or easing.
+  bool get settled {
+    if (_frozen) return true;
+    if (_dragging || _glide != null || _slideT0 >= 0) return false;
+    if (_velRa.abs() >= 1e-4 || _velDec.abs() >= 1e-4) return false;
+    if (_lineFor > 0 && !reduceMotion && clock < lineFrom + _lineFor) return false;
+    if (show != null && (show!.on || show!.a >= 1e-3)) return false;
+    if (orb >= 1e-3 || _goal.orb != 0) return false;
+    final targetVoice = _recordingPaused ? 0.0 : _voice.clamp(0.0, 1.0);
+    if ((voiceShown - targetVoice).abs() >= 1e-3) return false;
+    if ((pausedMix - (_recordingPaused ? 1.0 : 0.0)).abs() >= 1e-3) return false;
+    if ((_goalFov - fov).abs() >= 1e-3 ||
+        (_goal.cy - cy).abs() >= 1e-3 ||
+        (_goal.exp - exp).abs() >= 1e-3 ||
+        (_goal.st - st).abs() >= 1e-3 ||
+        (_goal.lights - lights).abs() >= 1e-3 ||
+        (_goal.solo - solo).abs() >= 1e-3 ||
+        (_goal.names - names).abs() >= 1e-3 ||
+        (_goal.ring - ring).abs() >= 1e-3) {
+      return false;
+    }
+    for (var i = 0; i < weights.length; i++) {
+      if (((i == _focus ? 1.0 : 0.0) - weights[i]).abs() >= 1e-3) return false;
+    }
+    return true;
+  }
 
   /// How far across the screen the circle is drawn now, 0 to 1.
   double get lineReveal {
@@ -151,6 +227,7 @@ class SkyEngine extends ChangeNotifier {
   void setView(SkyView v) {
     _goal = v;
     _goalFov = v.fov;
+    _wake();
   }
 
   /// Put the camera exactly where it is heading, with the blessing in focus centred.
@@ -174,9 +251,12 @@ class SkyEngine extends ChangeNotifier {
     _velRa = _velDec = 0;
     _free = false;
     _bump = 0;
+    _voice = voiceShown = pausedMix = 0;
+    _recordingPaused = false;
     for (var i = 0; i < weights.length; i++) {
       weights[i] = i == _focus ? 1 : 0;
     }
+    _wake();
   }
 
   /// Replace the blessings (a new one added, or a draft taken away), focusing
@@ -271,7 +351,11 @@ class SkyEngine extends ChangeNotifier {
     } else {
       _glide = _Glide(ra, dec, d, toDec, clock, reduceMotion ? .01 : 1.1 + 1.5 * math.min(1, ang / 2.4), ang);
     }
-    if (wasFree) notifyListeners();
+    if (wasFree) {
+      notifyListeners();
+    } else {
+      _wake();
+    }
   }
 
   // ---- looking around ----
@@ -279,6 +363,7 @@ class SkyEngine extends ChangeNotifier {
   void dragStart() {
     _dragging = true;
     _velRa = _velDec = 0;
+    _wake();
   }
 
   /// [delta] in logical pixels, [dt] seconds since the last move.
@@ -307,6 +392,7 @@ class SkyEngine extends ChangeNotifier {
   void zoomTo(double newFov) {
     _goalFov = newFov.clamp(minFov, maxFov);
     fov = _goalFov;
+    _wake();
   }
 
   double get goalFov => _goalFov;
@@ -381,6 +467,13 @@ class SkyEngine extends ChangeNotifier {
     names += (_goal.names - names) * k;
     ring += (_goal.ring - ring) * k;
 
+    // the recording glow rises quickly with a voice and settles back slowly between words
+    final targetVoice = recordingPaused ? 0.0 : voice.clamp(0.0, 1.0);
+    final vk = 1 - math.exp(-dt * (targetVoice > voiceShown ? 11.0 : 3.2));
+    voiceShown += (targetVoice - voiceShown) * vk;
+    final pk = 1 - math.exp(-dt * 4.0);
+    pausedMix += ((recordingPaused ? 1.0 : 0.0) - pausedMix) * pk;
+
     final g = _glide;
     if (g != null) {
       final u = ((clock - g.t0) / g.dur).clamp(0.0, 1.0), e = easeInOutCubic(u);
@@ -453,5 +546,17 @@ class SkyEngine extends ChangeNotifier {
   static double breath(double t) {
     final p = t % 10;
     return p < 4 ? (.5 - .5 * math.cos(math.pi * p / 4)) : (.5 + .5 * math.cos(math.pi * (p - 4) / 6));
+  }
+
+  /// Radius and strength of the golden recording glow (`uOrb.zw` in `shaders/sky.frag`): a calm
+  /// breath at rest, lifting gently in reach and brightness with [voiceShown], and stilling if
+  /// paused by a call. With [reduceMotion] on, only brightness responds to voice.
+  ({double radius, double strength}) orbUniforms() {
+    final rawBr = reduceMotion ? .6 : breath(clock - breathT0);
+    final br = rawBr * (1 - .6 * pausedMix);
+    final v = voiceShown.clamp(0.0, 1.0);
+    final radius = (.15 + .065 * br) * (1 - .18 * pausedMix) + (reduceMotion ? 0.0 : .095 * v);
+    final strength = orb * ((.50 + .32 * br) * (1 - .55 * pausedMix) + .48 * v);
+    return (radius: radius, strength: strength);
   }
 }

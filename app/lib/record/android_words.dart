@@ -243,6 +243,18 @@ class NativeWordsEngine implements WordsEngine {
   Future<void> release() => _channel.invokeMethod<void>('release');
 }
 
+/// `--dart-define=WORDS_TRACE=true` in a debug build (tool/android_words.sh): writes each piece
+/// and the finished words to the log and `words_text/` for the test runner. Off in ordinary debug
+/// builds so spoken words never go to logcat or stay in plaintext files.
+const _traceWords = kDebugMode && bool.fromEnvironment('WORDS_TRACE');
+
+class _Job {
+  _Job(this.priority, this.language);
+  int priority;
+  final SpeechLanguage language;
+  late final Future<Transcript> future;
+}
+
 /// Writes the words of Android recordings, one piece at a time, and keeps its place.
 class AndroidWords implements Transcriber {
   AndroidWords({WordsEngine? engine, this._folder}) : _engine = engine ?? const NativeWordsEngine();
@@ -268,12 +280,13 @@ class AndroidWords implements Transcriber {
 
   // ---- one piece at a time, the latest asked for first ----
 
-  /// Each waiting turn, with the number of the recording it is for (later asked, higher).
-  final List<(int, Completer<void>)> _waiting = [];
+  /// Each waiting turn, with the job it is for (later asked, higher priority).
+  final List<(_Job, Completer<void>)> _waiting = [];
+  final Map<String, _Job> _inFlight = {};
   bool _busy = false;
   int _jobs = 0, _asked = 0;
 
-  Future<void> _turn(int job) {
+  Future<void> _turn(_Job job) {
     if (!_busy) {
       _busy = true;
       return Future.value();
@@ -293,26 +306,50 @@ class AndroidWords implements Transcriber {
     // time, oldest first)
     var best = 0;
     for (var i = 1; i < _waiting.length; i++) {
-      if (_waiting[i].$1 > _waiting[best].$1) best = i;
+      if (_waiting[i].$1.priority > _waiting[best].$1.priority) best = i;
     }
     _waiting.removeAt(best).$2.complete();
   }
 
   @override
   Future<Transcript> transcribe(String path, SpeechLanguage language) async {
+    while (_inFlight.containsKey(path)) {
+      final active = _inFlight[path]!;
+      active.priority = ++_asked;
+      if (active.language == language) return active.future;
+      try {
+        await active.future;
+      } catch (_) {}
+    }
+    final job = _Job(++_asked, language);
+    _inFlight[path] = job;
+    return job.future = _run(path, language, job);
+  }
+
+  Future<Transcript> _run(String path, SpeechLanguage language, _Job job) async {
     _jobs++;
-    final job = ++_asked;
+    var held = false;
     try {
-      return await _write(path, language, job);
+      final sw = Stopwatch()..start();
+      // the engine is held for the whole recording, given up between pieces only to a newer one
+      await _turn(job);
+      held = true;
+      final dir = await _dir();
+      final place = _placeFile(dir, path);
+      return await _writeHolding(path, language, job, dir, place, sw);
     } on WordsCannot catch (e) {
       return e.code == 'unavailable' ? const Transcript.unavailable() : const Transcript.later();
     } finally {
       _jobs--;
+      if (identical(_inFlight[path], job)) _inFlight.remove(path);
       _clear(path);
-      if (_jobs == 0) {
-        try {
-          await _engine.release();
-        } catch (_) {}
+      if (held) {
+        if (_jobs == 0 && _waiting.isEmpty) {
+          try {
+            await _engine.release();
+          } catch (_) {}
+        }
+        _done();
       }
     }
   }
@@ -322,27 +359,14 @@ class AndroidWords implements Transcriber {
     progress.value = {...progress.value}..remove(path);
   }
 
-  Future<Transcript> _write(String path, SpeechLanguage language, int job) async {
-    final sw = Stopwatch()..start();
-    final dir = await _dir();
-    final place = _placeFile(dir, path);
-    // the engine is held for the whole recording, given up between pieces only to a newer one
-    await _turn(job);
-    try {
-      return await _writeHolding(path, language, job, dir, place, sw);
-    } finally {
-      _done();
-    }
-  }
-
   /// A newer recording is waiting: let it go first, then carry on.
-  Future<void> _yield(int job) async {
-    if (!_waiting.any((w) => w.$1 > job)) return;
+  Future<void> _yield(_Job job) async {
+    if (!_waiting.any((w) => w.$1.priority > job.priority)) return;
     _done();
     await _turn(job);
   }
 
-  Future<Transcript> _writeHolding(String path, SpeechLanguage language, int job, String dir, File place, Stopwatch sw) async {
+  Future<Transcript> _writeHolding(String path, SpeechLanguage language, _Job job, String dir, File place, Stopwatch sw) async {
     final prep = await _engine.prepare(path, language.code);
     // its place, if the app was closed in the middle of it
     final pieces = <WordsPiece>[];
@@ -350,7 +374,8 @@ class AndroidWords implements Transcriber {
       if (place.existsSync()) {
         final j = jsonDecode(await place.readAsString()) as Map<String, Object?>;
         if (j['language'] == language.code && j['count'] == prep.stretches.length) {
-          pieces.addAll([for (final x in (j['pieces'] as List)) WordsPiece.fromJson((x as Map).cast<String, Object?>())]);
+          final loaded = [for (final x in (j['pieces'] as List)) WordsPiece.fromJson((x as Map).cast<String, Object?>())];
+          if (loaded.length <= prep.stretches.length) pieces.addAll(loaded);
         }
       }
     } catch (e) {
@@ -387,7 +412,9 @@ class AndroidWords implements Transcriber {
         }
       }
       pieces.add(WordsPiece(start: s0, end: s1, text: text, mark: mark));
-      if (kDebugMode) debugPrint('words: piece ${i + 1}/${prep.stretches.length} ${s0.toStringAsFixed(2)}-${s1.toStringAsFixed(2)} ${jsonEncode(text)}');
+      if (_traceWords) {
+        debugPrint('words: piece ${i + 1}/${prep.stretches.length} ${s0.toStringAsFixed(2)}-${s1.toStringAsFixed(2)} ${jsonEncode(text)}');
+      }
       await _keep(dir, place, language, prep.stretches.length, pieces);
       show();
     }
@@ -398,7 +425,7 @@ class AndroidWords implements Transcriber {
     debugPrint('words: wrote ${p.basename(path)}: ${prep.seconds.toStringAsFixed(1)} s, ${pieces.length} pieces '
         '(${resumed > 0 ? 'carried on from ${resumed + 1}, ' : ''}$retried read again, $marked left out) in ${sw.elapsedMilliseconds} ms');
     // tests compare the final words of an interrupted writing with an uninterrupted one
-    if (kDebugMode) {
+    if (_traceWords) {
       debugPrint('words: text ${p.basename(path)} ${jsonEncode(text)}');
       // the log cuts long lines, so the whole text goes to a file too (tool/android_words.py)
       try {
@@ -424,6 +451,27 @@ class AndroidWords implements Transcriber {
     }
   }
 
+  /// Remove any place kept for [audioName], when its recording is erased or deleted.
+  Future<void> forget(String audioName, {String? audioDir}) async {
+    if (audioName.isEmpty || p.basename(audioName) != audioName) return;
+    final String dir;
+    try {
+      dir = _folder != null
+          ? await _folder()
+          : audioDir != null
+              ? p.join(p.dirname(audioDir), 'words')
+              : await _dir();
+    } catch (_) {
+      return;
+    }
+    for (final suffix in ['.json', '.json.tmp']) {
+      try {
+        final f = File(p.join(dir, '$audioName$suffix'));
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+  }
+
   /// At launch: places kept for recordings that are no longer on the phone.
   Future<void> tidy(Set<String> audioNames) async {
     try {
@@ -431,7 +479,11 @@ class AndroidWords implements Transcriber {
       if (!d.existsSync()) return;
       for (final f in d.listSync()) {
         final n = p.basename(f.path);
-        final audio = n.endsWith('.json') ? n.substring(0, n.length - 5) : n;
+        final audio = n.endsWith('.json.tmp')
+            ? n.substring(0, n.length - 9)
+            : n.endsWith('.json')
+                ? n.substring(0, n.length - 5)
+                : n;
         if (!audioNames.contains(audio)) f.deleteSync();
       }
     } catch (e) {

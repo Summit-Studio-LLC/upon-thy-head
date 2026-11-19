@@ -20,9 +20,11 @@ import UIKit
 ///  - `transcribe` {path, language} → {"text", "engine", "locale"}; error "unavailable" when no
 ///    engine on this phone can write the language
 ///  - `debugInterrupt` {began} : behave as if the system interrupted the audio (tests only)
+///  - `debugLevel` {db} : send a pretend microphone loudness in dBFS (tests only)
 ///  - `debugFeed` {path} : at `stop`, the finished file is replaced by a copy of this one, so a
 ///    test hears the same words every time (tests only)
-/// Events (iOS → Dart): `paused` {bool}, while the system has the microphone (a call, Siri).
+/// Events (iOS → Dart): `paused` {bool}, while the system has the microphone (a call, Siri);
+/// `level` {double}, microphone loudness in dBFS while listening on screen.
 enum SpeechChannel {
   static var channel: FlutterMethodChannel?
   static let recorder = SegmentRecorder()
@@ -32,6 +34,7 @@ enum SpeechChannel {
     c.setMethodCallHandler(handle)
     channel = c
     recorder.onPaused = { paused in channel?.invokeMethod("paused", arguments: paused) }
+    recorder.onLevel = { db in channel?.invokeMethod("level", arguments: db) }
   }
 
   static func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
@@ -98,40 +101,54 @@ enum SpeechChannel {
     case "recover":
       guard let path = args["path"] as? String else { return result(FlutterError(code: "args", message: "path", details: nil)) }
       SegmentRecorder.recover(URL(fileURLWithPath: path)) { r in
-        DispatchQueue.main.async {
-          switch r {
-          case .success(let got): result(got.map { ["path": $0.0.path, "seconds": $0.1] })
-          case .failure(let e): result(FlutterError(code: "record", message: "\(e)", details: nil))
-          }
+        switch r {
+        case .success(let got): result(got.map { ["path": $0.0.path, "seconds": $0.1] })
+        case .failure(let e): result(FlutterError(code: "record", message: "\(e)", details: nil))
         }
       }
     case "seconds":
       guard let path = args["path"] as? String else { return result(FlutterError(code: "args", message: "path", details: nil)) }
-      result(SegmentRecorder.seconds(URL(fileURLWithPath: path)))
+      DispatchQueue.global(qos: .userInitiated).async {
+        let s = SegmentRecorder.seconds(URL(fileURLWithPath: path))
+        DispatchQueue.main.async { result(s) }
+      }
     case "transcribe":
       guard let path = args["path"] as? String else { return result(FlutterError(code: "args", message: "path", details: nil)) }
       let language = args["language"] as? String ?? "en"
-      OnDeviceSpeech.verbose = args["trace"] as? Bool ?? false
+      #if DEBUG
+      let wantTrace = args["trace"] as? Bool ?? false
+      OnDeviceSpeech.verbose = wantTrace
       OnDeviceSpeech.trace = []
+      #endif
       Task {
         let t0 = Date()
         do {
           let w = try await OnDeviceSpeech.transcribe(URL(fileURLWithPath: path), language: language)
           let ms = Int(Date().timeIntervalSince(t0) * 1000)
           NSLog("speech: %@ %@ in %d ms", w.engine.rawValue, w.locale, ms)
-          await MainActor.run { result(["text": w.text, "engine": w.engine.rawValue, "locale": w.locale, "ms": ms, "trace": OnDeviceSpeech.trace]) }
+          #if DEBUG
+          let trace = wantTrace ? OnDeviceSpeech.trace : []
+          #else
+          let trace: [String] = []
+          #endif
+          await MainActor.run { result(["text": w.text, "engine": w.engine.rawValue, "locale": w.locale, "ms": ms, "trace": trace]) }
         } catch OnDeviceSpeech.Failure.unavailable(let why) {
           await MainActor.run { result(FlutterError(code: "unavailable", message: why, details: nil)) }
         } catch {
           await MainActor.run { result(FlutterError(code: "failed", message: "\(error)", details: nil)) }
         }
       }
+    #if DEBUG
     case "debugInterrupt":
       recorder.interrupted(began: args["began"] as? Bool ?? true, shouldResume: true)
+      result(nil)
+    case "debugLevel":
+      channel?.invokeMethod("level", arguments: args["db"] as? Double ?? -160.0)
       result(nil)
     case "debugFeed":
       recorder.feed = (args["path"] as? String).map { URL(fileURLWithPath: $0) }
       result(nil)
+    #endif
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -203,13 +220,22 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
   ]
 
   var onPaused: ((Bool) -> Void)?
+  var onLevel: ((Double) -> Void)?
+  #if DEBUG
   var feed: URL?
+  #endif
 
   private var target: URL?
   private var parts: [URL] = []
   private var recorder: AVAudioRecorder?
+  private var meterTimer: Timer?
   private(set) var paused = false
-  private var observing = false
+  private var observers: [NSObjectProtocol] = []
+
+  deinit {
+    let nc = NotificationCenter.default
+    observers.forEach { nc.removeObserver($0) }
+  }
 
   func start(_ url: URL) throws {
     cancel()
@@ -219,19 +245,39 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
     var values = URLResourceValues()
     values.isExcludedFromBackup = true
     var d = dir
-    try? d.setResourceValues(values)
+    do {
+      try d.setResourceValues(values)
+    } catch {
+      NSLog("speech: could not exclude from backup: %@", error.localizedDescription)
+    }
     let session = AVAudioSession.sharedInstance()
     try session.setCategory(.record, mode: .default, options: [])
     try session.setActive(true)
     target = url
     parts = []
     paused = false
-    if !observing {
-      observing = true
-      NotificationCenter.default.addObserver(self, selector: #selector(onInterruption), name: AVAudioSession.interruptionNotification, object: session)
-      NotificationCenter.default.addObserver(self, selector: #selector(onActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+    if observers.isEmpty {
+      let nc = NotificationCenter.default
+      observers = [
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { [weak self] n in
+          self?.onInterruption(n)
+        },
+        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+          self?.onActive()
+        },
+        nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+          self?.onResignActive()
+        },
+      ]
     }
-    try startPart()
+    do {
+      try startPart()
+    } catch {
+      target = nil
+      parts = []
+      try? session.setActive(false, options: .notifyOthersOnDeactivation)
+      throw error
+    }
   }
 
   private func startPart() throws {
@@ -239,10 +285,34 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
     let part = Self.partURL(target, parts.count + 1)
     try? FileManager.default.removeItem(at: part)
     let r = try AVAudioRecorder(url: part, settings: Self.settings)
+    r.isMeteringEnabled = true
     r.delegate = self
     guard r.record() else { throw NSError(domain: "record", code: 1, userInfo: [NSLocalizedDescriptionKey: "the recorder would not start"]) }
     recorder = r
     parts.append(part)
+    if UIApplication.shared.applicationState == .active {
+      startMetering()
+    }
+  }
+
+  private func startMetering() {
+    let setup = { [weak self] in
+      self?.meterTimer?.invalidate()
+      self?.meterTimer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: true) { [weak self] _ in
+        guard let self, !self.paused, UIApplication.shared.applicationState == .active, let r = self.recorder, r.isRecording else { return }
+        r.updateMeters()
+        self.onLevel?(Double(r.averagePower(forChannel: 0)))
+      }
+    }
+    if Thread.isMainThread { setup() } else { DispatchQueue.main.async(execute: setup) }
+  }
+
+  private func stopMetering() {
+    let clear = { [weak self] in
+      self?.meterTimer?.invalidate()
+      self?.meterTimer = nil
+    }
+    if Thread.isMainThread { clear() } else { DispatchQueue.main.async(execute: clear) }
   }
 
   static func partURL(_ target: URL, _ n: Int) -> URL {
@@ -265,11 +335,12 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
 
   /// Close the part being written, so it is complete on disk.
   private func closePart() {
+    stopMetering()
     recorder?.stop()
     recorder = nil
   }
 
-  @objc private func onInterruption(_ n: Notification) {
+  private func onInterruption(_ n: Notification) {
     guard let info = n.userInfo, let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
           let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
     let options = AVAudioSession.InterruptionOptions(rawValue: info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
@@ -283,15 +354,25 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
       closePart()
       paused = true
       NSLog("speech: interrupted; %d part(s) kept", parts.count)
+      onLevel?(-160.0)
       onPaused?(true)
     } else if paused, shouldResume || UIApplication.shared.applicationState == .active {
       resume()
     }
   }
 
-  /// Back in the app after an interruption that did not hand the microphone back.
-  @objc private func onActive() {
-    if target != nil && paused { resume() }
+  private func onResignActive() {
+    stopMetering()
+  }
+
+  /// Back in the app after an interruption that did not hand the microphone back, or after locking.
+  private func onActive() {
+    guard target != nil else { return }
+    if paused {
+      resume()
+    } else if recorder?.isRecording == true {
+      startMetering()
+    }
   }
 
   private func resume() {
@@ -315,11 +396,13 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
     paused = false
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     let finish: (Result<URL, Error>) -> Void = { r in
+      #if DEBUG
       // tests: the words they expect, in place of the room's
       if case .success(let url) = r, let feed = self.feed {
         try? FileManager.default.removeItem(at: url)
         do { try FileManager.default.copyItem(at: feed, to: url) } catch { return DispatchQueue.main.async { done(.failure(error)) } }
       }
+      #endif
       DispatchQueue.main.async { done(r) }
     }
     try? FileManager.default.removeItem(at: target)
@@ -336,25 +419,34 @@ final class SegmentRecorder: NSObject, AVAudioRecorderDelegate {
   /// seconds; nil when nothing was recorded (every file empty), after removing the empty parts. On a
   /// failure everything is left on disk for the next launch.
   static func recover(_ target: URL, _ done: @escaping (Result<(URL, Double)?, Error>) -> Void) {
-    let fm = FileManager.default
-    let parts = partsOnDisk(target)
-    let heard = parts.filter { seconds($0) > 0 }
-    if heard.isEmpty {
-      parts.forEach { try? fm.removeItem(at: $0) }
-      let s = fm.fileExists(atPath: target.path) ? seconds(target) : 0
-      if s > 0 { return done(.success((target, s))) }
-      try? fm.removeItem(at: target)
-      return done(.success(nil))
-    }
-    // a joined file from a join that was cut short is replaced by joining again
-    try? fm.removeItem(at: target)
-    join(heard, into: target) { r in
-      switch r {
-      case .success(let url):
+    DispatchQueue.global(qos: .userInitiated).async {
+      let fm = FileManager.default
+      let parts = partsOnDisk(target)
+      let heard = parts.filter { seconds($0) > 0 }
+      if heard.isEmpty {
         parts.forEach { try? fm.removeItem(at: $0) }
-        done(.success((url, seconds(url))))
-      case .failure(let e):
-        done(.failure(e))
+        let s = fm.fileExists(atPath: target.path) ? seconds(target) : 0
+        if s > 0 {
+          DispatchQueue.main.async { done(.success((target, s))) }
+          return
+        }
+        try? fm.removeItem(at: target)
+        DispatchQueue.main.async { done(.success(nil)) }
+        return
+      }
+      // a joined file from a join that was cut short is replaced by joining again
+      try? fm.removeItem(at: target)
+      join(heard, into: target) { r in
+        DispatchQueue.global(qos: .userInitiated).async {
+          switch r {
+          case .success(let url):
+            parts.forEach { try? fm.removeItem(at: $0) }
+            let len = seconds(url)
+            DispatchQueue.main.async { done(.success((url, len))) }
+          case .failure(let e):
+            DispatchQueue.main.async { done(.failure(e)) }
+          }
+        }
       }
     }
   }

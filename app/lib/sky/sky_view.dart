@@ -83,14 +83,26 @@ class _SkyWidgetState extends State<SkyWidget> with SingleTickerProviderStateMix
   Duration _lastMove = Duration.zero;
   final Stopwatch _clock = Stopwatch()..start();
 
+  void _wake() {
+    if (!mounted) return;
+    if (!_ticker.isActive) {
+      _last = Duration.zero;
+      _ticker.start();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    widget.engine.addWakeListener(_wake);
     _ticker = createTicker((elapsed) {
       final dt = _last == Duration.zero ? 0.0 : ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, .05);
       _last = elapsed;
       widget.engine.step(dt);
       _frame.value++;
+      if (dt > 0 && widget.engine.settled && (_painter?.labelsSettled ?? true)) {
+        _ticker.stop();
+      }
     })
       ..start();
   }
@@ -98,13 +110,22 @@ class _SkyWidgetState extends State<SkyWidget> with SingleTickerProviderStateMix
   @override
   void didUpdateWidget(SkyWidget old) {
     super.didUpdateWidget(old);
-    if (old.engine != widget.engine || old.palette != widget.palette || old.showLabels != widget.showLabels || old.line != widget.line) {
-      _painter = null;
+    if (old.engine != widget.engine) {
+      old.engine.removeWakeListener(_wake);
+      widget.engine.addWakeListener(_wake);
     }
+    if (old.engine != widget.engine || old.palette != widget.palette || old.showLabels != widget.showLabels) {
+      _painter = null;
+    } else if (old.line != widget.line) {
+      _painter?.line = widget.line;
+      _frame.value++;
+    }
+    _wake();
   }
 
   @override
   void dispose() {
+    widget.engine.removeWakeListener(_wake);
     _ticker.dispose();
     _frame.dispose();
     super.dispose();
@@ -141,7 +162,10 @@ class _SkyWidgetState extends State<SkyWidget> with SingleTickerProviderStateMix
 
   // The recognizer sends no final onEnd when the last fingers of a pinch lift
   // close together, so raw pointer counts end the gesture too.
-  void _onPointerDown(PointerDownEvent _) => _pointers++;
+  void _onPointerDown(PointerDownEvent _) {
+    _pointers++;
+    _wake();
+  }
 
   void _onPointerUp(PointerEvent _) {
     _pointers = (_pointers - 1).clamp(0, 99);
