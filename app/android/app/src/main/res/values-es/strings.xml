@@ -5,6 +5,9 @@
     <string name="recording_paused">En pausa</string>
     <string name="recording_channel">Grabación</string>
     <string name="recording_channel_about">Aparece mientras se graba una bendición.</string>
+    <string name="playback_title">Escuchando una grabación</string>
+    <string name="playback_channel">Reproducción</string>
+    <string name="playback_channel_about">Aparece mientras se reproduce una grabación.</string>
     <!-- Los atajos del launcher (xml/shortcuts.xml). -->
     <string name="shortcut_record">Grabar una bendición</string>
     <string name="shortcut_home">Abrir mis bendiciones</string>

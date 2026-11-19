@@ -57,6 +57,17 @@ abstract class Recorder {
   /// True while the system has taken the microphone (a phone call); the recording so far is kept
   /// and listening starts again when it is given back.
   Stream<bool> get paused;
+
+  /// Microphone loudness in dBFS while listening, a few times a second; silent where unused.
+  Stream<double> get level => const Stream.empty();
+}
+
+/// Maps microphone loudness in dBFS (typically -160..0) to 0..1 for the recording glow.
+/// Quiet room tone at or below -50 dBFS rests at 0; spoken voice (-36 to -14 dBFS) lifts smoothly.
+double voiceLevelFromDb(double db) {
+  if (!db.isFinite || db <= -50) return 0;
+  final u = ((db + 50) / 36).clamp(0.0, 1.0);
+  return u * (.35 + .65 * u);
 }
 
 /// What came back from turning a file into words.
@@ -94,7 +105,12 @@ class SilentRecorder implements Recorder {
 
   Permissions granted;
   final StreamController<bool> _paused = StreamController.broadcast();
+  final StreamController<double> _level = StreamController.broadcast();
   String? _path;
+
+  /// Tests: pretend the microphone heard [db] dBFS, or the system paused/resumed it.
+  void emitDb(double db) => _level.add(db);
+  void emitPaused(bool on) => _paused.add(on);
 
   @override
   Future<Permissions> permissions() async => granted;
@@ -126,6 +142,9 @@ class SilentRecorder implements Recorder {
 
   @override
   Stream<bool> get paused => _paused.stream;
+
+  @override
+  Stream<double> get level => _level.stream;
 }
 
 /// Writes nothing.

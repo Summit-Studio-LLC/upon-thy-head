@@ -243,6 +243,39 @@ void main() {
       expect(b.changes[1].kept, isFalse);
     });
   });
+
+  group('paragraph breaks and quotes around fillers', () {
+    test('a standalone filler before a blank line keeps the paragraph break intact', () {
+      const first = 'First paragraph. Um.\n\nSecond paragraph.';
+      final c1 = rules.find(first, 'en');
+      expect(c1, hasLength(1));
+      expect(c1.single.was, 'Um.');
+      expect(applyChanges(first, c1), contains('\n\n'));
+
+      const start = 'Um.\n\nSecond paragraph.';
+      final c2 = rules.find(start, 'en');
+      expect(c2, hasLength(1));
+      expect(c2.single.was, 'Um.');
+      expect(applyChanges(start, c2), '\n\nSecond paragraph.');
+
+      const spanish = 'Eh.\n\nSegundo párrafo.';
+      final c3 = rules.find(spanish, 'es');
+      expect(c3, hasLength(1));
+      expect(c3.single.was, 'Eh.');
+      expect(applyChanges(spanish, c3), '\n\nSegundo párrafo.');
+    });
+
+    test('unpaired quotes next to fillers are never stripped', () {
+      const closing = '“I bless you. Um.” Next.';
+      final c1 = rules.find(closing, 'en');
+      expect(applyChanges(closing, c1), contains('”'));
+      expect(applyChanges(closing, c1), contains('“'));
+
+      const opening = 'Um, “your strength” will return.';
+      final c2 = rules.find(opening, 'en');
+      expect(applyChanges(opening, c2), '“your strength” will return.');
+    });
+  });
 }
 
 Blessing _blessing(String spoken, String lang) => Blessing(

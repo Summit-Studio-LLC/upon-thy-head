@@ -203,10 +203,7 @@ void main() {
             measured(t, size, '${e.key} $name ${lang.name}');
           });
         }
-        // known, and on a phone too (lib/review/review_screen.dart's ListenBar Row at 3.1x): the other
-        // builder's file, left for the owner
-        final known = e.key == 'review' && size.width < 400;
-        testWidgets('${e.key} at the largest text', skip: known, (t) async {
+        testWidgets('${e.key} at the largest text', (t) async {
           Strings.use(UiLanguage.english);
           await show(t, await e.value(t), screen: size, padding: padding, scale: 3.1);
           final error = t.takeException();
@@ -220,6 +217,15 @@ void main() {
         expect(r.width, lessThanOrEqualTo(size.width > card ? card + .5 : size.width + .5), reason: 'the card is ${r.width} wide');
         expect((r.center.dx - size.width / 2).abs(), lessThan(1), reason: 'the card is centred');
       });
+    });
+  }
+
+  for (final lang in UiLanguage.values) {
+    testWidgets('review on a 360-wide phone, ${lang.name}, text ×3.1', (t) async {
+      Strings.use(lang);
+      await show(t, review(), screen: const Size(360, 800), padding: const EdgeInsets.only(top: 24, bottom: 48), scale: 3.1);
+      final error = t.takeException();
+      expect(error, isNull);
     });
   }
 

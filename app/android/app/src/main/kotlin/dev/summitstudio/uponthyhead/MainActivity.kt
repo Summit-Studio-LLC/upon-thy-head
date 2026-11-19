@@ -3,7 +3,9 @@ package dev.summitstudio.uponthyhead
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -22,8 +24,8 @@ import io.flutter.plugin.common.MethodChannel
  * cryptography (LinkChannel), sharing and receiving blessings by link, text, PDF and file
  * (ShareChannel, BlessingFiles), the app lock and the recent-apps cover (LockChannel), approximate
  * location (LocationChannel), the version, and opening this app's page in the system Settings.
- * The one thing left is the phone check page (test builds only), a stand-in that answers safely:
- * see [NotYet] and "Stand-ins" in docs/android-plan.md.
+ * Listening back with the screen locked is [PlaybackService]. The phone check page (test builds
+ * only) is [PhoneCheck] when that build bundled its audio, and [NotYet] otherwise.
  *
  * One Flutter engine for the whole process: the first activity makes it (with the flags it was
  * started with) and it is kept, so a new activity (Android's "Don't keep activities", or the system
@@ -33,13 +35,54 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val ENGINE = "main"
         private var registered = false
+        private val started = HashSet<MainActivity>()
+
+        @Volatile var current: MainActivity? = null
+            private set
+
+        /** On screen: the recording glow follows the microphone only while someone can see it. */
+        @Volatile var visible = false
+            private set
+
+        @Volatile var keepScreenOn = false
+            private set
+
+        fun liveActivity(): MainActivity? = current?.takeIf { !it.isFinishing && !it.isDestroyed }
+
+        /** lib/record/keep_awake.dart: the screen stays on while a recording listens. */
+        private fun keepAwake(call: MethodCall, result: MethodChannel.Result) {
+            when (call.method) {
+                "get" -> {
+                    val w = liveActivity()?.window
+                    val on = if (w != null) {
+                        (w.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+                    } else {
+                        keepScreenOn
+                    }
+                    result.success(on)
+                }
+                "set" -> {
+                    val on = call.arguments == true
+                    keepScreenOn = on
+                    liveActivity()?.window?.let { w ->
+                        if (on) {
+                            w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     @Deprecated("Android's share sheet is started for a result, to hear when it closes")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == ShareChannel.REQUEST) ShareChannel.closed()
+        if (requestCode == ShareChannel.REQUEST) ShareChannel.closed(applicationContext)
     }
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? = FlutterEngineCache.getInstance().get(ENGINE)
@@ -48,15 +91,23 @@ class MainActivity : FlutterActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        LockChannel.prompting = false
-        SpeechChannel.answered(requestCode)
-        LocationChannel.answered(requestCode)
-        LockChannel.questionGone(this)
+        SpeechChannel.answered(requestCode, permissions)
+        LocationChannel.answered(requestCode, permissions)
+        PhoneCheck.answered(requestCode, permissions, grantResults)
+        LockChannel.promptEnd("perm:$requestCode", this)
     }
 
     override fun onStart() {
         super.onStart()
+        current = this
+        started.add(this)
+        visible = true
         LockChannel.came(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        current = this
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -65,18 +116,29 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onStop() {
-        // listening back is for the screen only, for now (docs/android-plan.md task 18)
-        PlayerChannel.current?.pauseForBackground()
+        started.remove(this)
+        visible = started.isNotEmpty()
+        // playback keeps going with the screen locked (PlaybackService); a recording's service does too
         // out of sight: the time is noted for the lock, and with the lock on the plain ground covers the app
-        LockChannel.left(this)
+        if (!visible) LockChannel.left(this)
         super.onStop()
     }
 
+    override fun onDestroy() {
+        started.remove(this)
+        visible = started.isNotEmpty()
+        LockChannel.destroyed(this)
+        if (current === this) current = null
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        current = this
         // Drawn under the status and navigation bars (Android 15 and later insist; this makes 13
         // and 14 the same). Flutter reports the bars' sizes as padding, as on iPhone.
         window.setDecorFitsSystemWindows(false)
         super.onCreate(savedInstanceState)
+        if (keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // with the lock on, recent apps never shows the app (a new activity is told again)
         LockChannel.apply(this)
         if (!registered) {
@@ -86,10 +148,20 @@ class MainActivity : FlutterActivity() {
         // the link or file this activity was opened with; not again when Android recreates it (it
         // keeps the old intent) or when it is reopened from recent apps
         if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) receive(intent)
-        // Upright on phones; tablets turn freely, as the iPad does. (Android 16 ignores a fixed
-        // orientation on large screens anyway.)
-        if (resources.configuration.smallestScreenWidthDp < 600) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        applyOrientation(resources.configuration)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyOrientation(newConfig)
+    }
+
+    /** Upright on phones; tablets and unfolded screens turn freely, as the iPad does. */
+    private fun applyOrientation(config: Configuration) {
+        requestedOrientation = if (config.smallestScreenWidthDp < 600) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -117,6 +189,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         receive(intent)
     }
 
@@ -125,47 +198,38 @@ class MainActivity : FlutterActivity() {
         // a kept engine has its plugins already
         if (cache.get(ENGINE) !== flutterEngine) super.configureFlutterEngine(flutterEngine)
         cache.put(ENGINE, flutterEngine)
+        val app = applicationContext
         val m = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(m, "upon_thy_head/keep_awake").setMethodCallHandler(::keepAwake)
         val speech = MethodChannel(m, "upon_thy_head/speech")
-        speech.setMethodCallHandler(SpeechChannel({ this }, applicationContext))
+        speech.setMethodCallHandler(SpeechChannel(::liveActivity, app))
         SpeechChannel.channel = speech
         val lock = MethodChannel(m, "upon_thy_head/lock")
-        lock.setMethodCallHandler(LockChannel({ this }, applicationContext))
+        lock.setMethodCallHandler(LockChannel(::liveActivity, app))
         LockChannel.channel = lock
         val words = MethodChannel(m, "upon_thy_head/words")
-        words.setMethodCallHandler(WordsChannel(applicationContext))
+        words.setMethodCallHandler(WordsChannel.get(app))
         WordsChannel.channel = words
-        MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(LocationChannel({ this }, applicationContext))
+        MethodChannel(m, "upon_thy_head/location").setMethodCallHandler(LocationChannel(::liveActivity, app))
         val player = MethodChannel(m, "upon_thy_head/player")
-        player.setMethodCallHandler(PlayerChannel.get(this))
-        PlayerChannel.get(this).channel = player
-        MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(applicationContext))
-        MethodChannel(m, "upon_thy_head/proof").setMethodCallHandler(ProofChannel(applicationContext))
+        val pc = PlayerChannel.get(app)
+        player.setMethodCallHandler(pc)
+        pc.channel = player
+        MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(app))
+        MethodChannel(m, "upon_thy_head/proof").setMethodCallHandler(ProofChannel(app))
         val share = MethodChannel(m, "upon_thy_head/share")
         ShareChannel.channel = share
-        share.setMethodCallHandler { call, result -> ShareChannel.handle({ this }, applicationContext, call, result) }
-        MethodChannel(m, "upon_thy_head/check").setMethodCallHandler(NotYet::check)
+        share.setMethodCallHandler { call, result -> ShareChannel.handle(::liveActivity, app, call, result) }
+        val check = MethodChannel(m, "upon_thy_head/check")
+        // the prepared recordings are in the apk only for --dart-define=PHONE_CHECK=true
+        if (app.assets.list("phone_check")?.contains("en.m4a") == true) {
+            check.setMethodCallHandler(PhoneCheck(::liveActivity, app))
+            Log.i("phone_check", "present")
+        } else {
+            check.setMethodCallHandler(NotYet::check)
+        }
         // upon_thy_head/language_menu/<id> is never called here: on Android the Dart side draws the
         // language menu itself (lib/record/language_menu.dart).
-    }
-
-    /** lib/record/keep_awake.dart: the screen stays on while a recording listens. */
-    private fun keepAwake(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "get" -> result.success(
-                (window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0,
-            )
-            "set" -> {
-                if (call.arguments == true) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
-                result.success(null)
-            }
-            else -> result.notImplemented()
-        }
     }
 }
 
@@ -179,6 +243,6 @@ object NotYet {
     private fun no(result: MethodChannel.Result, what: String) =
         result.error("unavailable", "$what is not built on Android yet", null)
 
-    /** The phone check page (test builds only): an Android version is its own task. */
+    /** The phone check page, in a build that did not bundle its audio (PhoneCheck registers otherwise). */
     fun check(call: MethodCall, result: MethodChannel.Result) = no(result, "The phone check")
 }

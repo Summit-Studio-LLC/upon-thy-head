@@ -33,7 +33,7 @@ class HandOverSheet extends StatefulWidget {
     required this.onShare,
     required this.onSent,
     required this.onClose,
-    required this.onDelete,
+    this.onDelete,
   });
 
   final Palette palette;
@@ -58,8 +58,9 @@ class HandOverSheet extends StatefulWidget {
   /// Keep (the ring stays), a tap on the dimmed sky, or closing before sending.
   final VoidCallback onClose;
 
-  /// Delete it now: the family member's page asks once more, as removing them does.
-  final VoidCallback onDelete;
+  /// Delete it now: the family member's page asks once more, as removing them does. Null when
+  /// drafts remain on the ring (never offered then).
+  final VoidCallback? onDelete;
 
   @override
   State<HandOverSheet> createState() => HandOverSheetState();
@@ -73,6 +74,7 @@ class HandOverSheetState extends State<HandOverSheet> {
   final _focus = FocusNode();
   String? _url, _trouble;
   bool _busy = false;
+  int _gen = 0;
 
   /// Tests: the link made.
   String? get debugUrl => _url;
@@ -86,12 +88,17 @@ class HandOverSheetState extends State<HandOverSheet> {
   @override
   void didUpdateWidget(HandOverSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // each time it opens it starts again
-    if (widget.on && !oldWidget.on) _reset();
-    if (!widget.on && oldWidget.on) _focus.unfocus();
+    // each time it opens (or switches person) it starts again
+    if ((widget.on && !oldWidget.on) || widget.person?.id != oldWidget.person?.id) _reset();
+    if (!widget.on && oldWidget.on) {
+      _gen++;
+      _busy = false;
+      _focus.unfocus();
+    }
   }
 
   void _reset() {
+    _gen++;
     step = HandOverStep.choose;
     _keptBy.text = widget.keptBy;
     _url = _trouble = null;
@@ -109,6 +116,7 @@ class HandOverSheetState extends State<HandOverSheet> {
 
   Future<void> _send() async {
     if (_busy || widget.person == null) return;
+    final gen = ++_gen;
     _focus.unfocus();
     setState(() {
       _busy = true;
@@ -125,7 +133,7 @@ class HandOverSheetState extends State<HandOverSheet> {
     }
     final shown = DateTime.now().difference(started);
     if (shown < const Duration(milliseconds: 500)) await Future<void>.delayed(const Duration(milliseconds: 500) - shown);
-    if (!mounted || !widget.on) return;
+    if (!mounted || !widget.on || gen != _gen) return;
     switch (r) {
       case Made(:final url):
         _url = url;
@@ -151,6 +159,7 @@ class HandOverSheetState extends State<HandOverSheet> {
   Future<void> _share() async {
     final url = _url;
     if (url == null || _busy) return;
+    final gen = ++_gen;
     _busy = true;
     var done = false;
     try {
@@ -158,6 +167,7 @@ class HandOverSheetState extends State<HandOverSheet> {
     } catch (e) {
       debugPrint('hand over: $e');
     }
+    if (gen != _gen) return;
     _busy = false;
     if (!mounted || !widget.on) return;
     if (done) widget.onSent(_keptBy.text.trim());
@@ -182,8 +192,10 @@ class HandOverSheetState extends State<HandOverSheet> {
       barrier: true,
       label: Strings.handOverRow(_name),
       panelKey: const Key('hand-over-sheet'),
-      // while the link is being made, or the question is open, a stray tap does not end it
-      onDismiss: step == HandOverStep.choose || step == HandOverStep.made ? widget.onClose : null,
+      // while the link is being made, or the delete question is open, a stray tap does not end it
+      onDismiss: step == HandOverStep.choose || step == HandOverStep.made || (step == HandOverStep.sent && widget.onDelete == null)
+          ? widget.onClose
+          : null,
       child: still
           ? steps
           : AnimatedSize(duration: const Duration(milliseconds: 300), curve: easeOut, alignment: Alignment.bottomCenter, child: steps),
@@ -324,23 +336,28 @@ class HandOverSheetState extends State<HandOverSheet> {
         _foot(p),
       ]);
 
-  /// Sent: keep the ring here, or delete it now.
+  /// Sent: keep the ring here, or delete it now (when no drafts remain on it).
   Widget _sent(Palette p) => Column(key: const Key('hand-over-sent'), crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
           SizedBox(width: 22, height: 22, child: GlyphIcon(Glyph.link, color: p.light)),
           const SizedBox(width: 12),
           Text(Strings.ringSent, key: const Key('hand-over-sent-line'), style: sans(15, 20, p.ink2)),
         ]),
-        const SizedBox(height: 14),
-        Text(Strings.keepOrDelete(_name), key: const Key('hand-over-question'), style: serif(22, 28, p.ink)),
-        const SizedBox(height: 8),
-        Text(Strings.keepOrDeleteBody(_name), style: sans(15, 21, p.ink2)),
-        const SizedBox(height: 20),
-        SheetButtons(
-          palette: p,
-          left: PillBtn(key: const Key('hand-over-delete'), label: Strings.delete, palette: p, kind: PillKind.quiet, height: 48, fontSize: 16, onTap: widget.onDelete),
-          right: PillBtn(key: const Key('hand-over-keep'), label: Strings.keep, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: widget.onClose),
-        ),
+        if (widget.onDelete != null) ...[
+          const SizedBox(height: 14),
+          Text(Strings.keepOrDelete(_name), key: const Key('hand-over-question'), style: serif(22, 28, p.ink)),
+          const SizedBox(height: 8),
+          Text(Strings.keepOrDeleteBody(_name), style: sans(15, 21, p.ink2)),
+          const SizedBox(height: 20),
+          SheetButtons(
+            palette: p,
+            left: PillBtn(key: const Key('hand-over-delete'), label: Strings.delete, palette: p, kind: PillKind.quiet, height: 48, fontSize: 16, onTap: widget.onDelete),
+            right: PillBtn(key: const Key('hand-over-keep'), label: Strings.keep, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: widget.onClose),
+          ),
+        ] else ...[
+          const SizedBox(height: 20),
+          PillBtn(key: const Key('hand-over-keep'), label: Strings.done, palette: p, kind: PillKind.primary, height: 48, fontSize: 16, onTap: widget.onClose),
+        ],
       ]);
 }
 

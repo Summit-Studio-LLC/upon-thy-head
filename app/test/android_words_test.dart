@@ -222,6 +222,27 @@ void main() {
           reason: 'the piece under way finishes; then the new one whole; then the old one carries on');
       expect(finished, ['new', 'old']);
     });
+
+    test('concurrent transcribe calls on the same file share one run and forget removes its checkpoint', () async {
+      final dir = await Directory.systemTemp.createTemp('words');
+      addTearDown(() => dir.delete(recursive: true));
+      final engine = FakeEngine([(1, 3), (5, 7)], {1: ['I bless you.'], 5: ['Amen.']})..gate = Completer();
+      final w = AndroidWords(engine: engine, folder: () async => dir.path);
+      final f1 = w.transcribe('${dir.path}/same.m4a', SpeechLanguage.english);
+      final f2 = w.transcribe('${dir.path}/same.m4a', SpeechLanguage.english);
+      await pumpUntil(() => engine.asked.isNotEmpty);
+      engine.gate!.complete();
+      final results = await Future.wait([f1, f2]);
+      expect(results[0].text, 'I bless you.\n\nAmen.');
+      expect(results[1].text, results[0].text);
+      expect(engine.prepared, 1, reason: 'prepared and read once, not raced twice');
+      expect(engine.asked, hasLength(2));
+
+      File('${dir.path}/left.m4a.json').writeAsStringSync('{"pieces":[]}');
+      File('${dir.path}/left.m4a.json.tmp').writeAsStringSync('{"pieces":[');
+      await w.forget('left.m4a');
+      expect(dir.listSync(), isEmpty);
+    });
   });
 
   group('recordings waiting for the model', () {

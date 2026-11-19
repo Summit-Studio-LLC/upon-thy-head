@@ -69,19 +69,58 @@ class PolishRules implements ChangeSource {
     final startsSentence = prevEnd == null || _terminal.hasMatch(before) || before.contains('\n');
     final endsSentence = next == null || _terminal.hasMatch(after) || after.contains('\n');
     final Change c;
-    if (endsSentence && !startsSentence) {
+    if (endsSentence && !startsSentence && !RegExp(r'["“‘(¿¡]').hasMatch(before)) {
       // "body, um. Strength" → "body. Strength": what came before it up to the filler goes
       c = Change(start: prevEnd, was: s.substring(prevEnd, runEnd), now: '', kind: ChangeKind.filler);
-    } else if (next == null) {
-      // the filler is all there is, or all of the last sentence
-      c = Change(start: runStart, was: s.substring(runStart), now: '', kind: ChangeKind.filler);
-    } else if (startsSentence && _lowerFirst(next.text)) {
-      // "Um, your strength" → "Your strength"
-      c = Change(start: runStart, was: s.substring(runStart, next.end), now: _capitalise(next.text), kind: ChangeKind.filler);
     } else {
-      c = Change(start: runStart, was: s.substring(runStart, next.start), now: '', kind: ChangeKind.filler);
+      final span = _afterSpan(after, stopAtNewline: startsSentence && endsSentence && after.contains('\n'));
+      if (next != null && span == after.length && startsSentence && _lowerFirst(next.text)) {
+        // "Um, your strength" → "Your strength"
+        c = Change(start: runStart, was: s.substring(runStart, next.end), now: _capitalise(next.text), kind: ChangeKind.filler);
+      } else {
+        c = Change(start: runStart, was: s.substring(runStart, runEnd + span), now: '', kind: ChangeKind.filler);
+      }
     }
     return (c, k + 1);
+  }
+
+  /// How far into [after] a filler at the start of a sentence may take with it: never across a
+  /// line break when it also ends its sentence (so `\n\n` paragraph breaks stay), and never past an
+  /// unpaired quote or bracket.
+  static int _afterSpan(String after, {required bool stopAtNewline}) {
+    var limit = after.length;
+    if (stopAtNewline) {
+      final nl = after.indexOf('\n');
+      if (nl >= 0) {
+        limit = nl;
+        if (limit > 0 && after.codeUnitAt(limit - 1) == 0x0d) limit--;
+      }
+    }
+    const pairs = {'“': '”', '‘': '’', '(': ')'};
+    const closers = {'”', '’', ')'};
+    final open = <String>[];
+    for (var j = 0; j < limit; j++) {
+      final ch = after[j];
+      if (ch == '"' || ch == "'") {
+        if (open.isNotEmpty && open.last == ch) {
+          open.removeLast();
+        } else if (after.substring(j + 1, limit).contains(ch)) {
+          open.add(ch);
+        } else {
+          return j;
+        }
+      } else if (pairs.containsKey(ch)) {
+        final close = pairs[ch]!;
+        if (!after.substring(j + 1, limit).contains(close)) return j;
+        open.add(close);
+      } else if (closers.contains(ch)) {
+        if (open.isEmpty || open.last != ch) return j;
+        open.removeLast();
+      } else if (ch == '¿' || ch == '¡') {
+        return j;
+      }
+    }
+    return limit;
   }
 
   /// "este", "you know" and the like, only when they stand alone between two commas:

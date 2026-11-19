@@ -18,6 +18,7 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
   NativeSpeech._() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'paused') _paused.add(call.arguments == true);
+      if (call.method == 'level' && call.arguments is num) _level.add((call.arguments as num).toDouble());
     });
   }
 
@@ -25,6 +26,7 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
 
   static const _channel = MethodChannel('upon_thy_head/speech');
   final StreamController<bool> _paused = StreamController.broadcast();
+  final StreamController<double> _level = StreamController.broadcast();
 
   /// Whether this platform answers at all (iOS does; tests on the host and macOS do not).
   static Future<bool> present() async {
@@ -66,6 +68,9 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
 
   @override
   Stream<bool> get paused => _paused.stream;
+
+  @override
+  Stream<double> get level => _level.stream;
 
   @override
   Future<String?> join(String audioDir, String id) async {
@@ -115,6 +120,9 @@ class NativeSpeech implements Recorder, Transcriber, AudioJoiner {
 
   /// Behave as if the system took (or gave back) the microphone.
   Future<void> debugInterrupt(bool began) => _channel.invokeMethod<void>('debugInterrupt', {'began': began});
+
+  /// Send a pretend microphone loudness in dBFS through the native channel.
+  Future<void> debugLevel(double db) => _channel.invokeMethod<void>('debugLevel', {'db': db});
 
   /// At stop, replace what the microphone heard with a copy of the file at [path] (null: stop doing so).
   Future<void> debugFeed(String? path) => _channel.invokeMethod<void>('debugFeed', {'path': path});

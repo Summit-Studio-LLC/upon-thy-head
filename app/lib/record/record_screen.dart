@@ -135,16 +135,32 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
 
   /// Under Begin: what Begin does, and the language the blessing will be spoken in.
   Widget _hintAndLanguage(Palette p) => widget.practice
-      ? Text(Strings.practiceHint, key: const Key('practice-hint'), style: sans(13, 18, p.ink3), textAlign: TextAlign.center)
+      ? Semantics(
+          liveRegion: s.startFailed,
+          child: Text(
+            s.startFailed ? Strings.startFailed : Strings.practiceHint,
+            key: Key(s.startFailed ? 'start-failed' : 'practice-hint'),
+            style: sans(13, 18, s.startFailed ? p.ink2 : p.ink3),
+            textAlign: TextAlign.center,
+          ),
+        )
       : Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(Strings.nothingRecorded, style: sans(13, 18, p.ink3), textAlign: TextAlign.center),
-        const SizedBox(height: 2),
-        // the native menu button exists only while this screen is up and ready
-        if (widget.active && !s.live)
-          LanguageControl(key: const Key('language'), palette: p, language: s.language, onChanged: widget.onLanguage)
-        else
-          const SizedBox(height: 40),
-      ]);
+          Semantics(
+            liveRegion: s.startFailed,
+            child: Text(
+              s.startFailed ? Strings.startFailed : Strings.nothingRecorded,
+              key: s.startFailed ? const Key('start-failed') : null,
+              style: sans(13, 18, s.startFailed ? p.ink2 : p.ink3),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 2),
+          // the native menu button exists only while this screen is up and ready
+          if (widget.active && !s.live)
+            LanguageControl(key: const Key('language'), palette: p, language: s.language, onChanged: widget.onLanguage)
+          else
+            const SizedBox(height: 40),
+        ]);
 
   /// Under a dimmed Begin: what was refused, and the way to Settings. On Android, in its own words:
   /// while the phone will still put its question, the button asks it again; after that, the line

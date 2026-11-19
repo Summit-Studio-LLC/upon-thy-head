@@ -52,12 +52,12 @@ limit 120 ffmpeg -v error -y -i $SPEECH/en.m4a -i $SPEECH/es.m4a -filter_complex
 
 BYTES=$(stat -f %z "$MODEL")
 if [[ "$*" == *sum* ]]; then # the wrong-checksum step needs its own build: the same app told to expect another SHA-256
-  limit 900 flutter build apk --debug --target-platform android-arm64 \
+  limit 900 flutter build apk --debug --target-platform android-arm64 --dart-define=WORDS_TRACE=true \
     --dart-define=WORDS_MODEL_URL=http://10.0.2.2:$PORT/$(basename "$MODEL") --dart-define=WORDS_MODEL_BYTES="$BYTES" \
     --dart-define=WORDS_MODEL_SHA256=$(printf '0%.0s' $(seq 64)) >/dev/null || { echo "the build failed"; exit 1; }
   cp build/app/outputs/flutter-apk/app-debug.apk $WORK/app-badsum.apk
 fi
-limit 900 flutter build apk --debug --target-platform android-arm64 \
+limit 900 flutter build apk --debug --target-platform android-arm64 --dart-define=WORDS_TRACE=true \
   --dart-define=WORDS_MODEL_URL=http://10.0.2.2:$PORT/$(basename "$MODEL") --dart-define=WORDS_MODEL_BYTES="$BYTES" >/dev/null \
   || { echo "the build failed"; exit 1; }
 

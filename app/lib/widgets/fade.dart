@@ -33,7 +33,8 @@ class _FadeState extends State<Fade> {
     super.didUpdateWidget(old);
     if (old.on == widget.on) return;
     _timer?.cancel();
-    if (!widget.on || widget.delay == Duration.zero) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (!widget.on || widget.delay == Duration.zero || still) {
       _shown = widget.on;
     } else {
       _timer = Timer(widget.delay, () {
@@ -50,13 +51,14 @@ class _FadeState extends State<Fade> {
 
   @override
   Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return IgnorePointer(
       ignoring: !widget.on,
       child: ExcludeSemantics(
         excluding: !widget.on,
         child: AnimatedOpacity(
           opacity: _shown ? 1 : 0,
-          duration: _shown ? widget.inDuration : widget.outDuration,
+          duration: still ? Duration.zero : (_shown ? widget.inDuration : widget.outDuration),
           curve: easeOut,
           child: widget.child,
         ),

@@ -242,7 +242,7 @@ final _languagePattern = RegExp(r'^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$');
 final _givenPattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})Z$');
 
 /// Read a `.blessing` file's [bytes], strictly.
-BlessingRead readBlessingFile(List<int> bytes) {
+BlessingRead readBlessingFile(List<int> bytes, {DateTime? now}) {
   if (bytes.length > blessingFileMaxBytes) return BlessingReadBad('${bytes.length} bytes, over the limit');
   if (bytes.isEmpty) return const BlessingReadBad('empty');
   final String text;
@@ -251,11 +251,11 @@ BlessingRead readBlessingFile(List<int> bytes) {
   } on FormatException {
     return const BlessingReadBad('not UTF-8');
   }
-  return readBlessingJson(text);
+  return readBlessingJson(text, now: now);
 }
 
 /// Read the record from its JSON [text], strictly.
-BlessingRead readBlessingJson(String text) {
+BlessingRead readBlessingJson(String text, {DateTime? now}) {
   final Object? json;
   try {
     json = jsonDecode(text.startsWith('﻿') ? text.substring(1) : text);
@@ -263,7 +263,7 @@ BlessingRead readBlessingJson(String text) {
     return const BlessingReadBad('not JSON');
   }
   try {
-    return readBlessingObject(json);
+    return readBlessingObject(json, now: now);
   } on _Bad catch (e) {
     return BlessingReadBad(e.why);
   }
@@ -290,9 +290,10 @@ BlessingRecord _record(Map<String, Object?> j, DateTime now) {
   // a title left out or empty is the untitled blessing's ("Blessing"), as the app names one
   var title = _text(j, 'title', BlessingLimits.title).trim();
   if (title.isEmpty) title = Strings.untitled;
-  final given = _given(j['given'], now);
+  final precision = _precision(j['precision']);
   final offset = j['offset'];
-  if (offset is! int || offset.abs() > 18 * 60) throw _Bad('offset');
+  if (offset is! int || offset < -18 * 60 || offset > 18 * 60) throw _Bad('offset');
+  final given = _given(j['given'], now, precision: precision, offsetMinutes: offset);
   final from = _text(j, 'from', BlessingLimits.name);
   final recipient = _text(j, 'for', BlessingLimits.name);
   final language = _text(j, 'language', BlessingLimits.language);
@@ -318,12 +319,14 @@ BlessingRecord _record(Map<String, Object?> j, DateTime now) {
       final was = _text(c, 'was', BlessingLimits.changeText, required: true, lines: true);
       final now0 = _text(c, 'now', BlessingLimits.changeText, lines: true);
       final kindCode = _text(c, 'kind', 20, required: true);
-      final kind = ChangeKind.values.where((k) => k.code == kindCode).firstOrNull;
+      final kind = kindCode == 'restart' ? ChangeKind.reworded : ChangeKind.values.where((k) => k.code == kindCode).firstOrNull;
       final source = _text(c, 'source', BlessingLimits.source);
       final kept = c['kept'];
       if (at is! int || at < 0 || was.isEmpty || kind == null || kept is! bool) throw _Bad('change');
       // it must stand on the spoken words, after the one before it, touching none
-      if (at + was.length > spoken.length || spoken.substring(at, at + was.length) != was) throw _Bad('change not in the words');
+      if (at > spoken.length || was.length > spoken.length - at || spoken.substring(at, at + was.length) != was) {
+        throw _Bad('change not in the words');
+      }
       if (changes.isNotEmpty && at < changes.last.end) throw _Bad('changes overlap');
       changes.add(Change(start: at, was: was, now: now0, kind: kind, source: source.isEmpty ? Change.rulesSource : source, kept: kept));
     }
@@ -340,7 +343,7 @@ BlessingRecord _record(Map<String, Object?> j, DateTime now) {
     spoken: spoken,
     changes: changes,
     place: _place(j['place']),
-    precision: _precision(j['precision']),
+    precision: precision,
     entered: _entered(j['entered']),
   );
 }
@@ -384,6 +387,9 @@ String _text(Map<String, Object?> j, String key, int max, {bool required = false
   return v;
 }
 
+/// Whether [s] has no control characters (except \n, \r and \t where [lines]) and no lone surrogates.
+bool isCleanText(String s, {bool lines = false}) => _clean(s, lines: lines);
+
 /// No control characters (but \n, \r and \t where [lines]) and no lone surrogates.
 bool _clean(String s, {bool lines = false}) {
   for (var i = 0; i < s.length; i++) {
@@ -404,8 +410,9 @@ bool _clean(String s, {bool lines = false}) {
   return true;
 }
 
-/// "2026-03-03T16:40Z": a real minute, from the year 1900 to two days from now.
-DateTime _given(Object? v, DateTime now) {
+/// "2026-03-03T16:40Z": a real minute, from the year 1900 to two days from now (or this month or
+/// year, when only that much of the date is known: mid-month is the 15th, mid-year July 2).
+DateTime _given(Object? v, DateTime now, {DatePrecision precision = DatePrecision.day, int offsetMinutes = 0}) {
   if (v is! String) throw _Bad('no given');
   final m = _givenPattern.firstMatch(v);
   if (m == null) throw _Bad('given');
@@ -413,7 +420,20 @@ DateTime _given(Object? v, DateTime now) {
   final t = DateTime.utc(y, mo, d, h, mi);
   // DateTime rolls 2026-02-30 over to March; a real date comes back as written
   if (t.year != y || t.month != mo || t.day != d || t.hour != h || t.minute != mi) throw _Bad('given');
-  if (y < 1900 || t.isAfter(now.toUtc().add(const Duration(days: 2)))) throw _Bad('given out of range');
+  if (y < 1900) throw _Bad('given out of range');
+  final limit = now.toUtc().add(const Duration(days: 2));
+  switch (precision) {
+    case DatePrecision.day || DatePrecision.unset:
+      if (t.isAfter(limit)) throw _Bad('given out of range');
+    case DatePrecision.month:
+      final local = t.add(Duration(minutes: offsetMinutes));
+      if (local.year > limit.year || (local.year == limit.year && local.month > limit.month)) {
+        throw _Bad('given out of range');
+      }
+    case DatePrecision.year:
+      final local = t.add(Duration(minutes: offsetMinutes));
+      if (local.year > limit.year) throw _Bad('given out of range');
+  }
   return t;
 }
 

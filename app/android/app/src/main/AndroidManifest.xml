@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- Listening back with the screen locked (PlaybackService.kt). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Optional: the recording's notification; recording works without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -69,7 +71,6 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="content"/>
-                <data android:scheme="file"/>
                 <data android:mimeType="application/vnd.uponthyhead.blessing"/>
             </intent-filter>
             <!-- 2: "unknown binary file" from a content address, which is how Gmail can hand over an
@@ -89,11 +90,8 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:scheme="content"/>
-                <data android:scheme="file"/>
                 <data android:host="*"/>
-                <data android:pathPattern=".*\\.blessing"/>
-                <data android:pathPattern=".*\\..*\\.blessing"/>
-                <data android:pathPattern=".*\\..*\\..*\\.blessing"/>
+                <data android:pathSuffix=".blessing"/>
             </intent-filter>
             <!-- 4: shared into the app ("Share → Upon Thy Head"), its own type only. -->
             <intent-filter>
@@ -107,6 +105,11 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <!-- Keeps review playback going with the screen locked; started only while playing. -->
+        <service
+            android:name=".PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <!-- The PDF and .blessing files the app shares, read only, by grant (BlessingFiles.kt). -->
         <provider
             android:name=".BlessingFiles"

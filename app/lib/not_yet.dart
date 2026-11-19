@@ -30,7 +30,7 @@ abstract final class NotYet {
   /// recent-apps cover and approximate location are real on Android (tasks 11 and 12).
   static bool get android => _a;
 
-  /// Listening back with the phone locked (task 18). The review page's player works on screen;
-  /// leaving the app pauses it.
-  static bool get lockedListening => _a;
+  /// Listening back with the phone locked is built (PlaybackService). Kept so a caller can still
+  /// ask; it is no longer a stand-in.
+  static bool get lockedListening => false;
 }

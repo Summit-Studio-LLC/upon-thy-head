@@ -252,7 +252,12 @@ class SettingsLayer extends StatelessWidget {
                       child: _GoldWord(key: const Key('settings-phone-check-open'), label: 'Phone check', palette: p, onTap: onPhoneCheck!),
                     ),
                     const SizedBox(height: 2),
-                    Text('Checks this iPhone for the first test session. Only in test builds.', style: hint),
+                    Text(
+                      Phone.android
+                          ? 'Checks this phone for the first test session. Only in test builds.'
+                          : 'Checks this iPhone for the first test session. Only in test builds.',
+                      style: hint,
+                    ),
                   ]),
                   hairline(),
                 ],

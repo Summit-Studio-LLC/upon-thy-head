@@ -146,10 +146,10 @@ class HomeScreen extends StatefulWidget {
   static bool debugBare = false;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const Placement placement = RingPlacement();
 
   /// Where the empty sky looks: the Milky Way through Aquila and Scutum.
@@ -174,6 +174,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// The sky's menu is being opened or is open (it goes at once if the app locks: the capsule and
   /// the glass menu it morphs into leave the tree with the head).
   bool _skyMenuOpen = false;
+
+  /// Closes that menu from Android's back. The capsule keeps Key('sky-switch') for the tests.
+  final _skyHandle = SkySwitchHandle();
 
   /// When the ring showing begins: a family member's birth, if given.
   DateTime? get _begins => _family.person(_ring)?.born?.local;
@@ -319,6 +322,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _engine.addListener(_onEngine);
+    _bindSession(_session);
     _lock.addListener(_onLock);
     _lock.api.onActive = _onActive;
     // a file made for a share sheet the app was killed under
@@ -416,6 +420,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // the sky's menu, with its names and counts, goes at once: the locked head has no capsule, and
     // the menu goes with it
     _skyMenuOpen = false;
+    _skyHandle.close();
+    Navigator.maybeOf(context)?.popUntil((route) => route is! PopupRoute);
     _personKey.currentState?.closeSheet();
     // the system share sheet goes too, with anything made for it
     unawaited(_share.dismiss());
@@ -432,6 +438,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _swapping = false;
     _line = const [];
     final draft = _session.draft;
+    // locked before Begin: any recording started while locked belongs to the person's own sky
+    if (_stage == Stage.record && !_session.live) draft?.personId = '';
     if ((_stage == Stage.record || _stage == Stage.after) && draft != null) {
       _engine.setBlessings([draft], focus: 0);
     } else {
@@ -589,28 +597,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final b = _blessings.firstWhere((x) => x.id == stored.id, orElse: () => stored);
       setState(() => _writing[b.id] = WordsState.writing);
       var state = WordsState.failed;
+      String? heard;
       try {
         await RecordSession.debugHoldWords();
         final t = await _transcriber.transcribe(path, SpeechLanguage.fromCode(b.language));
         state = t.later ? WordsState.later : t.unavailable ? WordsState.unavailable : WordsState.done;
-        if (state == WordsState.done && b.rawText.trim().isEmpty) {
-          b
-            ..rawText = t.text
-            ..firstText = t.text;
-        }
+        if (state == WordsState.done) heard = t.text;
       } catch (e) {
         debugPrint('words: ${b.id}: $e');
       }
-      b.wordsStatus = _statusOf(state);
-      try {
-        await _store.update(b);
-        debugPrint('words: wrote ${b.id} (${b.wordsStatus.code}, ${b.rawText.length} characters)');
-      } on StateError {
-        // deleted while the words were being written
-      }
+      final ok = await _applyTranscript(b.id, status: _statusOf(state), words: heard, extra: b);
+      if (ok) debugPrint('words: wrote ${b.id} (${b.wordsStatus.code}, ${b.rawText.length} characters)');
       if (!mounted) return;
       setState(() => _writing[b.id] = state);
+      if (ok && heard != null && _stage == Stage.review && _reviewing?.id == b.id) {
+        _reviewKey.currentState?.wordsArrived();
+      }
     }
+  }
+
+  /// Writes speech recognition's outcome for [id] to every live copy and to the store without
+  /// overwriting concurrent edits, and erases the audio if review was finished meanwhile.
+  Future<bool> _applyTranscript(String id, {required WordsStatus status, String? words, Blessing? extra}) async {
+    final copies = <Blessing>[
+      ?extra,
+      if (_session.draft != null && _session.draft!.id == id) _session.draft!,
+      for (final x in _blessings) if (x.id == id) x,
+      for (final x in _passing) if (x.id == id) x,
+      for (final x in _family.unplaced) if (x.id == id) x,
+      if (_reviewing != null && _reviewing!.id == id) _reviewing!,
+    ];
+    final seen = <Blessing>[];
+    for (final c in copies) {
+      if (seen.any((s) => identical(s, c))) continue;
+      seen.add(c);
+      c.wordsStatus = status;
+      if (words != null) {
+        if (c.firstText.isEmpty) c.firstText = words;
+        if (c.rawText.trim().isEmpty) c.rawText = words;
+      }
+    }
+    final ok = await _store.saveTranscript(id, status: status, words: words);
+    if (!ok) return false;
+    final stored = await _store.get(id);
+    if (stored != null && !stored.draft && !keepsRecording(stored)) {
+      await _store.eraseAudio(stored);
+      for (final c in seen) {
+        c.audio = '';
+      }
+    }
+    return true;
   }
 
   /// Ids being tried again now, so the launch and the review page do not try the same one twice.
@@ -631,20 +667,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return debugPrint('words: again ${b.id}: $e');
       }
       if (t.unavailable || t.later) return debugPrint('words: ${b.id} still cannot be written here');
-      // typed in meanwhile: the person's words stand
-      if (b.rawText.trim().isNotEmpty) return;
-      b
-        ..rawText = t.text
-        ..firstText = t.text
-        ..wordsStatus = WordsStatus.written;
-      try {
-        await _store.update(b);
-        debugPrint('words: wrote ${b.id} on trying again (${b.rawText.length} characters)');
-      } on StateError {
-        return; // deleted meanwhile
-      }
+      final ok = await _applyTranscript(b.id, status: WordsStatus.written, words: t.text, extra: b);
+      if (!ok) return; // deleted meanwhile
+      debugPrint('words: wrote ${b.id} on trying again (${b.rawText.length} characters)');
       if (!mounted) return;
-      final reviewing = identical(_reviewing, b) && _stage == Stage.review;
+      final reviewing = _reviewing?.id == b.id && _stage == Stage.review;
       setState(() => _writing[b.id] = WordsState.done);
       if (reviewing) _reviewKey.currentState?.wordsArrived();
     } finally {
@@ -682,20 +709,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
       final typed = b.rawText.trim().isNotEmpty;
-      final erase = takeLaterWords(b, t.text);
-      // the blessing just recorded is held by its session as a copy of its own: the page after Amen
-      // and its review read that one, so it takes the words too
-      final draft = _session.draft;
-      if (draft != null && draft.id == b.id && !identical(draft, b)) takeLaterWords(draft, t.text);
-      try {
-        await _store.update(b);
-        if (erase) await _store.eraseAudio(b);
-        debugPrint('words: wrote ${b.id} from its kept recording (${t.text.length} characters, typed: $typed)');
-      } on StateError {
-        return; // deleted meanwhile
-      }
+      final ok = await _applyTranscript(b.id, status: WordsStatus.written, words: t.text, extra: b);
+      if (!ok) return; // deleted meanwhile
+      debugPrint('words: wrote ${b.id} from its kept recording (${t.text.length} characters, typed: $typed)');
       if (!mounted) return;
-      final reviewing = identical(_reviewing, b) && _stage == Stage.review;
+      final reviewing = _reviewing?.id == b.id && _stage == Stage.review;
       setState(() => _writing[b.id] = WordsState.done);
       if (reviewing && !typed) _reviewKey.currentState?.wordsArrived();
     } finally {
@@ -826,6 +844,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _noticeTimer?.cancel();
     _openingTimer?.cancel();
     _perms?.dispose();
+    _unbindSession(_session);
     _session.dispose();
     if (widget.player == null) _player.dispose();
     _engine
@@ -844,12 +863,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // ---- recording ----
 
+  @visibleForTesting
+  SkyEngine get debugEngine => _engine;
+
+  void _syncRecordingGlow() {
+    _engine.voice = _session.level.value;
+    _engine.recordingPaused = _session.live && _session.paused;
+  }
+
+  void _bindSession(RecordSession s) {
+    s.addListener(_syncRecordingGlow);
+    s.level.addListener(_syncRecordingGlow);
+    _syncRecordingGlow();
+  }
+
+  void _unbindSession(RecordSession s) {
+    s.removeListener(_syncRecordingGlow);
+    s.level.removeListener(_syncRecordingGlow);
+  }
+
+  void _replaceSession(RecordSession next) {
+    _unbindSession(_session);
+    _session.dispose();
+    _session = next;
+    _bindSession(next);
+  }
+
   /// "New blessing": a draft given now, its light placed by the rule, and the camera turned to it.
   void _openRecord() {
     if (_stage != Stage.home || (_recoveredSheet && !_locked) || !_lock.ready) return;
     _homeFocus = _locked ? _lockedFocus : _engine.focus;
-    _session.dispose();
-    _session = RecordSession(recorder: _recorder, transcriber: _transcriber);
+    _replaceSession(RecordSession(recorder: _recorder, transcriber: _transcriber));
     _setUpSession(_session);
     // for whoever's sky is showing; locked, for the person's own until unlocked and said otherwise
     final draft = draftBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple, personId: recordingPerson(locked: _locked, ring: _ring));
@@ -904,13 +948,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _session.checkPermissions(ask: recordScreenMayAsk(_settings?.firstRun));
       return;
     }
-    if (_session.practice) {
+    final s = _session;
+    void startAndWatch() {
+      unawaited(s.begin().then((_) {
+        if (!mounted || !identical(s, _session) || _stage != Stage.record) return;
+        if (!s.live && s.startFailed) {
+          _engine.show?.stop();
+          _engine.setView(SkyView.ready);
+        }
+      }));
+    }
+
+    if (s.practice) {
       // the practice puts no light in the sky and keeps nothing
+      _engine.breathT0 = _engine.clock;
       _engine.setView(SkyView.record);
-      _session.begin();
+      startAndWatch();
       return;
     }
-    final draft = _session.draft!;
+    final draft = s.draft!;
     // the blessing is given from the moment Begin is pressed
     final now = DateTime.now();
     draft
@@ -922,8 +978,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _engine.breathT0 = _engine.clock;
     _engine.setView(SkyView.record);
     _engine.show?.start(_engine, draft.ra, draft.dec, SkyView.record, _engine.size);
-    draft.language = _session.language.code;
-    _session.begin();
+    draft.language = s.language.code;
+    startAndWatch();
   }
 
   Future<void> _askThenBegin(RecordSession s) async {
@@ -989,18 +1045,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _writeWords(RecordSession session, Blessing draft) async {
     await session.transcribe();
-    draft.wordsStatus = _statusOf(session.wordsState);
-    if (session.wordsState == WordsState.done) {
-      draft
-        ..rawText = session.words
-        ..firstText = session.words;
+    final status = _statusOf(session.wordsState);
+    final done = session.wordsState == WordsState.done;
+    final ok = await _applyTranscript(draft.id, status: status, words: done ? session.words : null, extra: draft);
+    if (!ok || !mounted) return;
+    setState(() {});
+    if (done && _stage == Stage.review && _reviewing?.id == draft.id) {
+      _reviewKey.currentState?.wordsArrived();
     }
-    try {
-      await _store.update(draft);
-    } on StateError {
-      return; // deleted while the words were being written
-    }
-    if (mounted) setState(() {});
   }
 
   /// The new blessing (already in the store) joins the sky, in focus; its place in the list.
@@ -1008,10 +1060,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final draft = _session.draft!;
     await _saved;
     if (!mounted) return null;
+    await _reloadFamily();
+    if (!mounted) return null;
     if (draft.personId != _ring) {
       // recorded for another ring (one recorded while locked is the person's own): that sky shows
-      await _reloadFamily();
-      if (!mounted) return null;
       _setRing(draft.personId);
     }
     final list = [..._blessings.where((b) => b.id != draft.id), draft]..sort((a, b) => a.utc.compareTo(b.utc));
@@ -1124,7 +1176,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final arriving = b.entered && b.draft && b.placed && _reviewFrom == Stage.home;
     b.draft = false;
     await _saveReview();
-    if (!keepsRecording(b)) await _store.eraseAudio(b);
+    final inFlight = _writing[b.id] == WordsState.writing ||
+        _retrying.contains(b.id) ||
+        (b.id == _session.draft?.id && (_session.wordsState == WordsState.writing || _session.wordsState == WordsState.none));
+    if (!keepsRecording(b) && !inFlight) await _store.eraseAudio(b);
     if (!mounted) return;
     if (arriving) return _entryArrives(b);
     if (identical(b, _aside) && _reviewFrom == Stage.home) _readFrom = Stage.home;
@@ -1287,10 +1342,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (_readFrom == Stage.passing) _readFrom = Stage.home;
       return setState(() {});
     }
+    await _reloadFamily();
+    if (!mounted || !identical(b, _reviewing)) return;
     if (ring == null) {
       final i = _blessings.indexWhere((x) => x.id == b.id);
       if (i >= 0) {
-        final list = [..._blessings]..removeAt(i);
+        final list = [for (final x in _blessings) if (x.id != b.id) x];
         _setBlessings(list, focus: math.min(i, list.length - 1));
       }
       _passing = [..._passing.where((x) => x.id != b.id), b]..sort((a, b) => a.utc.compareTo(b.utc));
@@ -1815,11 +1872,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final (settings, _) = await _speechSetup;
     if (!mounted) return;
     final phone = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
-    _session.dispose();
-    final s = _session = RecordSession(recorder: _recorder, transcriber: _transcriber, practice: true)
+    final s = RecordSession(recorder: _recorder, transcriber: _transcriber, practice: true)
       ..audioDir = dir
       ..setLanguage(SpeechLanguage.fromCode(settings.language ?? SpeechLanguage.forPhone(phone).code))
       ..draft = draftBlessing(DateTime.now(), place: _where?.place ?? saltLakeTemple);
+    _replaceSession(s);
     if (firstRunFeed.isNotEmpty && _ios) {
       final feed = path.join(Directory.systemTemp.path, firstRunFeed);
       if (File(feed).existsSync()) unawaited(NativeSpeech.instance.debugFeed(feed));
@@ -1856,8 +1913,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _settings?.setFirstRun(state);
     if (!mounted) return;
     if (_session.practice) {
-      _session.dispose();
-      _session = RecordSession();
+      _replaceSession(RecordSession());
     }
     _perms?.dispose();
     _perms = null;
@@ -2002,19 +2058,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Before the capsule's menu opens: the family read afresh, and false to keep it shut.
   Future<bool> _openingSkyMenu() async {
     if (_locked || _stage != Stage.home || _skyMenuOpen || _recoveredSheet || _receiving) return false;
-    _skyMenuOpen = true;
+    // PopScope reads this: without setState, Android's back still thinks it may leave the app
+    setState(() => _skyMenuOpen = true);
     await _reloadFamily();
     if (!mounted || _locked) {
-      _skyMenuOpen = false;
+      if (mounted) {
+        setState(() => _skyMenuOpen = false);
+      } else {
+        _skyMenuOpen = false;
+      }
       return false;
     }
     return true;
   }
 
+  /// The menu closed (a row, a tap outside, or Android's back).
+  void _skyMenuClosed() {
+    if (!_skyMenuOpen || !mounted) return;
+    setState(() => _skyMenuOpen = false);
+  }
+
+  void _closeSkyMenu() {
+    _skyHandle.close();
+    _skyMenuClosed();
+  }
+
   /// A row of the capsule's menu chosen.
   Future<void> _skyMenuChosen(String code) async {
     final open = _skyMenuOpen;
-    _skyMenuOpen = false;
+    if (_skyMenuOpen && mounted) {
+      setState(() => _skyMenuOpen = false);
+    } else {
+      _skyMenuOpen = false;
+    }
     // closed by the lock: nothing chosen
     if (!open || !mounted || _locked || _stage != Stage.home) return;
     final ring = SkyMenu.ringOf(code);
@@ -2171,7 +2247,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_locked) return true;
     if (_onboard == Onboard.practice) return false;
     if (_onboard != Onboard.none) return true;
-    return _stage == Stage.home && !_list && !_recoveredSheet && !_receiving;
+    return _stage == Stage.home && !_list && !_skyMenuOpen && !_recoveredSheet && !_receiving;
   }
 
   /// Back on Android: closes a sheet; otherwise goes back as the page's chevron does. It never ends
@@ -2190,6 +2266,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // a shared blessing is declined only by its own button (question 49)
         if (_receiving) return;
         if (_recoveredSheet) return _laterRecovered();
+        if (_skyMenuOpen) return _closeSkyMenu();
         if (_list) setState(() => _list = false);
       case Stage.record:
         if (_session.sheet) return _session.showSheet(false);
@@ -2251,7 +2328,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final aside = _aside;
     if (aside != null) {
       await _store.delete(aside.id);
-      if (!mounted) return true;
+      await _reloadFamily();
+      if (!mounted || _locked) return false;
       _aside = null;
       _passing = _passing.where((b) => b.id != aside.id).toList();
       if (_readFrom == Stage.passing) {
@@ -2271,15 +2349,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final gone = _blessings[i];
     final links = _links;
     if (links != null && (await links.liveOf(gone.id)).isNotEmpty) {
+      if (!mounted || _locked) return false;
       if (await links.stopAllOf(gone.id) != StopResult.stopped) return false;
+      if (!mounted || _locked) return false;
     }
     await _store.delete(gone.id);
-    if (!mounted) return true;
-    final list = [..._blessings]..removeAt(i);
+    await _reloadFamily();
+    if (!mounted) return false;
+    final at = _blessings.indexWhere((b) => b.id == gone.id);
+    final list = [for (final b in _blessings) if (b.id != gone.id) b];
+    if (_locked) {
+      _blessings = list;
+      _lockedFocus = _lockedFocus.clamp(0, math.max(0, list.length - 1));
+      return false;
+    }
     var next = 0;
     if (list.isNotEmpty) {
       // the one given nearest in time: the next older or the next newer
-      final older = i - 1, newer = i;
+      final idx = at >= 0 ? at : i.clamp(0, list.length);
+      final older = idx - 1, newer = idx;
       if (older < 0) {
         next = newer;
       } else if (newer >= list.length) {
@@ -2594,25 +2682,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     : EdgeSwipeBack(
                         enabled: _stage == Stage.person,
                         onBack: _closePerson,
-                        child: PersonLayer(
-                          key: _personKey,
-                          palette: p,
-                          on: _stage == Stage.person,
-                          person: _editing,
-                          countLine: _editing == null ? '' : countLine(_family.on(_editing!.id)),
-                          blessings: _editing == null ? 0 : _family.on(_editing!.id).length,
-                          onBack: _closePerson,
-                          onSave: (name, born) => unawaited(_savePerson(name, born)),
-                          onRemove: _removePerson,
-                          keptBy: _editing == null ? '' : suggestedKeptBy(_family.on(_editing!.id), remembered: _settings?.keptBy),
-                          onMakeRing: _links == null || _editing == null ? null : _makeRing,
-                          onShareRing: (url, title) {
-                            // an iPad's popover: from the middle, not a page left behind
-                            NativeShareApi.origin = null;
-                            return _share.link(url, title);
-                          },
-                          onRingSent: (keptBy) => unawaited(_ringSent(keptBy)),
-                        ),
+                        child: Builder(builder: (context) {
+                          final onRing = _editing == null ? const <Blessing>[] : _family.on(_editing!.id);
+                          final finished = [for (final b in onRing) if (!b.draft && b.placed) b];
+                          final unplaced = _editing == null ? 0 : _family.unplaced.where((b) => b.personId == _editing!.id).length;
+                          return PersonLayer(
+                            key: _personKey,
+                            palette: p,
+                            on: _stage == Stage.person,
+                            person: _editing,
+                            countLine: _editing == null ? '' : countLine(onRing),
+                            blessings: onRing.length + unplaced,
+                            handOverBlessings: finished.length,
+                            handOverCountLine: _editing == null ? '' : countLine(finished),
+                            onBack: _closePerson,
+                            onSave: (name, born) => unawaited(_savePerson(name, born)),
+                            onRemove: _removePerson,
+                            keptBy: _editing == null ? '' : suggestedKeptBy(finished, remembered: _settings?.keptBy),
+                            onMakeRing: _links == null || _editing == null ? null : _makeRing,
+                            onShareRing: (url, title) {
+                              // an iPad's popover: from the middle, not a page left behind
+                              NativeShareApi.origin = null;
+                              return _share.link(url, title);
+                            },
+                            onRingSent: (keptBy) => unawaited(_ringSent(keptBy)),
+                          );
+                        }),
                       ),
               ),
             ),
@@ -2744,12 +2839,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // (its words stop growing at 1.6×; its menu follows the person's own size)
                 child: SkySwitch(
                   key: const Key('sky-switch'),
+                  handle: _skyHandle,
                   palette: p,
                   label: _family.title(_ring),
                   menu: () => _family.menu(_ring),
                   onOpening: _openingSkyMenu,
                   onChosen: (code) => unawaited(_skyMenuChosen(code)),
-                  onClosed: () => _skyMenuOpen = false,
+                  onClosed: _skyMenuClosed,
                 ),
               ),
               const SizedBox(height: 4),

@@ -21,6 +21,7 @@ object Adts {
         val profile = 1 // AAC-LC is object type 2, written as type - 1
         return { frame ->
             val len = frame.size + 7
+            require(len <= 0x1FFF) { "ADTS frame too large: $len" }
             val h = byteArrayOf(
                 0xFF.toByte(),
                 0xF1.toByte(), // MPEG-4, layer 0, no CRC
@@ -59,7 +60,7 @@ object Adts {
             val ch = ((b2 and 1) shl 2) or (b3 shr 6)
             val len = ((b3 and 3) shl 11) or (b4 shl 3) or (b5 shr 5)
             val head = if (noCrc) 7 else 9
-            if (len < head || at + len > b.size) break // cut off: the frames before it stand
+            if (len <= head || len > 0x1FFF || ch == 0 || at + len > b.size) break // cut off or corrupt: frames before it stand
             if (out.isEmpty()) { rate = RATES[sf]; channels = ch; type = (b2 shr 6) + 1 }
             out.add(b.copyOfRange(at + head, at + len))
             at += len
@@ -81,7 +82,7 @@ object Adts {
         } catch (_: Exception) {
             0.0
         } finally {
-            x.release()
+            runCatching { x.release() }
         }
     }
 
@@ -99,12 +100,18 @@ object Adts {
         val sf = RATES.indexOf(first.rate)
         val asc = (first.objectType shl 11) or (sf shl 7) or (first.channels shl 3)
         f.setByteBuffer("csd-0", ByteBuffer.wrap(byteArrayOf((asc shr 8).toByte(), asc.toByte())))
+        out.parentFile?.mkdirs()
         val tmp = File(out.parentFile, out.name + ".tmp")
         tmp.delete()
-        val m = MediaMuxer(tmp.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var muxer: MediaMuxer? = null
+        var started = false
+        var ok = false
         try {
+            val m = MediaMuxer(tmp.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = m
             val track = m.addTrack(f)
             m.start()
+            started = true
             val info = MediaCodec.BufferInfo()
             var n = 0L
             for (p in read) {
@@ -116,10 +123,19 @@ object Adts {
                 }
             }
             m.stop()
-        } finally {
+            started = false
             m.release()
+            muxer = null
+            // whole or not at all
+            if (!tmp.renameTo(out)) {
+                if (out.exists()) out.delete()
+                if (!tmp.renameTo(out)) throw IllegalStateException("could not put the joined file in place")
+            }
+            ok = true
+        } finally {
+            if (started) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
+            if (!ok) tmp.delete()
         }
-        // whole or not at all
-        if (!tmp.renameTo(out)) throw IllegalStateException("could not put the joined file in place")
     }
 }

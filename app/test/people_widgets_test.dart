@@ -4,12 +4,19 @@
 //
 //   flutter test test/people_widgets_test.dart
 
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as m;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+// Transitive of path_provider. A widget test has no path_provider plugin, and home reads settings through it.
+// ignore: depend_on_referenced_packages
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:upon_thy_head/data/blessing.dart';
-import 'package:upon_thy_head/home/home_screen.dart' show EmptyRingFoot;
+import 'package:upon_thy_head/data/store.dart';
+import 'package:upon_thy_head/home/home_screen.dart' show EmptyRingFoot, HomeScreen, HomeScreenState;
+import 'package:upon_thy_head/lock/lock.dart';
 import 'package:upon_thy_head/people/family.dart';
 import 'package:upon_thy_head/people/family_pages.dart';
 import 'package:upon_thy_head/people/person.dart';
@@ -61,6 +68,19 @@ void wholeWords(WidgetTester t, String key) {
   final text = para.text.toPlainText();
   final lines = {for (final b in para.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: text.length))) b.top.round()}.length;
   expect(lines, lessThanOrEqualTo(words), reason: '"${para.text.toPlainText()}" broken inside a word');
+}
+
+class _SupportPath extends PathProviderPlatform {
+  _SupportPath(this.root);
+  final String root;
+  @override
+  Future<String?> getTemporaryPath() async => root;
+  @override
+  Future<String?> getApplicationSupportPath() async => root;
+  @override
+  Future<String?> getApplicationDocumentsPath() async => root;
+  @override
+  Future<String?> getApplicationCachePath() async => root;
 }
 
 void main() {
@@ -162,6 +182,47 @@ void main() {
         }
       }
     }
+  });
+
+  testWidgets('Android back closes the open person menu and stays on home', (t) async {
+    HomeScreen.debugSkipFirstRun = true;
+    addTearDown(() => HomeScreen.debugSkipFirstRun = false);
+    final dir = Directory.systemTemp.createTempSync('sky-back');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    // home reads settings and the audio folder through path_provider, which a widget test has none of
+    final paths = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _SupportPath(dir.path);
+    addTearDown(() => PathProviderPlatform.instance = paths);
+    final store = SqliteBlessingStore.open('${dir.path}/blessings.sqlite');
+    addTearDown(store.close);
+    t.view.physicalSize = const Size(402, 874) * 3;
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(CupertinoApp(
+      localizationsDelegates: const [m.DefaultMaterialLocalizations.delegate, DefaultCupertinoLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
+      home: HomeScreen(palette: p, store: store, lock: AppLock(api: NoLockApi(), startUnlocked: true)),
+    ));
+    // the sky keeps painting, so pumpAndSettle would not return
+    // settings are read with dart:io, which a widget test only finishes inside runAsync
+    await t.pump();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    for (var i = 0; i < 20; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(const Key('sky-switch-label')), findsOneWidget);
+    await t.tap(find.byKey(const Key('sky-switch-label')));
+    for (var i = 0; i < 40 && find.byKey(const Key('pull-down-me')).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(const Key('pull-down-me')), findsOneWidget, reason: 'the menu is open');
+    final state = t.state<HomeScreenState>(find.byType(HomeScreen));
+    expect(state.debugSystemBack(), isTrue, reason: 'back closes the menu instead of leaving the app');
+    for (var i = 0; i < 20; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(const Key('pull-down-me')), findsNothing, reason: 'the menu is closed');
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(state.debugSystemBack(), isFalse, reason: 'from the sky itself, back leaves the app');
   });
 
   group('adding and changing a family member', () {

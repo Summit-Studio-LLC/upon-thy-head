@@ -7,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../people/person.dart';
 import '../polish/change.dart';
+import '../record/android_words.dart';
 import '../review/tags.dart';
 import '../sky/astro.dart';
 import 'blessing.dart';
@@ -53,6 +54,11 @@ abstract class BlessingStore {
   /// Erase the recording and forget it, keeping the words. The review step calls this when the
   /// person has finished reviewing.
   Future<void> eraseAudio(Blessing b);
+
+  /// Writes the outcome of speech recognition for blessing [id] without touching its title, names,
+  /// tags, changes or draft state (which the person may be editing at the same time). Answers
+  /// false when the blessing was deleted meanwhile.
+  Future<bool> saveTranscript(String id, {required WordsStatus status, String? words});
 
   /// Every link made on this phone, newest first. A link outlives its blessing (one passed along
   /// and then deleted keeps working until it stops), so each keeps a copy of the title.
@@ -491,15 +497,38 @@ class SqliteBlessingStore implements BlessingStore {
   Future<void> eraseAudio(Blessing b) async {
     final name = b.audio;
     if (name.isEmpty) return;
-    b.audio = '';
-    await update(b);
+    final now = DateTime.now().toUtc();
+    _db.execute('UPDATE blessings SET audio = ?, updated_at_ms = ? WHERE id = ?', ['', now.millisecondsSinceEpoch, b.id]);
+    b
+      ..audio = ''
+      ..updated = now;
     await _deleteFile(name);
   }
 
+  @override
+  Future<bool> saveTranscript(String id, {required WordsStatus status, String? words}) async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (words == null) {
+      _db.execute('UPDATE blessings SET words_state = ?, updated_at_ms = ? WHERE id = ?', [status.code, now, id]);
+    } else {
+      _db.execute(
+        'UPDATE blessings SET words_state = ?, '
+        "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END, "
+        "polished_text = CASE WHEN trim(raw_text) = '' THEN ? ELSE polished_text END, "
+        "raw_text = CASE WHEN trim(raw_text) = '' THEN ? ELSE raw_text END, "
+        'updated_at_ms = ? WHERE id = ?',
+        [status.code, words, words, words, now, id],
+      );
+    }
+    return _db.updatedRows == 1;
+  }
+
   Future<void> _deleteFile(String name) async {
-    if (name.isEmpty || audioDir == null) return;
+    if (name.isEmpty) return;
     // only a plain file name inside the audio folder, never a path elsewhere
     if (p.basename(name) != name) return;
+    await AndroidWords.instance.forget(name, audioDir: audioDir);
+    if (audioDir == null) return;
     final f = File(p.join(audioDir!, name));
     if (await f.exists()) await f.delete();
   }

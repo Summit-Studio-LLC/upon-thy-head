@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upon_thy_head/data/blessing.dart';
 import 'package:upon_thy_head/data/samples.dart';
+import 'package:upon_thy_head/polish/change.dart';
 import 'package:upon_thy_head/share/blessing_file.dart';
 import 'package:upon_thy_head/share/share.dart';
 import 'package:upon_thy_head/sky/astro.dart';
@@ -268,6 +269,63 @@ void main() {
     test('nothing in it is fetched or run: a link or script is only text', () {
       final r = ok(readMap({...good(), 'title': '<script>alert(1)</script> https://example.com', 'words': 'See https://example.com', 'changes': []}));
       expect(r.title, '<script>alert(1)</script> https://example.com');
+    });
+
+    test('entered month and year blessings in the current month or year are accepted; future months and years are refused', () {
+      final jan = DateTime.utc(2026, 1, 15, 12);
+      final mar1 = DateTime.utc(2026, 3, 1, 8);
+
+      // Year-only entered blessings sit at July 2: valid in January of that same year, refused for next year.
+      final thisYear = readBlessingFile(
+        utf8.encode(jsonEncode({...good(), 'given': '2026-07-02T12:00Z', 'offset': 0, 'precision': 'year', 'entered': true})),
+        now: jan,
+      );
+      expect(ok(thisYear).precision, DatePrecision.year);
+      final nextYear = readBlessingFile(
+        utf8.encode(jsonEncode({...good(), 'given': '2027-07-02T12:00Z', 'offset': 0, 'precision': 'year', 'entered': true})),
+        now: jan,
+      );
+      bad(nextYear, 'future year');
+
+      // Month-and-year entered blessings sit on the 15th: valid on day 1 of that month, refused for next month.
+      final thisMonth = readBlessingFile(
+        utf8.encode(jsonEncode({...good(), 'given': '2026-03-15T12:00Z', 'offset': 0, 'precision': 'month', 'entered': true})),
+        now: mar1,
+      );
+      expect(ok(thisMonth).precision, DatePrecision.month);
+      final nextMonth = readBlessingFile(
+        utf8.encode(jsonEncode({...good(), 'given': '2026-04-15T12:00Z', 'offset': 0, 'precision': 'month', 'entered': true})),
+        now: mar1,
+      );
+      bad(nextMonth, 'future month');
+    });
+
+    test('64-bit integer extremes in offset and change positions return BlessingReadBad without RangeError', () {
+      const int64Min = -9223372036854775808;
+      const int64Max = 9223372036854775807;
+      bad(readMap({...good(), 'offset': int64Min}), 'int64 min offset');
+      bad(readMap({...good(), 'offset': int64Max}), 'int64 max offset');
+      bad(
+        readMap({
+          ...good(),
+          'words': 'I bless you with peace.',
+          'changes': [
+            {'at': int64Max, 'was': 'peace', 'now': '', 'kind': 'filler', 'source': 'rules', 'kept': true},
+          ],
+        }),
+        'int64 max change at',
+      );
+    });
+
+    test('legacy "restart" change kind reads as ChangeKind.reworded', () {
+      final r = ok(readMap({
+        ...good(),
+        'words': 'Your strength, your strength will return.',
+        'changes': [
+          {'at': 0, 'was': 'Your strength, your', 'now': 'Your', 'kind': 'restart', 'source': 'rules', 'kept': true},
+        ],
+      }));
+      expect(r.changes.single.kind, ChangeKind.reworded);
     });
   });
 }

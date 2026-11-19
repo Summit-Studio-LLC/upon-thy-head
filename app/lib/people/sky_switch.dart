@@ -6,6 +6,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../strings.dart';
 import '../theme.dart';
+import '../widgets/measure.dart';
 import '../widgets/pull_down.dart';
 
 /// The switch at the top left of home: whose sky is showing ("For me", "For Emma") and a small
@@ -17,6 +18,16 @@ import '../widgets/pull_down.dart';
 /// The capsule's words stop growing at 1.6× the usual size; the menu's rows follow the person's
 /// own text size, two lines at most for a name, and the menu scrolls when it is taller than the
 /// screen.
+/// Lets home close the capsule's menu (Android's back) while the capsule keeps [Key] `sky-switch`.
+class SkySwitchHandle {
+  _SkySwitchState? _state;
+
+  void close() {
+    final s = _state;
+    if (s != null && s._menu.isOpen) s._menu.close();
+  }
+}
+
 class SkySwitch extends StatefulWidget {
   const SkySwitch({
     super.key,
@@ -26,9 +37,13 @@ class SkySwitch extends StatefulWidget {
     required this.onChosen,
     this.onOpening,
     this.onClosed,
+    this.handle,
   });
 
   final Palette palette;
+
+  /// Home's way to close the menu. Optional: the capsule works without one.
+  final SkySwitchHandle? handle;
 
   /// "For me", "For Emma".
   final String label;
@@ -57,6 +72,27 @@ class _SkySwitchState extends State<SkySwitch> {
   List<PullDownItem> _items = const [];
   bool _opening = false;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.handle?._state = this;
+  }
+
+  @override
+  void didUpdateWidget(SkySwitch old) {
+    super.didUpdateWidget(old);
+    if (old.handle != widget.handle) {
+      if (old.handle?._state == this) old.handle?._state = null;
+      widget.handle?._state = this;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.handle?._state == this) widget.handle?._state = null;
+    super.dispose();
+  }
+
   Future<void> _tap() async {
     if (_menu.isOpen) return _menu.close();
     if (_opening) return;
@@ -79,9 +115,9 @@ class _SkySwitchState extends State<SkySwitch> {
     final p = widget.palette;
     final mq = MediaQuery.of(context);
     final scale = mq.textScaler.scale(16) / 16;
-    // large text: the whole width between the margins, so words are not stacked one to a line
+    // large text: the whole width between the margins on a phone, capped on a tablet
     final large = scale > largeText;
-    final width = large ? mq.size.width - 32 : math.min(300.0, mq.size.width - 32);
+    final width = large ? math.min(Widths.card, mq.size.width - 32) : math.min(300.0, mq.size.width - 32);
     return GlassMenu(
       controller: _menu,
       items: [for (final it in _items) ..._row(it, scale, large)],

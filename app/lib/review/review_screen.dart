@@ -174,7 +174,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     if (!widget.on && old.on) _close();
     if (widget.on && old.audioPath != widget.audioPath) _loadAudio();
     // the words have arrived: put them in the box, unless something is already there
-    if (widget.on && old.words == WordsState.writing && widget.words != WordsState.writing && _b != null) {
+    final wasWriting = old.words == WordsState.writing || old.words == WordsState.none;
+    if (widget.on && wasWriting && !_writing && _b != null) {
       if (_words.text.trim().isEmpty) _setQuietly(_words, _b!.rawText);
     }
   }
@@ -247,6 +248,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     FocusManager.instance.primaryFocus?.unfocus();
     widget.player.unload();
     _finishing = false;
+    _dating = false;
   }
 
   /// The "For" name as filled in from the family member chosen, while the field still holds just it
@@ -421,8 +423,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                     SizedBox(height: spacer),
                     ConstrainedBox(
                       constraints: BoxConstraints(minHeight: math.max(0, h - spacer - keyboard + 16)),
-                      // behind the date sheet, out of a screen reader's reach (one Done at a time)
-                      child: ExcludeSemantics(excluding: _dating, child: _page(p, b)),
+                      // behind the date or finish sheet, out of a screen reader's reach (one Done at a time)
+                      child: ExcludeSemantics(excluding: _dating || _finishing, child: _page(p, b)),
                     ),
                   ],
                 ),
@@ -456,7 +458,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               top: 54 + dy,
               // like an iOS navigation bar, the top bar grows only a little with the text size
               child: ExcludeSemantics(
-                excluding: _dating,
+                excluding: _dating || _finishing,
                 child: MediaQuery.withClampedTextScaling(
                 maxScaleFactor: 1.3,
                 child: Row(
@@ -488,16 +490,21 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                 left: 0,
                 right: 0,
                 bottom: keyboard,
-                height: barHeight,
-                child: DecoratedBox(
-                  key: const Key('listen-pinned'),
-                  decoration: BoxDecoration(
-                    color: p.surface,
-                    border: Border(top: BorderSide(color: p.ink.withValues(alpha: .08))),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: Widths.side(MediaQuery.sizeOf(context).width, 16, Widths.reading)),
-                    child: ListenBar(palette: p, player: widget.player, keys: 'pinned'),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: barHeight),
+                  child: DecoratedBox(
+                    key: const Key('listen-pinned'),
+                    decoration: BoxDecoration(
+                      color: p.surface,
+                      border: Border(top: BorderSide(color: p.ink.withValues(alpha: .08))),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Widths.side(MediaQuery.sizeOf(context).width, 16, Widths.reading),
+                        vertical: 6,
+                      ),
+                      child: ListenBar(palette: p, player: widget.player, keys: 'pinned'),
+                    ),
                   ),
                 ),
               ),
@@ -505,7 +512,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
             Positioned.fill(
               child: Sheet(
                 palette: p,
-                on: _dating,
+                on: _dating && widget.on,
                 barrier: true,
                 onDismiss: () => setState(() => _dating = false),
                 label: Strings.whenGiven,
@@ -521,7 +528,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
             Positioned.fill(
               child: Sheet(
                 palette: p,
-                on: _finishing,
+                on: _finishing && widget.on,
                 barrier: true,
                 onDismiss: () => setState(() => _finishing = false),
                 label: Strings.finishTitle,
@@ -1116,26 +1123,20 @@ class ListenBar extends StatelessWidget {
         final d = player.duration, at = player.position.clamp(0, d == 0 ? 0 : d).toDouble();
         final f = d > 0 ? at / d : 0.0;
         final time = '${clockTime(at)} / ${clockTime(d)}';
-        return Row(
-          children: [
-            IconBtn(
-              key: Key('$keys-play'),
-              icon: player.playing ? Glyph.pause : Glyph.play,
-              color: p.ink,
-              palette: p,
-              semantics: player.playing ? Strings.pause : Strings.play,
-              onTap: player.loaded ? player.toggle : null,
-            ),
-            IconBtn(
-              key: Key('$keys-back'),
-              icon: Glyph.back10,
-              color: p.ink2,
-              palette: p,
-              semantics: Strings.back10,
-              onTap: player.loaded ? player.back : null,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
+        final timeStyle = sans(13, 18, p.ink2).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+        // the play and back buttons are 44, then 8, then the line, then 12, the time, and 4
+        const chrome = 44.0 + 44.0 + 8.0 + 12.0 + 4.0;
+        Widget timeLabel({required bool right}) => Semantics(
+              label: Strings.elapsed(clockTime(at), clockTime(d)),
+              excludeSemantics: true,
+              child: Text(
+                time,
+                key: Key('$keys-time'),
+                textAlign: right ? TextAlign.right : TextAlign.start,
+                style: timeStyle,
+              ),
+            );
+        Widget scrubber() => Expanded(
               child: LayoutBuilder(
                 // VoiceOver and TalkBack: a slider; a swipe up or down moves ten seconds
                 builder: (context, box) => Semantics(
@@ -1173,20 +1174,88 @@ class ListenBar extends StatelessWidget {
                 ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Semantics(
-              label: Strings.elapsed(clockTime(at), clockTime(d)),
-              excludeSemantics: true,
-              child: Text(
-                time,
-                key: Key('$keys-time'),
-                style: sans(13, 18, p.ink2).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+            );
+        // At the usual size this is the one row the iPhone golden was drawn from. At a large text
+        // size the time no longer fits beside the line (a 360-wide phone at 3.1× overflows), so the
+        // time drops under the line, still on the right.
+        return LayoutBuilder(builder: (context, box) {
+          final painter = TextPainter(
+            text: TextSpan(text: time, style: timeStyle),
+            textDirection: TextDirection.ltr,
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          final timeWidth = painter.width;
+          painter.dispose();
+          final max = box.maxWidth;
+          final cramped = max.isFinite && (timeWidth > max * 0.42 || max - chrome - timeWidth < 72);
+          if (!cramped) {
+            return Row(
+              children: [
+                IconBtn(
+                  key: Key('$keys-play'),
+                  icon: player.playing ? Glyph.pause : Glyph.play,
+                  color: p.ink,
+                  palette: p,
+                  semantics: player.playing ? Strings.pause : Strings.play,
+                  onTap: player.loaded ? player.toggle : null,
+                ),
+                IconBtn(
+                  key: Key('$keys-back'),
+                  icon: Glyph.back10,
+                  color: p.ink2,
+                  palette: p,
+                  semantics: Strings.back10,
+                  onTap: player.loaded ? player.back : null,
+                ),
+                const SizedBox(width: 8),
+                scrubber(),
+                const SizedBox(width: 12),
+                timeLabel(right: false),
+                const SizedBox(width: 4),
+              ],
+            );
+          }
+          final line = MediaQuery.textScalerOf(context).scale(18);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  IconBtn(
+                    key: Key('$keys-play'),
+                    icon: player.playing ? Glyph.pause : Glyph.play,
+                    color: p.ink,
+                    palette: p,
+                    semantics: player.playing ? Strings.pause : Strings.play,
+                    onTap: player.loaded ? player.toggle : null,
+                  ),
+                  IconBtn(
+                    key: Key('$keys-back'),
+                    icon: Glyph.back10,
+                    color: p.ink2,
+                    palette: p,
+                    semantics: Strings.back10,
+                    onTap: player.loaded ? player.back : null,
+                  ),
+                  const SizedBox(width: 8),
+                  scrubber(),
+                ],
               ),
-            ),
-            const SizedBox(width: 4),
-          ],
-        );
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: timeWidth > max
+                    ? SizedBox(
+                        height: line,
+                        width: max,
+                        child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: timeLabel(right: true)),
+                      )
+                    : timeLabel(right: true),
+              ),
+            ],
+          );
+        });
       },
     );
   }

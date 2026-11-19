@@ -111,6 +111,7 @@ class Strings {
   static String get begin => _w.begin;
   static String get beginLabel => _w.beginLabel;
   static String get nothingRecorded => _w.nothingRecorded;
+  static String get startFailed => _w.startFailed;
   static String get listening => _w.listening;
   static String get discard => _w.discard;
   static String get amen => _w.amen;
@@ -438,8 +439,8 @@ class Strings {
   static String get ringWelcome => _w.ringWelcome;
   static String ringWelcomeBody(String keptBy, int n, DateTime first, {bool yearOnly = false}) => _w.ringWelcomeBody(keptBy, n, first, yearOnly: yearOnly);
   static String ringMore(int n) => _w.ringMore(n);
-  static String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) =>
-      _w.ringMoreBody(keptBy, first, last, firstYearOnly: firstYearOnly, lastYearOnly: lastYearOnly);
+  static String ringMoreBody(String keptBy, DateTime first, DateTime last, {int n = 2, bool firstYearOnly = false, bool lastYearOnly = false}) =>
+      _w.ringMoreBody(keptBy, first, last, n: n, firstYearOnly: firstYearOnly, lastYearOnly: lastYearOnly);
   static String ofTotal(int i, int n) => _w.ofTotal(i, n);
   static String get keepThem => _w.keepThem;
   static String get ringAlreadyHave => _w.ringAlreadyHave;
@@ -465,6 +466,7 @@ extension WordsCatalogue on Words {
         'begin': begin,
         'beginLabel': beginLabel,
         'nothingRecorded': nothingRecorded,
+        'startFailed': startFailed,
         'listening': listening,
         'discard': discard,
         'amen': amen,
@@ -903,6 +905,7 @@ class Words {
   String get begin => 'Begin';
   String get beginLabel => 'Begin. Nothing is recorded until you press';
   String get nothingRecorded => 'Nothing is recorded until you press.';
+  String get startFailed => 'The microphone could not start just now. End any call or other recording and try Begin again.';
   String get listening => 'Listening';
   String get discard => 'Discard';
   String get amen => 'Amen';
@@ -1352,8 +1355,11 @@ class Words {
   }
 
   String ringMore(int n) => n == 1 ? 'One more of your blessings' : '${count(n)} more of your blessings';
-  String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) {
+  String ringMoreBody(String keptBy, DateTime first, DateTime last, {int n = 2, bool firstYearOnly = false, bool lastYearOnly = false}) {
     final a = _since(first, firstYearOnly), b = _since(last, lastYearOnly);
+    if (n == 1) {
+      return '${keptBy.isEmpty ? a : 'Kept by $keptBy, $a'}. It joins your ring by its date. Read it first, then keep it.';
+    }
     final range = a == b ? a : '$a to $b';
     return '${keptBy.isEmpty ? range : 'Kept by $keptBy, $range'}. They join your ring by their dates. Read them first, then keep them.';
   }
@@ -1537,6 +1543,8 @@ class _Spanish implements Words {
   String get beginLabel => 'Comenzar. No se graba nada hasta que lo presiones';
   @override
   String get nothingRecorded => 'No se graba nada hasta que lo presiones.';
+  @override
+  String get startFailed => 'El micrófono no pudo iniciar en este momento. Termina cualquier llamada u otra grabación e inténtalo de nuevo.';
   @override
   String get listening => 'Escuchando';
   @override
@@ -2287,8 +2295,12 @@ class _Spanish implements Words {
   @override
   String ringMore(int n) => n == 1 ? 'Una bendición más para ti' : '${count(n)} bendiciones más para ti';
   @override
-  String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) {
+  String ringMoreBody(String keptBy, DateTime first, DateTime last, {int n = 2, bool firstYearOnly = false, bool lastYearOnly = false}) {
     final a = _since(first, firstYearOnly), b = _since(last, lastYearOnly);
+    if (n == 1) {
+      final when = keptBy.isEmpty ? '${a[0].toUpperCase()}${a.substring(1)}' : 'Guardada por $keptBy, $a';
+      return '$when. Se une a tu anillo según su fecha. Léela primero y luego guárdala.';
+    }
     final range = a == b ? a : 'de $a a $b';
     return '${keptBy.isEmpty ? '${range[0].toUpperCase()}${range.substring(1)}' : 'Guardadas por $keptBy, $range'}. Se unen a tu anillo según sus fechas. Léelas primero y luego guárdalas.';
   }

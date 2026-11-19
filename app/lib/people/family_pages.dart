@@ -28,6 +28,8 @@ class PersonLayer extends StatefulWidget {
     required this.onSave,
     this.countLine = '',
     this.blessings = 0,
+    this.handOverBlessings,
+    this.handOverCountLine,
     this.onRemove,
     this.keptBy = '',
     this.onMakeRing,
@@ -52,6 +54,10 @@ class PersonLayer extends StatefulWidget {
   /// For one being changed: their count line, and how many blessings are on their ring.
   final String countLine;
   final int blessings;
+
+  /// Finished placed blessings that travel in a hand-over (defaults to [blessings] when omitted).
+  final int? handOverBlessings;
+  final String? handOverCountLine;
   final VoidCallback onBack;
 
   /// Add (or Save) with the name as typed and the birth date, if any.
@@ -111,6 +117,8 @@ class PersonLayerState extends State<PersonLayer> {
   }
 
   bool get _ready => cleanName(_name.text).isNotEmpty;
+  int get _toHandOver => widget.handOverBlessings ?? widget.blessings;
+  String get _handOverCount => widget.handOverCountLine ?? widget.countLine;
 
   void _save() {
     if (!_ready) return;
@@ -244,8 +252,8 @@ class PersonLayerState extends State<PersonLayer> {
                 onTap: _ready ? _save : null,
               ),
             ),
-            // never suggested: one quiet row, only for someone with blessings to hand over
-            if (!adding && widget.blessings > 0 && widget.onMakeRing != null) ...[
+            // never suggested: one quiet row, only for someone with finished blessings to hand over
+            if (!adding && _toHandOver > 0 && widget.onMakeRing != null) ...[
               const SizedBox(height: 28),
               Container(height: 1, color: p.ink.withValues(alpha: .10)),
               OpenRow(
@@ -361,18 +369,21 @@ class PersonLayerState extends State<PersonLayer> {
             palette: p,
             on: _handing && widget.on,
             person: person,
-            countLine: widget.countLine,
+            countLine: _handOverCount,
             keptBy: widget.keptBy,
             onMake: widget.onMakeRing!,
             onShare: widget.onShareRing ?? (_, _) async => false,
             onSent: (name) => widget.onRingSent?.call(name),
             onClose: () => setState(() => _handing = false),
-            // delete it now: asked once more, as removing them is
-            onDelete: () => setState(() {
-              _handing = false;
-              _removeNote = null;
-              _removing = true;
-            }),
+            // delete it now: asked once more, as removing them is — never offered when unshared drafts
+            // remain on the ring, so a draft and its recording cannot be thrown away with the sent ones
+            onDelete: widget.blessings > _toHandOver
+                ? null
+                : () => setState(() {
+                      _handing = false;
+                      _removeNote = null;
+                      _removing = true;
+                    }),
           ),
         ),
       if (person != null)

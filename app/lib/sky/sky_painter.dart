@@ -53,7 +53,7 @@ class SkyPainter extends CustomPainter {
   final bool showLabels;
 
   /// The curve the lights are strung on, as directions on the sphere.
-  final List<Vec3> line;
+  List<Vec3> line;
 
   /// Reports stars drawn and microseconds spent filling the star buffers.
   final void Function(int stars, int micros)? onStats;
@@ -97,7 +97,7 @@ class SkyPainter extends CustomPainter {
     final w = size.width, h = size.height;
 
     // ---- the night itself ----
-    final br = e.reduceMotion ? .6 : SkyEngine.breath(e.clock - e.breathT0);
+    final orbU = e.orbUniforms();
     var i = 0;
     void f(double v) => _sky.setFloat(i++, v);
     // the order of shaders/sky.frag's packed uniforms (uP0 to uP5, then the colours)
@@ -111,7 +111,7 @@ class SkyPainter extends CustomPainter {
       e.ux, e.uy, e.uz, softMilkyWay ? u * u * (3 - 2 * u) : 0.0, // uP3
       e.tx, e.ty, assets.milkyWay.width.toDouble(), assets.milkyWay.height.toDouble(), // uP4
       assets.milkyWaySoft.width.toDouble(), assets.milkyWaySoft.height.toDouble(), 0.0, 0.0, // uP5
-      0.0, e.cy, .15 + .075 * br, e.orb * (.55 + .45 * br), // uOrb
+      0.0, e.cy, orbU.radius, orbU.strength, // uOrb
     ]) {
       f(v);
     }
@@ -215,7 +215,11 @@ class SkyPainter extends CustomPainter {
       canvas.restore();
     }
 
-    if (showLabels) _paintLabels(canvas, size);
+    if (showLabels) {
+      _paintLabels(canvas, size);
+    } else {
+      _labelsFading = false;
+    }
   }
 
   /// Projects every star that can be seen and writes one or more sprites for it.
@@ -342,6 +346,10 @@ class SkyPainter extends CustomPainter {
   /// How strongly each date label shows, eased frame to frame so labels fade
   /// rather than pop. Keyed by blessing, as the list changes under it.
   final Map<Object, double> _labelA = {};
+  bool _labelsFading = true;
+
+  /// True once labels have been painted and none are still fading in or out.
+  bool get labelsSettled => !showLabels || !_labelsFading;
 
   /// The side of its light each date showing sits on: below (false) or above (true).
   final Map<Object, bool> _labelUp = {};
@@ -384,6 +392,7 @@ class SkyPainter extends CustomPainter {
     _placed.clear();
     _fading.clear();
     debugLabels.clear();
+    _labelsFading = false;
     final n = e.blessings.length, f = n == 0 ? 0 : math.min(e.focus, n - 1);
     final strength = .95 * e.lights * (1 - e.solo);
     // the light in focus keeps a narrow column clear above and below it, so
@@ -462,13 +471,17 @@ class SkyPainter extends CustomPainter {
       if (fits) {
         _placed.add(box);
         a = math.min(1, a + rise);
+        if (a < 1) _labelsFading = true;
       } else {
         a = math.max(0, a - fall);
         if (a > 0 && !(clear(_placed, box) && clear(_fading, box))) {
           a = 0;
           debugCut++;
         }
-        if (a > 0) _fading.add(box);
+        if (a > 0) {
+          _fading.add(box);
+          _labelsFading = true;
+        }
       }
       if (a <= 0) {
         _labelA.remove(bl);

@@ -54,9 +54,9 @@ When a feature lands, add an entry at the top of the current date in `docs/decis
 - Each native piece is one Kotlin file beside `MainActivity.kt`: `RecordingService` and `SegmentRecorder` (recording as a foreground service), `WhisperEngine`, `ModelStore`, `SpeechChannel` and `WordsChannel` (speech written on the phone by whisper.cpp; prebuilt libraries are in `app/android/app/src/main/jniLibs/`, rebuilt by `app/tool/android_whisper.sh`), `LockChannel`, `LocationChannel`, `ShareChannel`, `LinkChannel`, `BlessingFiles`, `PlayerChannel`, `ProofChannel` (Play Integrity).
 - A feature Android cannot do yet answers "this phone cannot", never "done": see `NotYet` in `MainActivity.kt` and `app/lib/not_yet.dart`.
 - **Most useful now:**
-  1. Nothing has ever run on a real Android phone; everything so far was proven on emulators. Tasks 15, 17 and 19 in `docs/android-plan.md` need a real phone: speech from a real voice in English and Spanish, receiving files and links from other apps, a real call, lock and kill during a recording.
+  1. An initial build has been smoke-tested on a real Android phone; tasks 15, 17 and 19 in `docs/android-plan.md` still need their full real-phone pass: speech from a real voice in English and Spanish, receiving files and links from other apps, a real call, lock and kill during a recording.
   2. Features built on 2026-11-18 compile for Android but have not been seen on it: family members and their rings, entering a past blessing, handing a ring over by link, the liquid glass controls on home, and the iPad-pass layout changes.
-  3. Listening back while the phone is locked (task 18), and the open questions in section 14.
+  3. Listening back while the phone is locked is built (task 18, `PlaybackService`); it has not been heard on a phone. The open questions are in section 14.
   4. Play Integrity is built on both sides (`ProofChannel.kt`, `website/lib/links/proof.ts`) but can only be proven from an install off Play's internal testing track.
 - Never test against the live link service. Run the website locally (`cd website && pnpm dev`) and point the app at it the way `app/tool/android_share.sh` does.
 

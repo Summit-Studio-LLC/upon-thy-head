@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.PowerManager
@@ -35,20 +36,32 @@ class RecordingService : Service() {
         @Volatile var running = false
             private set
 
+        @Volatile private var wantStop = false
+
         /** Begin. */
-        fun start(context: Context) {
-            context.startForegroundService(Intent(context, RecordingService::class.java))
+        fun start(context: Context): Boolean {
+            wantStop = false
+            return try {
+                context.startForegroundService(Intent(context, RecordingService::class.java))
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "recording: could not start service: $e")
+                false
+            }
         }
 
         /** Amen or Discard. */
         fun stop(context: Context) {
-            context.stopService(Intent(context, RecordingService::class.java))
+            wantStop = true
+            if (running) {
+                runCatching { context.stopService(Intent(context, RecordingService::class.java)) }
+            }
         }
 
         /** The clock in the notification, again: after a pause it carries on from the time recorded. */
         fun refresh(context: Context, paused: Boolean) {
+            if (!running || wantStop || SpeechChannel.recorder?.recording != true) return
             val m = context.getSystemService(NotificationManager::class.java)
-            if (SpeechChannel.recorder?.recording != true) return
             m.notify(ID, notification(context, paused))
         }
 
@@ -108,21 +121,48 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
+            // Always satisfy Android's 5-second foreground contract first, even if stop() already raced in.
             startForeground(ID, notification(this, false), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-            running = true
-            if (wake == null) {
-                wake = getSystemService(PowerManager::class.java)
-                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "uponthyhead:recording")
-                    .apply { acquire(4 * 60 * 60 * 1000L) } // a ceiling, never reached by a blessing
-            }
-            Log.i(TAG, "recording: service in the foreground")
         } catch (e: Exception) {
             // the recording itself goes on while the app is on screen; only the locked part is lost
             Log.e(TAG, "recording: the service could not start: $e")
+            running = false
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (wantStop || SpeechChannel.recorder?.recording != true) {
+            running = false
+            wake?.let { if (it.isHeld) it.release() }
+            wake = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        running = true
+        if (wake?.isHeld != true) {
+            wake = (wake ?: getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "uponthyhead:recording"))
+                .apply { acquire(4 * 60 * 60 * 1000L) } // a ceiling, never reached by a blessing
+        }
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            Log.i(TAG, "recording: service in the foreground")
         }
         // never restarted by the system after a kill: the recording is recovered at the next launch
         return START_NOT_STICKY
+    }
+
+    override fun onTimeout(startId: Int) = onTimeout(startId, 0)
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "recording: foreground service timed out")
+        if (SpeechChannel.recorder?.recording == true) {
+            SpeechChannel.recorder?.abandon()
+        }
+        running = false
+        wake?.let { if (it.isHeld) it.release() }
+        wake = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     /**
@@ -144,7 +184,9 @@ class RecordingService : Service() {
         wake?.let { if (it.isHeld) it.release() }
         wake = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        Log.i(TAG, "recording: service stopped")
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            Log.i(TAG, "recording: service stopped")
+        }
         super.onDestroy()
     }
 }
