@@ -46,6 +46,14 @@ one whose date is known only to the month or the year; the page shows "August 19
 - A reader checks the record as strictly as the app checks a file: see "Reading strictly" in
   `docs/blessing-file.md`. A record `version` above 2 is "made with a newer version" (the
   site reads 1 and 2; the link's own format byte stays `0x01`).
+- **A whole ring** (2026-11-18: a parent handing a family member's ring to their own phone) is one
+  record of `version` **3** with `"kind": "ring"`:
+  `{"format":"upon-thy-head/blessing","version":3,"kind":"ring","keptBy":"Dad","blessings":[…]}`.
+  `keptBy` is the name the parent typed (≤ 200 characters, no control characters; may be empty);
+  `blessings` is a list of up to 2,000 single records (version 1 or 2, each read as strictly as
+  alone), oldest first; one id twice is kept once. An app or page made before rings reads version 3
+  as "made with a newer version". Like every record, it is only ever inside the locked copy: the
+  service and the link carry no name, count or date.
 - The words shown are the spoken words with each change whose `kept` is true applied in order
   (`applyChanges` in `app/lib/polish/change.dart`).
 
@@ -65,7 +73,7 @@ where the document has `restart`. The page accepts all six.
 - Additional authenticated data: **the one byte `0x01`** (the same byte as byte 0). So the version
   byte cannot be changed without the copy failing to open.
 - Plaintext: the record's compact JSON bytes (§2).
-- Size: at least 31 bytes (1 + 12 + 16 + the two bytes of `{}`); **at most 65,536 bytes** (§5).
+- Size: at least 31 bytes (1 + 12 + 16 + the two bytes of `{}`); **at most 524,288 bytes** (512 KiB, §5). The app keeps a single blessing's copy to 65,536 bytes, as before rings, so every single-blessing link still opens in an older app.
 - Randomness must come from the system's secure generator (`SecRandomCopyBytes` / `SystemRandom`,
   `java.security.SecureRandom`).
 
@@ -84,7 +92,7 @@ earlier experiment's hand-written ChaCha20-Poly1305 (`app/lib/share/chacha.dart`
 Opening, in this order (the error names are the ones in `protocol-vectors.json`):
 
 1. The fragment is not exactly a 43-character canonical base64url key: `key`.
-2. Fewer than 31 or more than 65,536 bytes, or byte 0 is `0x00`: `damaged`.
+2. Fewer than 31 or more than 524,288 bytes, or byte 0 is `0x00`: `damaged`.
 3. Byte 0 is greater than `0x01`: `newer`.
 4. AES-GCM does not authenticate (wrong key, any byte changed, cut short): `locked`.
 5. The plaintext is not a valid record: `record`, or `newer` if its `version` is above 2.
@@ -116,7 +124,7 @@ the app" below).
 | status | error | when | what the app does |
 |---|---|---|---|
 | 415 | `type` | `Content-Type` is not `application/octet-stream` | a bug in the app |
-| 413 | `too_big` | over 65,536 bytes | offer the blessing file instead |
+| 413 | `too_big` | over 524,288 bytes | offer the blessing file instead |
 | 400 | `too_small` | under 31 bytes | a bug in the app |
 | 400 | `version` | byte 0 is not `0x01` | a bug, or the site is older than the app: offer the file |
 | 429 | `slow_down` | too many from this network; `Retry-After: <seconds>` | say to try again shortly; offer the file |
@@ -241,19 +249,22 @@ link's id but never its key.
 
 ## 5. Limits, and why
 
-- **65,536 bytes for a locked copy.** A 2,500-word blessing with its changes is about 17 KB, so
-  this is about four times the longest blessing anyone is likely to give (roughly 9,000 words).
+- **524,288 bytes (512 KiB) for a locked copy** (65,536 until 2026-11-18). A 2,500-word blessing
+  with its changes is about 17 KB; an ordinary blessing about 2–4 KB, so a whole ring of 100–150
+  blessings fits. The app still keeps one blessing to 65,536 bytes (so older apps open it); only a
+  ring uses more. An app made before rings refuses a copy over 65,536 bytes as `damaged`.
   It is small enough that the service is useless as file hosting: no photo, video or program of
   any size fits. A record over the cap is sent as a file instead.
 - **30 days**, then erased.
 - **One network:** 10 links in 10 minutes and 40 in a day; 120 reads a minute; 30 stops a minute.
-- **Everyone together, per UTC day:** 1,000 links and 6 MiB. Thirty such days fit inside the free
+- **One client, per UTC day:** 3 MiB of copies made (about six of the largest rings).
+- **Everyone together, per UTC day:** 1,000 links and 12 MiB (6 MiB until 2026-11-18). Thirty such days fit inside the free
   size of the store, so the worst case costs nothing and fills nothing.
 
 ### An open "store my bytes" endpoint will be abused. What is done now
 
 - The cap, the 30 days, the per-network limits and the daily budget above bound what anyone can
-  take: at most about 180 MiB at any time, all of it gone in 30 days.
+  take: at most about 360 MiB at any time, all of it gone in 30 days.
 - A copy is only ever served back as `application/octet-stream` with `nosniff`, a
   `Content-Security-Policy: default-src 'none'; sandbox`, and `Cross-Origin-Resource-Policy:
   same-origin`, with no CORS. A browser will not run it, show it, or let another site embed or

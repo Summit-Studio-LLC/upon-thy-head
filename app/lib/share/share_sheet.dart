@@ -270,7 +270,7 @@ class ShareSheetState extends State<ShareSheet> {
             ),
           ]),
           const SizedBox(height: 16),
-          _BigButton(
+          BigButton(
             key: const Key('share-send'),
             palette: p,
             icon: Glyph.blessing,
@@ -344,7 +344,7 @@ class ShareSheetState extends State<ShareSheet> {
       const SizedBox(height: 8),
       Text(Strings.linkLine2, style: sans(15, 21, p.ink3)),
       const SizedBox(height: 20),
-      _BigButton(key: const Key('share-send-link'), palette: p, icon: Glyph.share, label: Strings.sendLink, onTap: _sendLink),
+      BigButton(key: const Key('share-send-link'), palette: p, icon: Glyph.share, label: Strings.sendLink, onTap: _sendLink),
       if (widget.onYourLinks != null) ...[
         const SizedBox(height: 16),
         Container(height: 1, color: p.ink.withValues(alpha: .10)),
@@ -395,7 +395,7 @@ class ShareSheetState extends State<ShareSheet> {
         ),
       ]),
       const SizedBox(height: 18),
-      _BigButton(key: const Key('share-file'), palette: p, icon: Glyph.file, label: Strings.sendFile, onTap: _sendFile),
+      BigButton(key: const Key('share-file'), palette: p, icon: Glyph.file, label: Strings.sendFile, onTap: _sendFile),
       const SizedBox(height: 12),
       Text(Strings.fileNote, textAlign: TextAlign.center, style: sans(14, 19, p.ink3)),
       const SizedBox(height: 18),
@@ -431,9 +431,10 @@ class _Thumb extends StatelessWidget {
   }
 }
 
-/// The gold button with an icon: "Send this blessing", "Send the link", "Send as a file".
-class _BigButton extends StatefulWidget {
-  const _BigButton({super.key, required this.palette, required this.icon, required this.label, required this.onTap, this.busy = false});
+/// The gold button with an icon: "Send this blessing", "Send the link", "Send as a file", and the
+/// hand-over's "Send Emma's ring" (people/hand_over_sheet.dart).
+class BigButton extends StatefulWidget {
+  const BigButton({super.key, required this.palette, required this.icon, required this.label, required this.onTap, this.busy = false});
   final Palette palette;
   final Glyph icon;
   final String label;
@@ -441,10 +442,10 @@ class _BigButton extends StatefulWidget {
   final bool busy;
 
   @override
-  State<_BigButton> createState() => _BigButtonState();
+  State<BigButton> createState() => BigButtonState();
 }
 
-class _BigButtonState extends State<_BigButton> {
+class BigButtonState extends State<BigButton> {
   bool _down = false;
 
   @override

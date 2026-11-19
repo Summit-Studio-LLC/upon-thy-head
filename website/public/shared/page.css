@@ -351,3 +351,18 @@ noscript {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* A family member's whole ring, handed to them: its head, then each blessing, oldest first. */
+.ring-head {
+  margin-bottom: 2.5rem;
+}
+
+.blessing.in-ring {
+  padding-top: 2.25rem;
+  margin-top: 2.25rem;
+  border-top: 1px solid rgba(240, 230, 212, 0.12);
+}
+
+.blessing.in-ring .title {
+  font-size: 1.75rem;
+}

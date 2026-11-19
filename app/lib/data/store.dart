@@ -228,6 +228,12 @@ class SqliteBlessingStore implements BlessingStore {
       db.execute("ALTER TABLE blessings ADD COLUMN date_precision TEXT NOT NULL DEFAULT 'day' CHECK (date_precision IN ('day', 'month', 'year', 'unset'))");
       db.execute('ALTER TABLE blessings ADD COLUMN entered INTEGER NOT NULL DEFAULT 0 CHECK (entered IN (0, 1))');
     },
+    // 10: a family member's ring handed to their own phone (share/ring_file.dart): who kept each
+    // blessing that came that way ('' for every other), and when a ring here was last handed over.
+    (db) {
+      db.execute("ALTER TABLE blessings ADD COLUMN kept_by TEXT NOT NULL DEFAULT ''");
+      db.execute('ALTER TABLE people ADD COLUMN handed_at_ms INTEGER');
+    },
   ];
 
   static void _insertChanges(Database db, String id, List<Change> changes) {
@@ -275,7 +281,7 @@ class SqliteBlessingStore implements BlessingStore {
 
   static const _columns = 'id, title, giver, recipient, ownership, given_utc_minute, utc_offset_minutes, '
       'latitude, longitude, raw_text, polished_text, polish_asked, draft, created_at_ms, updated_at_ms, audio, language, words_state, first_text, sent_at_ms, '
-      'person_id, date_precision, entered';
+      'person_id, date_precision, entered, kept_by';
 
   List<Object?> _values(Blessing b) => [
         b.id,
@@ -302,6 +308,7 @@ class SqliteBlessingStore implements BlessingStore {
         b.ownership == Ownership.passingOn ? '' : b.personId,
         b.precision.code,
         b.entered ? 1 : 0,
+        b.keptBy,
       ];
 
   Blessing _read(Row r, Map<String, List<String>> tags, Map<String, List<Change>> changes) {
@@ -330,6 +337,7 @@ class SqliteBlessingStore implements BlessingStore {
       updated: DateTime.fromMillisecondsSinceEpoch(r['updated_at_ms'] as int, isUtc: true),
       precision: DatePrecision.fromCode(r['date_precision'] as String),
       entered: r['entered'] == 1,
+      keptBy: r['kept_by'] as String,
     );
   }
 
@@ -398,7 +406,7 @@ class SqliteBlessingStore implements BlessingStore {
   @override
   Future<void> create(Blessing b) async {
     _tx(_db, () {
-      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(23, '?').join(', ')})', _values(b));
+      _db.execute('INSERT INTO blessings ($_columns) VALUES (${List.filled(24, '?').join(', ')})', _values(b));
       _writeTags(b);
       _writeChanges(b);
     });
@@ -415,7 +423,7 @@ class SqliteBlessingStore implements BlessingStore {
         'audio = ?, language = ?, words_state = ?, '
         // the first writing is kept as it was once there is one
         "first_text = CASE WHEN first_text = '' THEN ? ELSE first_text END, "
-        'sent_at_ms = ?, person_id = ?, date_precision = ?, entered = ? '
+        'sent_at_ms = ?, person_id = ?, date_precision = ?, entered = ?, kept_by = ? '
         'WHERE id = ?',
         [...v.skip(1), b.id],
       );
@@ -432,19 +440,20 @@ class SqliteBlessingStore implements BlessingStore {
             id: r['id'] as String,
             name: r['name'] as String,
             born: Day.parse(r['born'] as String?),
+            handed: r['handed_at_ms'] == null ? null : DateTime.fromMillisecondsSinceEpoch(r['handed_at_ms'] as int, isUtc: true),
             created: DateTime.fromMillisecondsSinceEpoch(r['created_at_ms'] as int, isUtc: true),
           ),
       ];
 
   @override
   Future<void> addPerson(Person p) async => _db.execute(
-        'INSERT INTO people (id, name, born, created_at_ms) VALUES (?, ?, ?, ?)',
-        [p.id, p.name, p.born?.code, p.created.millisecondsSinceEpoch],
+        'INSERT INTO people (id, name, born, created_at_ms, handed_at_ms) VALUES (?, ?, ?, ?, ?)',
+        [p.id, p.name, p.born?.code, p.created.millisecondsSinceEpoch, p.handed?.millisecondsSinceEpoch],
       );
 
   @override
   Future<void> updatePerson(Person p) async {
-    _db.execute('UPDATE people SET name = ?, born = ? WHERE id = ?', [p.name, p.born?.code, p.id]);
+    _db.execute('UPDATE people SET name = ?, born = ?, handed_at_ms = ? WHERE id = ?', [p.name, p.born?.code, p.handed?.millisecondsSinceEpoch, p.id]);
     if (_db.updatedRows != 1) throw StateError('No family member ${p.id} to update');
   }
 

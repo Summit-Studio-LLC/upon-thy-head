@@ -22,8 +22,15 @@ const linkTagBytes = 16;
 /// The smallest locked copy: the version, the nonce, the tag and the two bytes of `{}`.
 const linkMinBytes = 1 + linkNonceBytes + linkTagBytes + 2;
 
-/// The largest locked copy the service takes (a 2,500-word blessing is about 17 KB).
-const linkMaxBytes = 65536;
+/// The largest locked copy the service takes. A 2,500-word blessing is about 17 KB, an ordinary
+/// one 3 to 6 KB; a family member's whole ring handed over (share/ring_file.dart) is one locked
+/// copy, so the cap is 512 KiB (2026-11-18; it was 64 KiB): about 100 ordinary blessings, or 30 of
+/// the longest. An app from before reads at most 64 KiB and calls a larger copy unreadable.
+const linkMaxBytes = 524288;
+
+/// The largest locked copy of one blessing: 64 KiB, as before rings, so every single-blessing link
+/// still opens in an app made before rings (which reads no more than this).
+const blessingLinkMaxBytes = 65536;
 
 /// How long a link lasts (the service decides; this is only for words shown before it answers).
 const linkDays = 30;

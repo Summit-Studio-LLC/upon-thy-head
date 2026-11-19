@@ -5,11 +5,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as m;
 
 import '../not_yet.dart';
+import '../share/links.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/over_sky_page.dart';
 import '../widgets/sheet.dart';
+import 'hand_over_sheet.dart';
 import 'person.dart';
 
 /// Adding a family member (design B1-04), or changing one: a name and an optional birth date
@@ -27,10 +29,22 @@ class PersonLayer extends StatefulWidget {
     this.countLine = '',
     this.blessings = 0,
     this.onRemove,
+    this.keptBy = '',
+    this.onMakeRing,
+    this.onShareRing,
+    this.onRingSent,
   });
 
   final Palette palette;
   final bool on;
+
+  /// Handing their ring to their own phone (hand_over_sheet.dart): the "Kept by" name to start
+  /// with, making the link, the system share sheet, and once it was sent. Without [onMakeRing]
+  /// (no link service) there is no row for it.
+  final String keptBy;
+  final Future<MakeResult> Function(String keptBy)? onMakeRing;
+  final Future<bool> Function(String url, String title)? onShareRing;
+  final void Function(String keptBy)? onRingSent;
 
   /// Null when adding.
   final Person? person;
@@ -54,7 +68,7 @@ class PersonLayerState extends State<PersonLayer> {
   final _name = TextEditingController();
   final _nameFocus = FocusNode();
   Day? _born;
-  bool _picking = false, _removing = false, _busy = false;
+  bool _picking = false, _removing = false, _busy = false, _handing = false;
   String? _removeNote;
   DateTime _pending = DateTime.now();
 
@@ -71,14 +85,14 @@ class PersonLayerState extends State<PersonLayer> {
     if ((widget.on && !oldWidget.on) || widget.person?.id != oldWidget.person?.id) _reset();
     if (!widget.on && oldWidget.on) {
       _nameFocus.unfocus();
-      _picking = _removing = false;
+      _picking = _removing = _handing = false;
     }
   }
 
   void _reset() {
     _name.text = widget.person?.name ?? '';
     _born = widget.person?.born;
-    _picking = _removing = _busy = false;
+    _picking = _removing = _busy = _handing = false;
     _removeNote = null;
   }
 
@@ -91,8 +105,8 @@ class PersonLayerState extends State<PersonLayer> {
 
   /// Android's back: the date or the remove sheet goes, if one is up. True when one went.
   bool closeSheet() {
-    if (!_picking && !_removing) return false;
-    setState(() => _picking = _removing = false);
+    if (!_picking && !_removing && !_handing) return false;
+    setState(() => _picking = _removing = _handing = false);
     return true;
   }
 
@@ -230,6 +244,28 @@ class PersonLayerState extends State<PersonLayer> {
                 onTap: _ready ? _save : null,
               ),
             ),
+            // never suggested: one quiet row, only for someone with blessings to hand over
+            if (!adding && widget.blessings > 0 && widget.onMakeRing != null) ...[
+              const SizedBox(height: 28),
+              Container(height: 1, color: p.ink.withValues(alpha: .10)),
+              OpenRow(
+                key: const Key('person-hand-over'),
+                palette: p,
+                semantics: [Strings.handOverRow(person.name), if (person.handed != null) Strings.handedOn(person.name, person.handed!.toLocal())].join('. '),
+                onTap: () => setState(() {
+                  _nameFocus.unfocus();
+                  _handing = true;
+                }),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(Strings.handOverRow(person.name), style: sans(16, 21, p.ink)),
+                  if (person.handed != null) ...[
+                    const SizedBox(height: 3),
+                    Text(Strings.handedOn(person.name, person.handed!.toLocal()), key: const Key('person-handed'), style: sans(13, 18, p.ink3)),
+                  ],
+                ]),
+              ),
+              Container(height: 1, color: p.ink.withValues(alpha: .10)),
+            ],
             if (!adding && widget.onRemove != null) ...[
               const SizedBox(height: 28),
               Align(
@@ -319,6 +355,26 @@ class PersonLayerState extends State<PersonLayer> {
           ]),
         ),
       ),
+      if (person != null && widget.onMakeRing != null)
+        Positioned.fill(
+          child: HandOverSheet(
+            palette: p,
+            on: _handing && widget.on,
+            person: person,
+            countLine: widget.countLine,
+            keptBy: widget.keptBy,
+            onMake: widget.onMakeRing!,
+            onShare: widget.onShareRing ?? (_, _) async => false,
+            onSent: (name) => widget.onRingSent?.call(name),
+            onClose: () => setState(() => _handing = false),
+            // delete it now: asked once more, as removing them is
+            onDelete: () => setState(() {
+              _handing = false;
+              _removeNote = null;
+              _removing = true;
+            }),
+          ),
+        ),
       if (person != null)
         Positioned.fill(
           child: ConfirmSheet(

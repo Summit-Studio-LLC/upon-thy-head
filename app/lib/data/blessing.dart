@@ -62,6 +62,7 @@ class Blessing {
     this.sent,
     this.precision = DatePrecision.day,
     this.entered = false,
+    this.keptBy = '',
     DateTime? created,
     DateTime? updated,
   })  : changes = changes ?? [],
@@ -139,6 +140,11 @@ class Blessing {
 
   /// Entered from a written copy (typed or pasted), not recorded. Its words are never polished.
   bool entered;
+
+  /// Who kept it before it came to this phone with a whole ring handed over ("Dad", share/ring_file.dart);
+  /// '' for every other blessing. Its reading page says "Kept by Dad", and the person's own sky
+  /// "Kept for you by Dad". Not part of what is sent.
+  String keptBy;
 
   /// It has a date, so a light and a place on its ring.
   bool get placed => precision != DatePrecision.unset;

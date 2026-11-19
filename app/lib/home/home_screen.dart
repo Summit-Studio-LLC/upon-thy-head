@@ -44,7 +44,9 @@ import '../share/link_crypto.dart';
 import '../share/link_format.dart';
 import '../share/link_service.dart';
 import '../share/links.dart';
+import '../share/hand_over.dart';
 import '../share/receive.dart';
+import '../share/ring_arrival.dart';
 import '../share/share.dart';
 import '../share/your_links.dart';
 import '../check/check_page.dart';
@@ -251,6 +253,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   IncomingFile? _arrivalFile;
   Arrival? _arrival;
   bool _receiving = false, _arrivalsOpen = false, _arrivalBusy = false, _arrivalScheduled = false;
+
+  /// A ring handed over being kept; and the words of the quiet notice over the sky.
+  bool _ringBusy = false;
+  String _noticeText = Strings.alreadyHave;
 
   /// Where an App Shortcut, the Spotlight entry or a launcher shortcut asked the app to open (the
   /// newest only), waiting until the app is unlocked and free to go there.
@@ -1468,6 +1474,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _notice();
       return setState(() {});
     }
+    if (a is ArrivalRing && a.fresh.isEmpty) {
+      // a ring handed over whose every blessing is here already: the person's own sky, saying so
+      await _switchSky('');
+      if (mounted) _notice(Strings.ringAlreadyHave);
+      return setState(() {});
+    }
     setState(() {
       _arrivalFile = f;
       _arrival = a;
@@ -1545,6 +1557,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final b = a.record.toBlessing(place: _where?.place ?? saltLakeTemple);
         await _store.create(b);
         id = b.id;
+      } else if (a is ArrivalRing) {
+        // a ring handed over: each new one joins the person's own ring by its date
+        setState(() => _ringBusy = true);
+        final kept = await keepRing(_store, a, place: _where?.place ?? saltLakeTemple);
+        debugPrint('receive: kept ${kept.length} of a ring');
+        _ringBusy = false;
+        await _switchSky('');
+        return;
       } else if (a is ArrivalDifferent) {
         final mine = a.mine;
         a.record.writeOver(mine);
@@ -1591,10 +1611,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  void _notice() {
+  void _notice([String? text]) {
     _noticeTimer?.cancel();
     _noticeOn = true;
-    SemanticsService.sendAnnouncement(View.of(context), Strings.alreadyHave, TextDirection.ltr);
+    _noticeText = text ?? Strings.alreadyHave;
+    SemanticsService.sendAnnouncement(View.of(context), _noticeText, TextDirection.ltr);
     _noticeTimer = Timer(const Duration(milliseconds: 3500), () {
       if (mounted) setState(() => _noticeOn = false);
     });
@@ -2092,6 +2113,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return true;
   }
 
+  /// The family member's whole ring as one link (share/ring_file.dart), kept by [keptBy].
+  Future<MakeResult> _makeRing(String keptBy) async {
+    final p = _editing, links = _links;
+    if (p == null || links == null) return const NotMade(LinkTrouble.unavailable);
+    await _reloadFamily();
+    return links.makeRing(p.id, _family.on(p.id), keptBy: keptBy, title: Strings.ringOf(p.name));
+  }
+
+  /// Their ring's link was sent: the name remembered for next time, and the day on their page.
+  Future<void> _ringSent(String keptBy) async {
+    final p = _editing;
+    if (p == null) return;
+    await _settings?.setKeptBy(keptBy);
+    final handed = p.copy()..handed = DateTime.now().toUtc();
+    try {
+      await _store.updatePerson(handed);
+    } catch (e) {
+      debugPrint('family: $e');
+    }
+    await _reloadFamily();
+    if (!mounted) return;
+    setState(() => _editing = _family.person(p.id) ?? handed);
+  }
+
   // ---- reading ----
 
   /// Read the blessing in focus: the page rises and the sky frames its light alone.
@@ -2311,7 +2356,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       left: Widths.side(mq.size.width, 0, Widths.foot),
                       right: Widths.side(mq.size.width, 0, Widths.foot),
                       bottom: 30,
-                      child: Fade(on: !_list, inDuration: listTime, outDuration: listTime, child: _locked ? _lockedFoot(p) : _foot(p)),
+                      // hidden under a ring arriving, whose own words sit there
+                      child: Fade(on: !_list && !(_receiving && _arrival is ArrivalRing), inDuration: listTime, outDuration: listTime, child: _locked ? _lockedFoot(p) : _foot(p)),
                     ),
                     // the list view: the same blessings, by date (not built at all while locked)
                     if (!_locked)
@@ -2554,6 +2600,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           onBack: _closePerson,
                           onSave: (name, born) => unawaited(_savePerson(name, born)),
                           onRemove: _removePerson,
+                          keptBy: _editing == null ? '' : suggestedKeptBy(_family.on(_editing!.id), remembered: _settings?.keptBy),
+                          onMakeRing: _links == null || _editing == null ? null : _makeRing,
+                          onShareRing: (url, title) {
+                            // an iPad's popover: from the middle, not a page left behind
+                            NativeShareApi.origin = null;
+                            return _share.link(url, title);
+                          },
+                          onRingSent: (keptBy) => unawaited(_ringSent(keptBy)),
                         ),
                       ),
               ),
@@ -2622,17 +2676,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Positioned.fill(
               child: ReceiveSheet(
                 palette: p,
-                on: _receiving && !_locked && _lock.ready,
-                arrival: _locked ? null : _arrival,
+                on: _receiving && !_locked && _lock.ready && _arrival is! ArrivalRing,
+                arrival: _locked || _arrival is ArrivalRing ? null : _arrival,
                 onKeep: _keepArrival,
                 onNotNow: _dismissArrival,
               ),
             ),
+            // a family member's ring handed to this phone: read first, then Keep them; built only
+            // once unlocked
+            if (_receiving && !_locked && _lock.ready && _arrival is ArrivalRing)
+              Positioned.fill(
+                child: RingArrivalLayer(
+                  palette: p,
+                  arrival: _arrival as ArrivalRing,
+                  more: _family.on('').isNotEmpty,
+                  busy: _ringBusy,
+                  onKeep: _keepArrival,
+                  onNotNow: _dismissArrival,
+                ),
+              ),
             Positioned(
               left: 0,
               right: 0,
               bottom: 120,
-              child: ReceiveNotice(palette: p, on: _noticeOn && !_locked, text: Strings.alreadyHave),
+              child: ReceiveNotice(palette: p, on: _noticeOn && !_locked, text: _noticeText),
             ),
             if (widget.showStats)
               Positioned(
@@ -2688,6 +2755,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 alignment: Alignment.centerLeft,
                 child: Text(countLine(_blessings), key: const Key('count'), style: sans(13, 18, p.ink2, tracking: .005)),
               ),
+              // the person's own sky, with blessings that came with a ring handed over
+              if (_ring.isEmpty && keptByNames(_blessings).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(Strings.keptForYouBy(keptByNames(_blessings)), key: const Key('kept-for-you'), style: sans(13, 18, p.ink3, tracking: .005)),
+                  ),
+                ),
               if (_drafts > 0 && !_list)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),

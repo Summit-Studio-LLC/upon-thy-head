@@ -7,7 +7,9 @@ export const NONCE_BYTES = 12;
 export const TAG_BYTES = 16;
 export const KEY_BYTES = 32;
 export const MIN_BYTES = 1 + NONCE_BYTES + TAG_BYTES + 2; // the smallest record is "{}"
-export const MAX_BYTES = 65536; // the largest locked copy the service keeps
+// the largest locked copy the service keeps: 512 KiB since 2026-11-18 (64 KiB before), so a family
+// member's whole ring can travel as one link (PROTOCOL.md §5)
+export const MAX_BYTES = 524288;
 export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const KEY_PATTERN = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/; // 43 characters, the spare bits zero
 
@@ -15,6 +17,11 @@ export const RECORD_FORMAT = "upon-thy-head/blessing";
 // 2 (2026-11-18): a blessing entered from a written copy ("entered": true), and one known only to its
 // month or year ("precision"). The app still writes 1 for a blessing recorded on a known day.
 export const RECORD_VERSION = 2;
+// 3 (2026-11-18): a family member's whole ring handed to their own phone, {"kind":"ring","keptBy",
+// "blessings":[record, …]}. A single blessing is never written as 3, so every reader from before
+// says "made with a newer version" of a ring.
+export const RING_VERSION = 3;
+export const RING_MAX = 2000;
 export const LIMITS = { id: 64, title: 300, name: 200, tags: 40, tag: 60, language: 20, words: 200000, changes: 5000, changeText: 2000, source: 40 };
 // docs/blessing-file.md lists "restart"; app/lib/polish/change.dart has "reworded". Both are read.
 const KINDS = ["filler", "repeat", "reworded", "restart", "grammar", "punctuation"];
@@ -154,12 +161,46 @@ function given(v, now) {
  * ("newer" for a later record version, "record" for anything else).
  */
 export function readRecord(bytes, now = new Date()) {
-  let j;
+  return recordOf(parse(bytes), now);
+}
+
+function parse(bytes) {
   try {
-    j = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
     throw bad("not UTF-8 JSON");
   }
+}
+
+/**
+ * Read what a link opened to: one blessing, `{kind: "blessing", record}`, or a family member's whole
+ * ring, `{kind: "ring", keptBy, records}` with the records oldest first and each id once. Throws a
+ * LinkError as readRecord does.
+ */
+export function readShared(bytes, now = new Date()) {
+  const j = parse(bytes);
+  if (typeof j === "object" && j !== null && !Array.isArray(j) && j.format === RECORD_FORMAT && j.kind === "ring") {
+    if (!Number.isInteger(j.version) || j.version < RING_VERSION) throw bad("ring version");
+    if (j.version > RING_VERSION) throw new LinkError("newer", `ring version ${j.version}`);
+    const keptBy = j.keptBy == null ? "" : j.keptBy;
+    if (typeof keptBy !== "string" || keptBy.length > LIMITS.name || !clean(keptBy)) throw bad("keptBy");
+    if (!Array.isArray(j.blessings) || j.blessings.length === 0 || j.blessings.length > RING_MAX) throw bad("blessings");
+    const seen = new Set();
+    const records = [];
+    for (const b of j.blessings) {
+      const r = recordOf(b, now);
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        records.push(r);
+      }
+    }
+    records.sort((a, b) => a.given - b.given);
+    return { kind: "ring", keptBy: keptBy.trim(), records };
+  }
+  return { kind: "blessing", record: recordOf(j, now) };
+}
+
+function recordOf(j, now) {
   if (typeof j !== "object" || j === null || Array.isArray(j)) throw bad("not an object");
   if (j.format !== RECORD_FORMAT) throw bad("not a blessing");
   if (!Number.isInteger(j.version) || j.version < 1) throw bad("no version");

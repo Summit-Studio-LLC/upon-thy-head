@@ -10,7 +10,7 @@ const protocolVectorsJson = r'''{
     "nonceBytes": 12,
     "tagBytes": 16,
     "additionalData": "the single byte 0x01",
-    "maxBytes": 65536
+    "maxBytes": 524288
   },
   "vectors": [
     {

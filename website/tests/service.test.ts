@@ -275,3 +275,14 @@ test("upstash store: a copy is set once, with the moment it expires, so Redis er
   clock.now = START + LIMITS.lifeMs;
   assert.equal(await store.get("A".repeat(22)), null);
 });
+
+test("one client's bytes in a day are limited, so one network cannot spend the day's allowance alone", async () => {
+  const { make } = world();
+  const big = LIMITS.maxBytes;
+  const fit = Math.floor(LIMITS.createBytesDay[0] / big);
+  for (let i = 0; i < fit; i++) assert.equal((await make(locked(big))).status, 201, `ring ${i + 1}`);
+  const refused = await make(locked(big));
+  assert.deepEqual([refused.status, error(refused)], [429, "slow_down"]);
+  // another network is not held by it
+  assert.equal((await make(locked(big), "b")).status, 201);
+});

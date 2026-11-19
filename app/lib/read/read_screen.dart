@@ -373,6 +373,11 @@ class ReadLayerState extends State<ReadLayer> {
             const SizedBox(height: 6),
             Text(Strings.blessingFrom(b.from), key: const Key('read-from'), style: serif(18, 26, p.light, italic: true)),
           ],
+          // came with a ring handed over: who kept it until it reached this phone
+          if (b.keptBy.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(Strings.keptByLine(b.keptBy.trim()), key: const Key('read-kept-by'), style: sans(14, 20, p.ink2)),
+          ],
           if (b.draft) ...[
             const SizedBox(height: 22),
             Text(Strings.notReviewed, key: const Key('read-draft-note'), style: sans(15, 22, p.ink2)),

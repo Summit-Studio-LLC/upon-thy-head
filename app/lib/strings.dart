@@ -420,6 +420,31 @@ class Strings {
   static String get welcomeFamily => _w.welcomeFamily;
   static String bornOn(DateTime d) => _w.bornOn(d);
   static String get editPersonLede => _w.editPersonLede;
+
+  // ---- handing a ring to its own phone (share/ring_file.dart, people/hand_over_sheet.dart) ----
+  static String handOverRow(String name) => _w.handOverRow(name);
+  static String ringOf(String name) => _w.ringOf(name);
+  static String get keptByLabel => _w.keptByLabel;
+  static String get keptByHint => _w.keptByHint;
+  static String sendRing(String name) => _w.sendRing(name);
+  static String ringKeepNote(String name) => _w.ringKeepNote(name);
+  static String get ringFoot => _w.ringFoot;
+  static String get ringSent => _w.ringSent;
+  static String keepOrDelete(String name) => _w.keepOrDelete(name);
+  static String keepOrDeleteBody(String name) => _w.keepOrDeleteBody(name);
+  static String ringNotSentYet(String name) => _w.ringNotSentYet(name);
+  static String ringTooBig(String name) => _w.ringTooBig(name);
+  static String handedOn(String name, DateTime d, {DateTime? now}) => _w.handedOn(name, d, now: now);
+  static String get ringWelcome => _w.ringWelcome;
+  static String ringWelcomeBody(String keptBy, int n, DateTime first, {bool yearOnly = false}) => _w.ringWelcomeBody(keptBy, n, first, yearOnly: yearOnly);
+  static String ringMore(int n) => _w.ringMore(n);
+  static String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) =>
+      _w.ringMoreBody(keptBy, first, last, firstYearOnly: firstYearOnly, lastYearOnly: lastYearOnly);
+  static String ofTotal(int i, int n) => _w.ofTotal(i, n);
+  static String get keepThem => _w.keepThem;
+  static String get ringAlreadyHave => _w.ringAlreadyHave;
+  static String keptForYouBy(List<String> names) => _w.keptForYouBy(names);
+  static String keptByLine(String name) => _w.keptByLine(name);
 }
 
 /// Every fixed string by name, for tests that look for English left on a Spanish screen and for
@@ -715,6 +740,27 @@ extension WordsCatalogue on Words {
         'removeBody': removeBody('Emma', 7),
         'welcomeFamily': welcomeFamily,
         'editPersonLede': editPersonLede,
+        'handOverRow': handOverRow('Emma'),
+        'ringOf': ringOf('Emma'),
+        'keptByLabel': keptByLabel,
+        'keptByHint': keptByHint,
+        'sendRing': sendRing('Emma'),
+        'ringKeepNote': ringKeepNote('Emma'),
+        'ringFoot': ringFoot,
+        'ringSent': ringSent,
+        'keepOrDelete': keepOrDelete('Emma'),
+        'keepOrDeleteBody': keepOrDeleteBody('Emma'),
+        'ringNotSentYet': ringNotSentYet('Emma'),
+        'ringTooBig': ringTooBig('Emma'),
+        'ringWelcome': ringWelcome,
+        'ringWelcomeBody': ringWelcomeBody('Dad', 7, DateTime(2008, 8, 10)),
+        'ringMore': ringMore(4),
+        'ringMoreBody': ringMoreBody('Mom', DateTime(2014, 8, 1), DateTime(2024, 5, 1)),
+        'ofTotal': ofTotal(1, 7),
+        'keepThem': keepThem,
+        'ringAlreadyHave': ringAlreadyHave,
+        'keptForYouBy': keptForYouBy(['Dad', 'Mom']),
+        'keptByLine': keptByLine('Dad'),
         'enterPast': enterPast,
         'enterPastHint': enterPastHint,
         'givenField': givenField,
@@ -1274,6 +1320,55 @@ class Words {
   /// "Born August 3, 2008"
   String bornOn(DateTime d) => 'Born ${months[d.month - 1]} ${d.day}, ${d.year}';
   String get editPersonLede => 'Their ring begins on the day they were born, when it is given.';
+
+  // ---- handing a ring to its own phone ----
+  /// The quiet row on a family member's page in Manage family.
+  String handOverRow(String name) => 'Hand over $name’s blessings';
+  String ringOf(String name) => '$name’s ring';
+  String get keptByLabel => 'Kept by';
+  String get keptByHint => 'Your name';
+  String sendRing(String name) => 'Send $name’s ring';
+  String ringKeepNote(String name) => '$name can keep them in Upon Thy Head.';
+  String get ringFoot => 'This sends a link. Anyone who has it can read these blessings.';
+  String get ringSent => 'Sent';
+  String keepOrDelete(String name) => 'Keep $name’s ring on this phone, or delete it now?';
+  String keepOrDeleteBody(String name) => 'If you keep it, blessings added later can be sent to $name too.';
+  String ringNotSentYet(String name) => 'The link is made. Send it to $name when you are ready.';
+  String ringTooBig(String name) => '$name’s ring is too large to send as one link.';
+
+  /// On the family member's page once handed over: "Handed to Emma on November 16".
+  String handedOn(String name, DateTime d, {DateTime? now}) =>
+      'Handed to $name on ${months[d.month - 1]} ${d.day}${d.year == (now ?? DateTime.now()).year ? '' : ', ${d.year}'}';
+  String _since(DateTime d, bool yearOnly) => yearOnly ? '${d.year}' : monthYear(d);
+
+  /// The receiving phone.
+  String get ringWelcome => 'Your blessings were kept for you.';
+  String ringWelcomeBody(String keptBy, int n, DateTime first, {bool yearOnly = false}) {
+    final what = n == 1 ? 'one blessing' : '${count(n).toLowerCase()} blessings';
+    final them = n == 1 ? 'it' : 'them';
+    return keptBy.isEmpty
+        ? '${n == 1 ? 'One blessing was' : '${count(n)} blessings were'} kept for you, from ${_since(first, yearOnly)}. Read $them first, then keep $them.'
+        : '$keptBy kept $what for you, from ${_since(first, yearOnly)}. Read $them first, then keep $them.';
+  }
+
+  String ringMore(int n) => n == 1 ? 'One more of your blessings' : '${count(n)} more of your blessings';
+  String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) {
+    final a = _since(first, firstYearOnly), b = _since(last, lastYearOnly);
+    final range = a == b ? a : '$a to $b';
+    return '${keptBy.isEmpty ? range : 'Kept by $keptBy, $range'}. They join your ring by their dates. Read them first, then keep them.';
+  }
+
+  /// "1 of 7"
+  String ofTotal(int i, int n) => '$i of $n';
+  String get keepThem => 'Keep them';
+  String get ringAlreadyHave => 'You already have these blessings.';
+
+  /// Under the count on the person's own sky: "Kept for you by Dad", "… by Dad and Mom".
+  String keptForYouBy(List<String> names) => 'Kept for you by ${_and(names)}';
+  String _and(List<String> n) => n.length <= 1 ? n.join() : '${n.take(n.length - 1).join(', ')} and ${n.last}';
+
+  /// On the reading page of one that came with a ring: "Kept by Dad".
+  String keptByLine(String name) => 'Kept by $name';
 }
 
 /// Every word in Spanish: plain, warm Latin American Spanish as used in the United States,
@@ -2142,6 +2237,74 @@ class _Spanish implements Words {
   String bornOn(DateTime d) => 'Nació el ${d.day} de ${months[d.month - 1]} de ${d.year}';
   @override
   String get editPersonLede => 'Su anillo comienza el día en que nació, si se indica.';
+
+  // ---- entregar un anillo a su propio teléfono ----
+  @override
+  String handOverRow(String name) => 'Entregar las bendiciones de $name';
+  @override
+  String ringOf(String name) => 'El anillo de $name';
+  @override
+  String get keptByLabel => 'Guardadas por';
+  @override
+  String get keptByHint => 'Tu nombre';
+  @override
+  String sendRing(String name) => 'Enviar el anillo de $name';
+  @override
+  String ringKeepNote(String name) => '$name podrá guardarlas en Upon Thy Head.';
+  @override
+  String get ringFoot => 'Esto envía un enlace. Quien lo tenga puede leer estas bendiciones.';
+  @override
+  String get ringSent => 'Enviado';
+  @override
+  String keepOrDelete(String name) => '¿Guardar el anillo de $name en este teléfono o eliminarlo ahora?';
+  @override
+  String keepOrDeleteBody(String name) => 'Si lo guardas, las bendiciones que agregues después también se pueden enviar a $name.';
+  @override
+  String ringNotSentYet(String name) => 'El enlace está listo. Envíaselo a $name cuando quieras.';
+  @override
+  String ringTooBig(String name) => 'El anillo de $name es demasiado grande para enviarlo en un solo enlace.';
+  @override
+  String handedOn(String name, DateTime d, {DateTime? now}) =>
+      'Entregado a $name el ${d.day} de ${months[d.month - 1]}${d.year == (now ?? DateTime.now()).year ? '' : ' de ${d.year}'}';
+  @override
+  String _since(DateTime d, bool yearOnly) => yearOnly ? '${d.year}' : monthYear(d);
+  @override
+  String get ringWelcome => 'Tus bendiciones se guardaron para ti.';
+  @override
+  String ringWelcomeBody(String keptBy, int n, DateTime first, {bool yearOnly = false}) {
+    final since = _since(first, yearOnly);
+    if (n == 1) {
+      return keptBy.isEmpty
+          ? 'Se guardó una bendición para ti, desde $since. Léela primero y luego guárdala.'
+          : '$keptBy guardó una bendición para ti, desde $since. Léela primero y luego guárdala.';
+    }
+    final what = '${count(n).toLowerCase()} bendiciones';
+    return keptBy.isEmpty
+        ? 'Se guardaron $what para ti, desde $since. Léelas primero y luego guárdalas.'
+        : '$keptBy guardó $what para ti, desde $since. Léelas primero y luego guárdalas.';
+  }
+
+  @override
+  String ringMore(int n) => n == 1 ? 'Una bendición más para ti' : '${count(n)} bendiciones más para ti';
+  @override
+  String ringMoreBody(String keptBy, DateTime first, DateTime last, {bool firstYearOnly = false, bool lastYearOnly = false}) {
+    final a = _since(first, firstYearOnly), b = _since(last, lastYearOnly);
+    final range = a == b ? a : 'de $a a $b';
+    return '${keptBy.isEmpty ? '${range[0].toUpperCase()}${range.substring(1)}' : 'Guardadas por $keptBy, $range'}. Se unen a tu anillo según sus fechas. Léelas primero y luego guárdalas.';
+  }
+
+  @override
+  String ofTotal(int i, int n) => '$i de $n';
+  @override
+  String get keepThem => 'Guardarlas';
+  @override
+  String get ringAlreadyHave => 'Ya tienes estas bendiciones.';
+  @override
+  String keptForYouBy(List<String> names) => 'Guardadas para ti por ${_and(names)}';
+  @override
+  String _and(List<String> n) => n.length <= 1 ? n.join() : '${n.take(n.length - 1).join(', ')} y ${n.last}';
+  @override
+  String keptByLine(String name) => 'Guardada por $name';
 }
 
 /// A row's name inside a sentence: "Microphone" reads "microphone"; "Face ID" stays as it is.

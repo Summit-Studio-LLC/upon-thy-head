@@ -128,7 +128,7 @@ const records = [
 
 const out = {
   about: "Test vectors for website/PROTOCOL.md. Made by scripts/make-vectors.mjs with Node's own AES-256-GCM. Sealing each `plaintext` under its `key` and `nonce` must give exactly `locked`; opening `locked` with `key` must give `plaintext`.",
-  format: { version: 1, cipher: "AES-256-GCM", nonceBytes: 12, tagBytes: 16, additionalData: "the single byte 0x01", maxBytes: 65536 },
+  format: { version: 1, cipher: "AES-256-GCM", nonceBytes: 12, tagBytes: 16, additionalData: "the single byte 0x01", maxBytes: 524288 },
   vectors: [v1, v2],
   refusals,
   fragments,

@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/sheet.dart';
 import 'blessing_file.dart';
+import 'ring_file.dart';
 import 'share.dart';
 
 /// What a blessing file that arrived comes to, once read and set beside the store.
@@ -30,6 +31,16 @@ class ArrivalDifferent extends Arrival {
   const ArrivalDifferent(this.record, this.mine);
   final BlessingRecord record;
   final Blessing mine;
+}
+
+/// A family member's whole ring, handed to this phone (ring_file.dart): read first, then Keep
+/// them. [fresh] are those this phone does not have yet, oldest first; [had] how many it has
+/// already (kept once, as they are). With nothing fresh, it opens saying so.
+class ArrivalRing extends Arrival {
+  const ArrivalRing(this.ring, this.fresh, this.had);
+  final RingBundle ring;
+  final List<BlessingRecord> fresh;
+  final int had;
 }
 
 /// Made by a newer version of the app.
@@ -68,13 +79,24 @@ Future<Arrival> arrivalOf(IncomingFile file, Future<Blessing?> Function(String i
   final bytes = file.bytes;
   if (file.tooLarge) return const ArrivalUnreadable('over the size limit');
   if (bytes == null) return const ArrivalUnreadable('no bytes');
-  final read = readBlessingFile(bytes);
+  return arrivalOfShared(readShared(bytes), find);
+}
+
+/// What was read ([readShared]), set beside the blessings already kept ([find]).
+Future<Arrival> arrivalOfShared(SharedRead read, Future<Blessing?> Function(String id) find) async {
   switch (read) {
-    case BlessingReadNewer():
+    case SharedNewer():
       return const ArrivalNewer();
-    case BlessingReadBad(:final why):
+    case SharedBad(:final why):
       return ArrivalUnreadable(why);
-    case BlessingReadOk(:final record):
+    case SharedRing(:final ring):
+      final have = <String>{};
+      for (final r in ring.records) {
+        if (await find(r.id) != null) have.add(r.id);
+      }
+      final (:fresh, :had) = ringNews(ring, have);
+      return ArrivalRing(ring, fresh, had);
+    case SharedBlessing(:final record):
       final mine = await find(record.id);
       if (mine == null) return ArrivalNew(record);
       return record.sameAs(mine) ? ArrivalSame(mine) : ArrivalDifferent(record, mine);

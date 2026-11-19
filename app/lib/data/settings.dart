@@ -72,6 +72,12 @@ class Settings {
 
   Future<void> setSky(String id) => _set('sky', id.isEmpty ? null : id);
 
+  /// The "Kept by" name typed when a ring was last handed over ("Dad"), offered the next time;
+  /// null until one has been sent.
+  String? get keptBy => _values['keptBy'] as String?;
+
+  Future<void> setKeptBy(String name) => _set('keptBy', name.trim().isEmpty ? null : name.trim());
+
   Future<void> _set(String key, Object? value) async {
     if (value == null) {
       _values.remove(key);

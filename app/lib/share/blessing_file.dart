@@ -150,9 +150,10 @@ class BlessingRecord {
 
   /// A finished blessing of the person's own, at the place it was given; for a file that carries
   /// none (made before the place was carried), at [place] (the receiver's).
-  Blessing toBlessing({required Place place, DateTime? now}) {
+  Blessing toBlessing({required Place place, DateTime? now, String keptBy = ''}) {
     final t = (now ?? DateTime.now()).toUtc();
     return Blessing(
+      keptBy: keptBy,
       id: id,
       title: title,
       from: from,

@@ -34,7 +34,7 @@ func seal(_ plain: Data, _ key: Data, _ nonce: Data) throws -> Data {
 /// The contract's steps 2–4: the error name, or the plaintext.
 func open(_ locked: Data, _ key: Data) -> (String?, Data?) {
   let b = [UInt8](locked)
-  if b.count < 31 || b.count > 65536 || b[0] == 0 { return ("damaged", nil) }
+  if b.count < 31 || b.count > 524288 || b[0] == 0 { return ("damaged", nil) }
   if b[0] > 1 { return ("newer", nil) }
   do {
     let box = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: Data(b[1..<13])), ciphertext: Data(b[13..<(b.count - 16)]), tag: Data(b[(b.count - 16)...]))

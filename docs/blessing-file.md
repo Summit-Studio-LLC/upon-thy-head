@@ -64,6 +64,22 @@ from N changes", and can open the changes screen and restore any change to the s
   overlapping, of a known kind. One bad change refuses the file: a half-right file is not shown.
 - Nothing in it is fetched, run, or turned into a link.
 
+### A whole ring (version 3, 2026-11-18)
+
+Handing a family member's ring to their own phone (design/entry-and-rings, B1 rows 9–16) sends one
+record holding them all, only ever inside a locked link (website/PROTOCOL.md §2), never as a file:
+
+    {"format":"upon-thy-head/blessing","version":3,"kind":"ring","keptBy":"Dad","blessings":[…]}
+
+- `keptBy`: the name the parent typed on the sending sheet (≤ 200 characters, no control characters).
+- `blessings`: up to 2,000 records as above (version 1 or 2), each read as strictly as a file; drafts
+  and entries with no date are left out; oldest first; one id twice is kept once.
+- Read by `readShared` (app/lib/share/ring_file.dart; website/public/shared/format.js). The single
+  readers (`readBlessingFile`, `readRecord`) still answer "made with a newer version" for it, which
+  is what an app made before rings shows.
+- Kept on the receiving phone: each blessing it lacks joins "For me" by its date with `keptBy` set
+  (store column `kept_by`, migration 10); one it has stays as it is.
+
 ### Receiving
 
 - iOS hands the app the file through the scene (`scene(_:willConnectTo:options:)` at a cold launch,

@@ -32,6 +32,12 @@ const en = {
     body: "The blessing is kept locked on our server, and the key is in the link itself, which the server never sees. Unlocking it has to happen here in your browser. Turn JavaScript on for this page, then load it again.",
   },
   notOfficial: "Upon Thy Head is not an official app of The Church of Jesus Christ of Latter-day Saints.",
+  ringTitle: "Your blessings were kept for you.",
+  ringKeptBy: (name, n) => `${name} kept ${n === 1 ? "one blessing" : `${n} blessings`} for you. Here they are, oldest first.`,
+  ringCount: (n) => `${n === 1 ? "One blessing was" : `${n} blessings were`} kept for you. Here they are, oldest first.`,
+  ringKeep: "You can keep them in Upon Thy Head, where they join your own ring by their dates.",
+  ringKeepButton: "Keep them in Upon Thy Head",
+  unlockedHereRing: "This page unlocked these blessings here, on this device. Our server keeps only a locked copy and cannot read it.",
 };
 
 const es = {
@@ -65,6 +71,12 @@ const es = {
     body: "La bendición se guarda cerrada en nuestro servidor, y la llave está en el propio enlace, que el servidor nunca ve. Abrirla tiene que ocurrir aquí, en tu navegador. Activa JavaScript para esta página y vuelve a cargarla.",
   },
   notOfficial: "Upon Thy Head no es una aplicación oficial de La Iglesia de Jesucristo de los Santos de los Últimos Días.",
+  ringTitle: "Tus bendiciones se guardaron para ti.",
+  ringKeptBy: (name, n) => `${name} guardó ${n === 1 ? "una bendición" : `${n} bendiciones`} para ti. Aquí están, de la más antigua a la más reciente.`,
+  ringCount: (n) => `${n === 1 ? "Se guardó una bendición" : `Se guardaron ${n} bendiciones`} para ti. Aquí están, de la más antigua a la más reciente.`,
+  ringKeep: "Puedes guardarlas en Upon Thy Head, donde se unen a tu propio anillo según sus fechas.",
+  ringKeepButton: "Guardarlas en Upon Thy Head",
+  unlockedHereRing: "Esta página abrió estas bendiciones aquí, en este dispositivo. Nuestro servidor guarda solo una copia cerrada y no puede leerla.",
 };
 
 export const WORDS = { en, es };

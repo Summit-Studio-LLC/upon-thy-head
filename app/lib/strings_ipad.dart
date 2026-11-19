@@ -9,6 +9,9 @@ class _IPadEnglish extends Words {
   const _IPadEnglish();
 
   @override
+  String keepOrDelete(String name) => 'Keep $name’s ring on this iPad, or delete it now?';
+
+  @override
   String get recordingKeptBody => 'The recording stays on this iPad until you have reviewed the words. Then it is erased.';
   @override
   String get wordsNotWrittenYet => 'The words could not be written on this iPad yet. The recording stays here until they can be.';
@@ -65,6 +68,9 @@ class _IPadEnglish extends Words {
 
 class _IPadSpanish extends _Spanish {
   const _IPadSpanish();
+
+  @override
+  String keepOrDelete(String name) => '¿Guardar el anillo de $name en este iPad o eliminarlo ahora?';
 
   @override
   String get recordingKeptBody => 'La grabación se queda en este iPad hasta que hayas revisado las palabras. Después se borra.';

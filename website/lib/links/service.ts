@@ -10,17 +10,29 @@ import type { Store } from "./store.ts";
 
 export const LIMITS = {
   version: 1,
-  /** The largest locked copy kept. See PROTOCOL.md for why 64 KiB. */
-  maxBytes: 65536,
+  /**
+   * The largest locked copy kept: 512 KiB, so a family member's whole ring handed to their own
+   * phone travels as one link (about 100 ordinary blessings, or 30 of the longest). It was 64 KiB
+   * until 2026-11-18. See PROTOCOL.md §5.
+   */
+  maxBytes: 524288,
   /** Version byte, nonce, tag, and the two bytes of "{}". */
   minBytes: 1 + 12 + 16 + 2,
   lifeMs: 30 * 24 * 60 * 60 * 1000,
-  /** Everyone together, per UTC day. Sized so 30 days of full days fit a free 256 MB store. */
+  /**
+   * Everyone together, per UTC day. 12 MiB (6 MiB until 2026-11-18, when a ring could be one link):
+   * thirty full days are 360 MiB, inside Neon's free 0.5 GB.
+   */
   dayLinks: Number(process.env.LINKS_DAY_LINKS ?? 1000),
-  dayBytes: Number(process.env.LINKS_DAY_BYTES ?? 6 * 1024 * 1024),
+  dayBytes: Number(process.env.LINKS_DAY_BYTES ?? 12 * 1024 * 1024),
   /** One client (see clientOf in app/api/b/http.ts): [how many, in how many milliseconds]. */
   create: [10, 10 * 60 * 1000] as const,
   createDay: [40, 24 * 60 * 60 * 1000] as const,
+  /**
+   * One client's bytes in a day (added with the 512 KiB cap): a family handing over three or four
+   * rings fits; one network cannot spend the whole day's allowance alone.
+   */
+  createBytesDay: [3 * 1024 * 1024, 24 * 60 * 60 * 1000] as const,
   read: [120, 60 * 1000] as const,
   stop: [30, 60 * 1000] as const,
   /**
@@ -65,7 +77,7 @@ export class Limiter {
   private tables = new Map<string, Map<string, { count: number; ends: number }>>();
 
   /** Take one from `client`'s allowance for `what`. Returns 0 if allowed, or the seconds to wait. */
-  take(what: string, client: string, [max, windowMs]: readonly [number, number], now: number): number {
+  take(what: string, client: string, [max, windowMs]: readonly [number, number], now: number, amount = 1): number {
     let table = this.tables.get(what);
     if (!table) this.tables.set(what, (table = new Map()));
     let w = table.get(client);
@@ -77,8 +89,8 @@ export class Limiter {
       w = { count: 0, ends: now + windowMs };
     }
     table.set(client, w);
-    if (w.count >= max) return Math.max(1, Math.ceil((w.ends - now) / 1000));
-    w.count++;
+    if (w.count + amount > max) return Math.max(1, Math.ceil((w.ends - now) / 1000));
+    w.count += amount;
     return 0;
   }
 
@@ -186,7 +198,8 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
   if (input.body[0] !== LIMITS.version) return refuse(400, "version");
   const wait =
     deps.limiter.takeWithCeiling("create", input.client, LIMITS.create, LIMITS.createAll, now) ||
-    deps.limiter.take("create-day", input.client, LIMITS.createDay, now);
+    deps.limiter.take("create-day", input.client, LIMITS.createDay, now) ||
+    deps.limiter.take("create-bytes-day", input.client, LIMITS.createBytesDay, now, input.body.length);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
   const store = deps.store;

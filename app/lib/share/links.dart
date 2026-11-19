@@ -8,6 +8,7 @@ import 'link_crypto.dart';
 import 'link_format.dart';
 import 'link_service.dart';
 import 'receive.dart';
+import 'ring_file.dart';
 
 /// Sending a blessing by link and opening one (website/PROTOCOL.md): the record locked on the
 /// phone with a new key, only the locked copy sent, the key only ever in the link's fragment.
@@ -33,7 +34,7 @@ class Links {
   Future<MakeResult> make(Blessing b) async {
     final plain = BlessingRecord.of(b).toCompactBytes();
     // too big for a link whatever the service says: the file, with no request at all
-    if (plain.length + 1 + linkNonceBytes + linkTagBytes > linkMaxBytes) return const NotMade(LinkTrouble.tooBig);
+    if (plain.length + 1 + linkNonceBytes + linkTagBytes > blessingLinkMaxBytes) return const NotMade(LinkTrouble.tooBig);
     final (:locked, :key) = await lockForLink(crypto, plain);
     final r = await service.create(locked);
     switch (r) {
@@ -42,6 +43,27 @@ class Links {
       case Created(:final id, :final expires, :final stop):
         await secrets.put(_secret(id), stop);
         final link = SentLink(id: id, blessingId: b.id, title: b.title, sent: _now(), expires: expires);
+        await store.addLink(link);
+        return Made(url: linkOf(id, key), link: link);
+    }
+  }
+
+  /// Make a link for a family member's whole ring ([ring], kept by [keptBy]): one locked copy of
+  /// every blessing on it (ring_file.dart). "Your links" lists it as [title] ("Emma's ring"), under
+  /// [ringLinkId] of the person, so it is stopped as any link is.
+  Future<MakeResult> makeRing(String personId, List<Blessing> ring, {required String keptBy, required String title}) async {
+    final bundle = RingBundle.of(ring, keptBy: keptBy);
+    if (bundle.records.isEmpty) return const NotMade(LinkTrouble.unavailable);
+    final plain = bundle.toCompactBytes();
+    if (plain.length + 1 + linkNonceBytes + linkTagBytes > linkMaxBytes) return const NotMade(LinkTrouble.tooBig);
+    final (:locked, :key) = await lockForLink(crypto, plain);
+    final r = await service.create(locked);
+    switch (r) {
+      case CreateFailed(:final trouble):
+        return NotMade(trouble);
+      case Created(:final id, :final expires, :final stop):
+        await secrets.put(_secret(id), stop);
+        final link = SentLink(id: id, blessingId: ringLinkId(personId), title: title, sent: _now(), expires: expires);
         await store.addLink(link);
         return Made(url: linkOf(id, key), link: link);
     }
@@ -116,13 +138,19 @@ class Links {
 
 /// Open [locked] with [key] in the contract's order and set it beside the store ([find]).
 Future<Arrival> openLocked(LinkCrypto crypto, Uint8List locked, Uint8List key, Future<Blessing?> Function(String) find) async {
-  final (error, record) = await openError(crypto, locked, key);
-  if (error == LinkError.newer) return const ArrivalNewer();
-  if (error != null || record == null) return ArrivalUnreadable('link: ${error?.name}');
-  final mine = await find(record.id);
-  if (mine == null) return ArrivalNew(record);
-  return record.sameAs(mine) ? ArrivalSame(mine) : ArrivalDifferent(record, mine);
+  final frame = frameError(locked);
+  if (frame == LinkError.newer) return const ArrivalNewer();
+  if (frame != null) return ArrivalUnreadable('link: ${frame.name}');
+  final plain = await crypto.open(locked, key);
+  if (plain == null) return const ArrivalUnreadable('link: locked');
+  final read = readShared(plain);
+  if (read is SharedBad) return const ArrivalUnreadable('link: record');
+  return arrivalOfShared(read, find);
 }
+
+/// The id "Your links" keeps a ring's link under, in place of a blessing's: never a blessing id
+/// (those are hex), so nothing confuses the two.
+String ringLinkId(String personId) => 'ring:$personId';
 
 /// The contract's steps 2–5 (the key has been checked): the error, or the record.
 Future<(LinkError?, BlessingRecord?)> openError(LinkCrypto crypto, Uint8List locked, Uint8List key) async {

@@ -77,6 +77,18 @@ abstract final class SkyMenu {
   static String? ringOf(String code) => code == me ? '' : (code.startsWith('p:') ? code.substring(2) : null);
 }
 
+/// Who kept the blessings on [ring] that came with a ring handed over, each name once, in the order
+/// they came ("Dad", then "Mom"): for the line "Kept for you by Dad and Mom".
+List<String> keptByNames(Iterable<Blessing> ring) {
+  final withName = [for (final b in ring) if (b.keptBy.trim().isNotEmpty) b]..sort((a, b) => a.created.compareTo(b.created));
+  final out = <String>[];
+  for (final b in withName) {
+    final n = b.keptBy.trim();
+    if (!out.contains(n)) out.add(n);
+  }
+  return out;
+}
+
 /// "Five blessings since June 2024".
 String countLine(List<Blessing> blessings) {
   if (blessings.isEmpty) return Strings.countLine(0, DateTime(0));

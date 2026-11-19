@@ -127,8 +127,8 @@ void main() {
       expect(frameError(Uint8List(30)..[0] = 1), LinkError.damaged);
       expect(frameError(Uint8List(31)), LinkError.damaged);
       expect(frameError(Uint8List(31)..[0] = 2), LinkError.newer);
-      expect(frameError(Uint8List(65537)..[0] = 1), LinkError.damaged);
-      expect(frameError(Uint8List(65536)..[0] = 1), isNull);
+      expect(frameError(Uint8List(524289)..[0] = 1), LinkError.damaged);
+      expect(frameError(Uint8List(524288)..[0] = 1), isNull);
     });
   });
 }

@@ -172,8 +172,8 @@ void main() {
       expect(b.rawText, 'I bless you');
       await s.close();
       db = sqlite3.open(path);
-      expect(db.userVersion, 9);
-      expect(SqliteBlessingStore.schemaVersion, 9);
+      expect(db.userVersion, 10);
+      expect(SqliteBlessingStore.schemaVersion, 10);
       db.close();
     });
 

@@ -6,7 +6,7 @@ import '../data/blessing.dart';
 /// The id is 128 random bits, made once on this phone and never changed, so a later round can hand
 /// a person's whole ring to another phone and join two parents' copies of the same child by it.
 class Person {
-  Person({required this.id, required this.name, this.born, DateTime? created})
+  Person({required this.id, required this.name, this.born, this.handed, DateTime? created})
       : created = created ?? DateTime.now().toUtc();
 
   final String id;
@@ -18,10 +18,14 @@ class Person {
   /// Optional.
   Day? born;
 
+  /// When their ring was last handed over to their own phone (share/ring_file.dart), sent through
+  /// the share sheet; null when it never has been. Their page says "Handed to Emma on November 16".
+  DateTime? handed;
+
   /// When they were added here (UTC); the menu lists them in this order.
   final DateTime created;
 
-  Person copy() => Person(id: id, name: name, born: born, created: created);
+  Person copy() => Person(id: id, name: name, born: born, handed: handed, created: created);
 }
 
 /// A calendar day, the same wherever the phone is.

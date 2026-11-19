@@ -4,7 +4,7 @@
 // The key never leaves this page: the only request made is for /api/b/<id>, the fragment is never
 // put in a request, a log, storage or the page's title, and the address is left exactly as it came.
 
-import { ID_PATTERN, LinkError, keptChanges, keyFromFragment, open, paragraphs, polished, readRecord } from "./format.js";
+import { ID_PATTERN, LinkError, keptChanges, keyFromFragment, open, paragraphs, polished, readShared } from "./format.js";
 import { STORES } from "./stores.js";
 import { wordsFor } from "./words.js";
 
@@ -63,15 +63,15 @@ function pageIcon() {
   return svg;
 }
 
-function showBlessing(record, expires) {
-  const until = expires ? day(expires) : "";
+/** One blessing as an article; in a ring, its title is a heading under the ring's own. */
+function blessingArticle(record, until, inRing = false) {
   // the date as it was where the blessing was given
   const given = givenDate(new Date(record.given.getTime() + record.offset * 60000), record.precision);
-  const article = el("article", "blessing");
+  const article = el("article", inRing ? "blessing in-ring" : "blessing");
   if (record.language) article.lang = record.language;
   const head = el("header", "blessing-head");
   if (until) head.append(Object.assign(el("p", "shared", w.sharedUntil(until)), { lang: w.lang }));
-  head.append(el("h1", "title", record.title || w.untitled));
+  head.append(el(inRing ? "h2" : "h1", "title", record.title || w.untitled));
   head.append(Object.assign(el("p", "from", record.from ? w.blessingFrom(record.from) : w.aBlessing), { lang: w.lang }));
   head.append(Object.assign(el("p", "given", [given, record.for && w.forName(record.for)].filter(Boolean).join(" · ")), { lang: w.lang }));
   const words = el("div", "words");
@@ -81,19 +81,43 @@ function showBlessing(record, expires) {
   // entered from a written copy: said so, with a small page, where a recording says "as spoken"
   const how = record.entered ? el("p", "entered", w.entered) : el("p", "", kept ? w.polishedFrom(kept) : w.asSpoken);
   if (record.entered) how.prepend(pageIcon());
-  notes.append(how, el("p", "", w.unlockedHere), el("p", "", w.notOfficial));
+  notes.append(how);
+  if (!inRing) notes.append(el("p", "", w.unlockedHere), el("p", "", w.notOfficial));
   article.append(head, words, notes);
-  document.title = `${record.title || w.untitled} · ${w.brand}`;
-  show("open", [article]);
+  return article;
+}
 
-  // Keep it in Upon Thy Head: a button once the app is in a store (see stores.js), a plain line until then.
+function showBlessing(record, expires) {
+  const until = expires ? day(expires) : "";
+  document.title = `${record.title || w.untitled} · ${w.brand}`;
+  show("open", [blessingArticle(record, until)]);
+  showKeep(until, w.keepButton);
+}
+
+/** A family member's whole ring, handed to them: every blessing, oldest first, readable here. */
+function showRing(ring, expires) {
+  const until = expires ? day(expires) : "";
+  const head = Object.assign(el("header", "ring-head"), { lang: w.lang });
+  if (until) head.append(el("p", "shared", w.sharedUntil(until)));
+  head.append(el("h1", "title", w.ringTitle));
+  head.append(el("p", "from", ring.keptBy ? w.ringKeptBy(ring.keptBy, ring.records.length) : w.ringCount(ring.records.length)));
+  head.append(el("p", "given", w.ringKeep));
+  const notes = Object.assign(el("footer", "notes"), { lang: w.lang });
+  notes.append(el("p", "", w.unlockedHereRing), el("p", "", w.notOfficial));
+  document.title = `${w.ringTitle} · ${w.brand}`;
+  show("open", [head, ...ring.records.map((r) => blessingArticle(r, "", true)), notes]);
+  showKeep(until, w.ringKeepButton);
+}
+
+// Keep it in Upon Thy Head: a button once the app is in a store (see stores.js), a plain line until then.
+function showKeep(until, label) {
   const android = /Android/i.test(navigator.userAgent);
   const store = android ? STORES.googlePlay : STORES.appStore || STORES.googlePlay;
   if (store) {
     const button = el("a", "keep-button");
     button.href = store;
     button.rel = "noreferrer";
-    button.append(Object.assign(el("img"), { src: "/app-icon.png", alt: "", width: 28, height: 28 }), el("span", "", w.keepButton));
+    button.append(Object.assign(el("img"), { src: "/app-icon.png", alt: "", width: 28, height: 28 }), el("span", "", label));
     keep.replaceChildren(button, el("p", "keep-note", w.keepNote));
   } else {
     keep.replaceChildren(el("p", "keep-coming", w.comingTitle), el("p", "keep-note", until ? w.comingNote(until) : ""));
@@ -122,8 +146,10 @@ async function run() {
   try {
     const locked = new Uint8Array(await response.arrayBuffer());
     const expires = new Date(response.headers.get("Blessing-Expires") ?? "");
-    const record = readRecord(await open(locked, key));
-    showBlessing(record, Number.isNaN(expires.getTime()) ? null : expires);
+    const shared = readShared(await open(locked, key));
+    const until = Number.isNaN(expires.getTime()) ? null : expires;
+    if (shared.kind === "ring") showRing(shared, until);
+    else showBlessing(shared.record, until);
   } catch (error) {
     const code = error instanceof LinkError ? error.code : "record";
     if (code === "newer") return message("newer", w.newer);
