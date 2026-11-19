@@ -170,8 +170,16 @@ class NativeShareApi implements ShareApi {
     }
   }
 
-  /// Android: the link onto the clipboard marked sensitive (ClipDescription.EXTRA_IS_SENSITIVE).
-  static Future<void> copySensitive(String text) => _channel.invokeMethod<void>('copy', {'text': text});
+  /// The link onto the clipboard, kept private to this phone: on iOS, local-only (no Universal
+  /// Clipboard) and expiring after two minutes; on Android, marked sensitive so the copy preview
+  /// shows dots, never the key. Falls back to [Clipboard.setData] where there is no native channel.
+  static Future<void> copySensitive(String text) async {
+    try {
+      await _channel.invokeMethod<void>('copy', {'text': text});
+    } on MissingPluginException {
+      await Clipboard.setData(ClipboardData(text: text));
+    }
+  }
 
   /// Tests: whether the system share sheet is up, and the paper this phone's region uses.
   static Future<bool> debugShowing() async => await _channel.invokeMethod<bool>('debugShowing') ?? false;

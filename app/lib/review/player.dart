@@ -32,6 +32,7 @@ abstract class Player extends ChangeNotifier {
 class NativePlayer extends Player {
   NativePlayer() {
     _channel.setMethodCallHandler((call) async {
+      if (_disposed) return;
       if (call.method == 'stopped') {
         _position = ((call.arguments as Map)['position'] as num).toDouble();
         _setPlaying(false);
@@ -57,6 +58,7 @@ class NativePlayer extends Player {
   }
 
   void _setPlaying(bool on) {
+    if (_disposed) return;
     _playing = on;
     _poll?.cancel();
     if (on) _poll = Timer.periodic(const Duration(milliseconds: 100), (_) => _ask());
@@ -64,15 +66,20 @@ class NativePlayer extends Player {
   }
 
   Future<void> _ask() async {
-    final m = await _channel.invokeMethod<Map<Object?, Object?>>('position');
-    if (m == null) return;
-    _position = (m['position'] as num).toDouble();
-    _duration = (m['duration'] as num).toDouble();
-    final playing = m['playing'] == true;
-    if (playing != _playing) {
-      _setPlaying(playing);
-    } else {
-      _changed();
+    if (_disposed) return;
+    try {
+      final m = await _channel.invokeMethod<Map<Object?, Object?>>('position');
+      if (_disposed || m == null) return;
+      _position = (m['position'] as num).toDouble();
+      _duration = (m['duration'] as num).toDouble();
+      final playing = m['playing'] == true;
+      if (playing != _playing) {
+        _setPlaying(playing);
+      } else {
+        _changed();
+      }
+    } catch (e) {
+      debugPrint('player: $e');
     }
   }
 
@@ -122,7 +129,7 @@ class NativePlayer extends Player {
   void dispose() {
     _poll?.cancel();
     _disposed = true;
-    _channel.invokeMethod<void>('unload');
+    unawaited(_channel.invokeMethod<void>('unload').catchError((_) {}));
     super.dispose();
   }
 }

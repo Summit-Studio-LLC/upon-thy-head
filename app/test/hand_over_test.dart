@@ -122,7 +122,42 @@ void main() {
       expect(readShared(utf8.encode(jsonEncode(ring()..['version'] = 4))), isA<SharedNewer>());
       expect(readShared(utf8.encode(jsonEncode(ring()..['blessings'] = 'x'))), isA<SharedBad>());
       expect(readShared(utf8.encode(jsonEncode(ring()..['keptBy'] = 'Da\u0000d'))), isA<SharedBad>());
+      expect(readShared(utf8.encode(jsonEncode(ring()..['keptBy'] = 'Da\u0085d'))), isA<SharedBad>());
+      expect(readShared(utf8.encode(jsonEncode(ring()..['keptBy'] = 'Da\u009fd'))), isA<SharedBad>());
+      expect(readShared(utf8.encode(jsonEncode(ring()..['keptBy'] = 'Da\ud800d'))), isA<SharedBad>());
       expect(readShared(utf8.encode('{"format":"upon-thy-head/blessing"')), isA<SharedBad>());
+    });
+
+    test('a ring carrying current-year or current-month entered blessings opens early in that year or month', () {
+      final ring = [
+        Blessing(
+          id: 'yr',
+          title: 'Childhood',
+          from: 'Dad',
+          utc: DateTime.utc(2026, 7, 2, 12),
+          utcOffset: Duration.zero,
+          place: place,
+          precision: DatePrecision.year,
+          entered: true,
+          draft: false,
+          rawText: 'I bless you.',
+        ),
+        Blessing(
+          id: 'mo',
+          title: 'January',
+          from: 'Dad',
+          utc: DateTime.utc(2026, 1, 15, 12),
+          utcOffset: Duration.zero,
+          place: place,
+          precision: DatePrecision.month,
+          entered: true,
+          draft: false,
+          rawText: 'With peace.',
+        ),
+      ];
+      final bytes = RingBundle.of(ring, keptBy: 'Dad').toCompactBytes();
+      final read = readShared(bytes, now: DateTime.utc(2026, 1, 2)) as SharedRing;
+      expect([for (final r in read.ring.records) r.id], ['mo', 'yr']);
     });
 
     test('the same blessing twice in a bundle is kept once', () {
@@ -249,6 +284,16 @@ void main() {
       expect(Strings.keptForYouBy(['Dad']), 'Guardadas para ti por Dad');
       expect(Strings.keptForYouBy(['Dad', 'Mom']), 'Guardadas para ti por Dad y Mom');
       expect(Strings.keptByLine('Dad'), 'Guardada por Dad');
+
+      // Singular vs plural pronouns when more blessings arrive for a ring already handed over.
+      final first = DateTime(2018, 5, 1), last = DateTime(2024, 9, 1);
+      Strings.use(UiLanguage.english);
+      expect(Strings.ringMoreBody('Dad', first, first, n: 1), contains('It joins your ring by its date. Read it first, then keep it.'));
+      expect(Strings.ringMoreBody('Dad', first, last, n: 2), contains('They join your ring by their dates. Read them first, then keep them.'));
+      Strings.use(UiLanguage.spanish);
+      expect(Strings.ringMoreBody('Dad', first, first, n: 1), contains('Guardada por Dad'));
+      expect(Strings.ringMoreBody('Dad', first, first, n: 1), contains('Léela primero y luego guárdala.'));
+      expect(Strings.ringMoreBody('Dad', first, last, n: 2), contains('Léelas primero y luego guárdalas.'));
     });
 
     test('the "Kept by" name: remembered, else the most common From, else empty', () {
@@ -389,5 +434,29 @@ void main() {
         });
       }
     }
+
+    testWidgets('when drafts remain on the ring, post-handover ring deletion is withheld so drafts stay safe', (t) async {
+      await show(
+        t,
+        HandOverSheet(
+          palette: Palette.lamplight,
+          on: true,
+          person: Person(id: 'emma', name: 'Emma'),
+          countLine: countLine(emmasRing()),
+          keptBy: 'Dad',
+          onMake: (k) async => made(),
+          onShare: (url, title) async => true,
+          onSent: (_) {},
+          onClose: () {},
+          onDelete: null,
+        ),
+      );
+      await t.tap(find.byKey(const Key('hand-over-send')));
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('hand-over-keep')), findsOneWidget);
+      expect(find.byKey(const Key('hand-over-delete')), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
   });
 }

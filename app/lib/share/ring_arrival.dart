@@ -85,7 +85,7 @@ class RingArrivalLayerState extends State<RingArrivalLayer> {
     final title = widget.more ? Strings.ringMore(n) : Strings.ringWelcome;
     final body = widget.more
         ? Strings.ringMoreBody(a.ring.keptBy, _local(_first), _local(_last),
-            firstYearOnly: _first.precision == DatePrecision.year, lastYearOnly: _last.precision == DatePrecision.year)
+            n: n, firstYearOnly: _first.precision == DatePrecision.year, lastYearOnly: _last.precision == DatePrecision.year)
         : Strings.ringWelcomeBody(a.ring.keptBy, n, _local(_first), yearOnly: _first.precision == DatePrecision.year);
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(28, mq.viewPadding.top + 40, 28, mq.viewPadding.bottom + 28),

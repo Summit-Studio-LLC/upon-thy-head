@@ -55,10 +55,24 @@ class TimelineLayout {
     double ms(DateTime d) => d.millisecondsSinceEpoch.toDouble();
     final nowMs = ms(now.toUtc().add(now.timeZoneOffset));
     void tick(double tNew, double tOld, double yNew, double yOld) {
+      if (tNew <= tOld) return;
+      final months = (tNew - tOld) / _month;
+      final stepMonths = months <= 60
+          ? 1
+          : months <= 120
+              ? 3
+              : months <= 360
+                  ? 12
+                  : months <= 720
+                      ? 24
+                      : 60;
       final d = DateTime.fromMillisecondsSinceEpoch(tNew.toInt(), isUtc: true);
       var m = DateTime.utc(d.year, d.month);
       while (ms(m) > tOld) {
-        ticks.add((y: yNew + (tNew - ms(m)) / (tNew - tOld) * (yOld - yNew), year: m.month == 1));
+        final totalMonths = m.year * 12 + (m.month - 1);
+        if (stepMonths == 1 || totalMonths % stepMonths == 0) {
+          ticks.add((y: yNew + (tNew - ms(m)) / (tNew - tOld) * (yOld - yNew), year: m.month == 1));
+        }
         m = DateTime.utc(m.year, m.month - 1);
       }
     }

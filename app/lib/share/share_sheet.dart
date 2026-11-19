@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../data/blessing.dart';
-import '../not_yet.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
@@ -59,6 +57,7 @@ class ShareSheetState extends State<ShareSheet> {
   String? _url;
   LinkTrouble? _trouble;
   bool _copied = false, _busy = false;
+  int _gen = 0;
   Timer? _copiedTimer;
 
   /// Tests: the link on the sheet.
@@ -67,11 +66,12 @@ class ShareSheetState extends State<ShareSheet> {
   @override
   void didUpdateWidget(ShareSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // each time it opens it starts again (a link is made only when asked)
-    if (widget.on && !oldWidget.on) _reset();
+    // each time it opens (or switches blessing) it starts again (a link is made only when asked)
+    if ((widget.on && !oldWidget.on) || widget.blessing?.id != oldWidget.blessing?.id) _reset();
   }
 
   void _reset() {
+    _gen++;
     step = ShareStep.choose;
     _url = null;
     _trouble = null;
@@ -89,6 +89,7 @@ class ShareSheetState extends State<ShareSheet> {
     final b = widget.blessing, links = widget.links;
     if (b == null || _busy) return;
     if (links == null) return setState(() => step = ShareStep.offline);
+    final gen = ++_gen;
     setState(() {
       _busy = true;
       step = ShareStep.making;
@@ -104,7 +105,7 @@ class ShareSheetState extends State<ShareSheet> {
     // long enough to be read as a step, never a wait
     final shown = DateTime.now().difference(started);
     if (shown < const Duration(milliseconds: 500)) await Future<void>.delayed(const Duration(milliseconds: 500) - shown);
-    if (!mounted || !widget.on) return;
+    if (!mounted || !widget.on || gen != _gen) return;
     setState(() {
       _busy = false;
       switch (r) {
@@ -122,6 +123,7 @@ class ShareSheetState extends State<ShareSheet> {
   Future<void> _sendLink() async {
     final b = widget.blessing, url = _url;
     if (b == null || url == null || _busy) return;
+    final gen = ++_gen;
     _busy = true;
     var done = false;
     try {
@@ -129,8 +131,8 @@ class ShareSheetState extends State<ShareSheet> {
     } catch (e) {
       debugPrint('share: $e');
     }
-    _busy = false;
-    if (!mounted) return;
+    if (gen == _gen) _busy = false;
+    if (!mounted || gen != _gen) return;
     widget.onClose();
     widget.onSent(b, done);
   }
@@ -138,6 +140,7 @@ class ShareSheetState extends State<ShareSheet> {
   Future<void> _sendFile() async {
     final b = widget.blessing;
     if (b == null || _busy) return;
+    final gen = ++_gen;
     _busy = true;
     final w = Strings.wordsFor(Strings.language);
     // the app's sheet goes; the system's opens with the one file
@@ -148,7 +151,8 @@ class ShareSheetState extends State<ShareSheet> {
     } catch (e) {
       debugPrint('share: $e');
     }
-    _busy = false;
+    if (gen == _gen) _busy = false;
+    if (!mounted) return;
     widget.onSent(b, done);
   }
 
@@ -170,8 +174,8 @@ class ShareSheetState extends State<ShareSheet> {
   void _copy() {
     final url = _url;
     if (url == null) return;
-    // Android: marked sensitive, so its copy preview shows dots, never the link (which holds the key)
-    unawaited(Phone.android ? NativeShareApi.copySensitive(url) : Clipboard.setData(ClipboardData(text: url)));
+    // kept local to this phone (no Universal Clipboard, 2-minute expiry on iOS; sensitive on Android)
+    unawaited(NativeShareApi.copySensitive(url));
     _copiedTimer?.cancel();
     setState(() => _copied = true);
     SemanticsService.sendAnnouncement(View.of(context), Strings.linkCopied, TextDirection.ltr);
@@ -232,7 +236,9 @@ class ShareSheetState extends State<ShareSheet> {
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context))
         ..layout();
-      if (tp.width > c.maxWidth * .45) {
+      final wide = tp.width > c.maxWidth * .45;
+      tp.dispose();
+      if (wide) {
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           label,
           const SizedBox(height: 10),

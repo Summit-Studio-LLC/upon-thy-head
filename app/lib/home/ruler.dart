@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../data/blessing.dart';
@@ -131,15 +133,31 @@ class _TicksPainter extends CustomPainter {
     final ink = r.palette.ink;
     final years = r._end.year - r._start.year;
     final sparse = years > 4;
+    final tickMonths = years <= 4
+        ? 1
+        : years <= 12
+            ? 3
+            : years <= 35
+                ? 12
+                : years <= 80
+                    ? 24
+                    : 60;
+    var labelYears = 1;
+    if (sparse && size.width > 0) {
+      final minYears = years * 38 / size.width;
+      labelYears = const [2, 5, 10, 20, 25, 50, 100].firstWhere((s) => s >= minYears, orElse: () => 100);
+    }
     final paint = Paint()..strokeWidth = 1;
     for (var m = 0; m <= years * 12; m++) {
-      if (sparse && m % 3 != 0) continue;
+      if (m % tickMonths != 0) continue;
       final t = DateTime.utc(r._start.year, 1 + m);
       final x = (r._frac(t) * size.width).roundToDouble() + .5;
       final year = m % 12 == 0;
       paint.color = ink.withValues(alpha: t.isAfter(r.now) ? .09 : (year ? .5 : .22));
       canvas.drawLine(Offset(x, year ? 4 : 10), Offset(x, 15), paint);
-      if (year && m < years * 12 && (!sparse || (m ~/ 12) % 2 == 1)) {
+      final yIdx = m ~/ 12;
+      final showLabel = year && m < years * 12 && (!sparse || (labelYears == 2 ? yIdx % 2 == 1 : yIdx > 0 && t.year % labelYears == 0));
+      if (showLabel) {
         final tp = TextPainter(
           text: TextSpan(
             text: '${t.year}',
@@ -147,12 +165,14 @@ class _TicksPainter extends CustomPainter {
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp.paint(canvas, Offset(x + size.width / years / 2 - tp.width / 2, 22));
+        final lx = (x + size.width / years / 2 - tp.width / 2).clamp(0.0, math.max(0.0, size.width - tp.width)).toDouble();
+        tp.paint(canvas, Offset(lx, 22));
+        tp.dispose();
       }
     }
   }
 
   @override
   bool shouldRepaint(_TicksPainter old) =>
-      old.r.blessings != r.blessings || old.r.palette != r.palette || old.r.now.year != r.now.year;
+      old.r.blessings != r.blessings || old.r.palette != r.palette || old.r.now.year != r.now.year || old.r.begins != r.begins;
 }

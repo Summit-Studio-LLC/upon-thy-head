@@ -135,30 +135,37 @@ class MarkedLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: MediaQuery.textScalerOf(context))
-      ..layout();
+    final scaler = MediaQuery.textScalerOf(context);
+    final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+    final boxSize = tp.size;
+    tp.dispose();
     return Semantics(
       label: text,
       excludeSemantics: true,
-      child: CustomPaint(size: tp.size, painter: _MarkedLabelPainter(tp, size)),
+      child: CustomPaint(size: boxSize, painter: _MarkedLabelPainter(text, style, scaler, size)),
     );
   }
 }
 
 class _MarkedLabelPainter extends CustomPainter {
-  _MarkedLabelPainter(this.tp, this.level);
-  final TextPainter tp;
+  _MarkedLabelPainter(this.text, this.style, this.scaler, this.level);
+  final String text;
+  final TextStyle style;
+  final TextScaler scaler;
   final ChangeSize level;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: scaler)..layout();
     tp.paint(canvas, Offset.zero);
     final base = tp.computeDistanceToActualBaseline(TextBaseline.alphabetic);
     paintChangeLine(canvas, 0, tp.width, base, level, changeColor(level));
+    tp.dispose();
   }
 
   @override
-  bool shouldRepaint(_MarkedLabelPainter old) => old.tp.text != tp.text || old.level != level;
+  bool shouldRepaint(_MarkedLabelPainter old) =>
+      old.text != text || old.style != style || old.scaler != scaler || old.level != level;
 }
 
 // ---- the words, laid out ----
@@ -217,6 +224,12 @@ class _Layout {
   _Layout(this.paras, this.height);
   final List<_Para> paras;
   final double height;
+
+  void dispose() {
+    for (final p in paras) {
+      p.tp.dispose();
+    }
+  }
 }
 
 /// A word (or the caret) where it sits, for the motion when changes are restored or kept.
@@ -229,6 +242,10 @@ class _Tok {
   final bool cut, ch;
   TextPainter? _tp;
   TextPainter tp(TextScaler s) => _tp ??= TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: s)..layout();
+  void dispose() {
+    _tp?.dispose();
+    _tp = null;
+  }
 }
 
 class _Flip {
@@ -236,6 +253,12 @@ class _Flip {
 
   /// (token, dx, dy, kind): kind 0 moves from (dx, dy) to its place; 1 fades out; 2 fades in.
   final List<(_Tok, double, double, int)> items;
+
+  void dispose() {
+    for (final (t, _, _, _) in items) {
+      t.dispose();
+    }
+  }
 }
 
 class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixin {
@@ -266,7 +289,12 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
     _in = AnimationController(vsync: this, duration: const Duration(milliseconds: 320), value: 1);
     _flipC = AnimationController(vsync: this, duration: const Duration(milliseconds: 540))
       ..addStatusListener((s) {
-        if (s == AnimationStatus.completed && mounted) setState(() => _flip = null);
+        if (s == AnimationStatus.completed && mounted) {
+          setState(() {
+            _flip?.dispose();
+            _flip = null;
+          });
+        }
       });
     if (widget.on) WidgetsBinding.instance.addPostFrameCallback((_) => _open());
   }
@@ -280,6 +308,8 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
   @override
   void dispose() {
     _swap?.cancel();
+    _flip?.dispose();
+    _layout?.dispose();
     _out.dispose();
     _in.dispose();
     _flipC.dispose();
@@ -294,6 +324,7 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
     _out.value = 0;
     _in.value = 1;
     _flipC.stop();
+    _flip?.dispose();
     _flip = null;
     if (_scroll.hasClients) _scroll.jumpTo(0);
     if (mounted) setState(() {});
@@ -365,8 +396,11 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
       b.changes[n].kept = keep;
     }
     if (before != null) {
-      final after = _tokens(_build(b), changed);
+      final afterLayout = _build(b);
+      final after = _tokens(afterLayout, changed);
+      afterLayout.dispose();
       final a = before.where((t) => !t.ch).toList(), z = after.where((t) => !t.ch).toList();
+      _flip?.dispose();
       if (a.length == z.length) {
         final items = <(_Tok, double, double, int)>[];
         for (var k = 0; k < z.length; k++) {
@@ -491,6 +525,7 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
   _Layout _layoutFor(Blessing b) {
     final key = '${b.rawText.hashCode}|${[for (final c in b.changes) '${c.start}:${c.kept}'].join(',')}|$_width|${_scaler.scale(19)}';
     if (key != _layoutKey || _layout == null) {
+      _layout?.dispose();
       _layout = _build(b);
       _layoutKey = key;
     }
@@ -544,7 +579,9 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
     final scaler = MediaQuery.textScalerOf(context);
     if (_nbsp == 0 || scaler != _scaler) {
       _scaler = scaler;
-      _nbsp = (TextPainter(text: TextSpan(text: _cutChar, style: _wordStyle), textDirection: TextDirection.ltr, textScaler: scaler)..layout()).width;
+      final tp = TextPainter(text: TextSpan(text: _cutChar, style: _wordStyle), textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+      _nbsp = tp.width;
+      tp.dispose();
     }
     final kept = b.changes.where((c) => c.kept).length, n = b.changes.length;
     final count = kept == n ? Strings.changes(n) : kept == 0 ? Strings.originalWords : Strings.keptOf(kept, n);
