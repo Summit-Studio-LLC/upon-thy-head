@@ -80,13 +80,13 @@ class Palette {
 }
 
 const _serif = 'Newsreader';
-const _emoji = ['Apple Color Emoji'];
+// Newsreader has no emoji. Apple Color Emoji is on every iPhone; Noto Color Emoji is Android's.
+const _emoji = ['Apple Color Emoji', 'Noto Color Emoji'];
 
 /// Newsreader with its optical size following the text size, as browsers do.
 TextStyle serif(double size, double height, Color color, {bool italic = false, double tracking = 0}) => TextStyle(
       fontFamily: _serif,
-      // Newsreader has no emoji, and dictation writes them: without a fallback an emoji in a
-      // blessing's words draws as an empty box. Apple's own emoji font is on every iPhone.
+      // Without a fallback an emoji in a blessing's words draws as an empty box.
       fontFamilyFallback: _emoji,
       fontSize: size,
       height: height / size,
