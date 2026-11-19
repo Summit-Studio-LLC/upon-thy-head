@@ -25,9 +25,22 @@ import UniformTypeIdentifiers
 ///    (Shortcuts.swift) comes the same way, as {shortcut: "record" | "home"}
 ///
 /// The app adds nothing of its own to what is shared: no message, no link, no app name.
+private final class SheetDismissDelegate: NSObject, UIAdaptivePresentationControllerDelegate {
+  weak var target: UIActivityViewController?
+  init(_ target: UIActivityViewController) {
+    self.target = target
+  }
+
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    guard let target, ShareChannel.sheet === target else { return }
+    ShareChannel.finish()
+  }
+}
+
 enum ShareChannel {
   static var channel: FlutterMethodChannel?
   static var sheet: UIActivityViewController?
+  private static var dismissDelegate: SheetDismissDelegate?
   static var answer: FlutterResult?
   /// Whether the last sheet's activity was carried out (not cancelled).
   static var completed = false
@@ -67,9 +80,16 @@ enum ShareChannel {
       clean()
       do {
         let doc = SharedPdf(args)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent(doc.fileName)
+        try FileManager.default.createDirectory(
+          at: folder,
+          withIntermediateDirectories: true,
+          attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        let rawName = (doc.fileName as NSString).lastPathComponent
+        let safeName = rawName.isEmpty || rawName == "." || rawName == ".." ? "Blessing.pdf" : rawName
+        let url = folder.appendingPathComponent(safeName)
         try doc.write(to: url)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)
         present(ShareItem(item: url, subject: doc.title), result)
       } catch {
         NSLog("share: %@", error.localizedDescription)
@@ -82,8 +102,14 @@ enum ShareChannel {
       do {
         let name = (args["fileName"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Blessing.blessing"
         guard let bytes = args["bytes"] as? FlutterStandardTypedData else { throw NSError(domain: "share", code: 2) }
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent((name as NSString).lastPathComponent)
+        try FileManager.default.createDirectory(
+          at: folder,
+          withIntermediateDirectories: true,
+          attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        let rawName = (name as NSString).lastPathComponent
+        let safeName = rawName.isEmpty || rawName == "." || rawName == ".." ? "Blessing.blessing" : rawName
+        let url = folder.appendingPathComponent(safeName)
         try bytes.data.write(to: url, options: [.atomic, .completeFileProtection])
         present(ShareItem(item: url, subject: args["title"] as? String ?? ""), result)
       } catch {
@@ -96,10 +122,21 @@ enum ShareChannel {
         return result(FlutterError(code: "link", message: "not a link", details: nil))
       }
       present(ShareItem(item: url, subject: args["title"] as? String ?? ""), result)
+    case "copy":
+      let text = args["text"] as? String ?? ""
+      UIPasteboard.general.setItems(
+        [[UTType.utf8PlainText.identifier: text]],
+        options: [.localOnly: true, .expirationDate: Date(timeIntervalSinceNow: 120)]
+      )
+      result(nil)
     case "receiving":
       BlessingInbox.ready(result)
     case "debugItems":
+      #if DEBUG
       result(lastItems)
+      #else
+      result([[String: Any]]())
+      #endif
     case "debugReceivedLeft":
       result(BlessingInbox.leftovers())
     case "dismiss":
@@ -128,19 +165,23 @@ enum ShareChannel {
       clean()
       return result(FlutterError(code: "share", message: "no window", details: nil))
     }
+    #if DEBUG
     lastItems = [describe(item.item)]
+    #endif
     let vc = UIActivityViewController(activityItems: [item], applicationActivities: nil)
     // nothing that would keep or file it on the app's behalf
     vc.excludedActivityTypes = [.addToReadingList, .assignToContact, .openInIBooks]
     completed = false
+    let delegate = SheetDismissDelegate(vc)
+    dismissDelegate = delegate
+    vc.presentationController?.delegate = delegate
     vc.completionWithItemsHandler = { [weak vc] _, done, _, _ in
-      if done { completed = true }
-      // an activity that shows its own screen (Messages, Mail) calls this when it is done; the sheet
-      // may still be up after a cancelled one, so only finish once it has gone, and only if no newer
-      // sheet has taken its place
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-        guard let vc, sheet === vc, vc.presentingViewController == nil else { return }
-        finish()
+      DispatchQueue.main.async {
+        if done { completed = true }
+        // an activity that shows its own screen (Messages, Mail) calls this when it is done; the sheet
+        // may still be up after a cancelled one, so only finish once it has gone, and only if no newer
+        // sheet has taken its place
+        checkDismissed(vc)
       }
     }
     if let pop = vc.popoverPresentationController {
@@ -172,10 +213,22 @@ enum ShareChannel {
     top.present(vc, animated: true)
   }
 
+  private static func checkDismissed(_ vc: UIActivityViewController?) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+      guard let vc, sheet === vc else { return }
+      if vc.presentingViewController == nil && !vc.isBeingDismissed {
+        finish()
+      } else {
+        checkDismissed(vc)
+      }
+    }
+  }
+
   /// An earlier sheet goes without a trace and is answered, leaving the share folder alone.
   static func close() {
     let s = sheet
     sheet = nil
+    dismissDelegate = nil
     if let s, s.presentingViewController != nil { s.dismiss(animated: false) }
     let a = answer
     answer = nil
@@ -188,22 +241,20 @@ enum ShareChannel {
     anchor?.removeFromSuperview()
     anchor = nil
     sheet = nil
+    dismissDelegate = nil
     let a = answer
     answer = nil
     a?(completed)
   }
 
+  #if DEBUG
   /// What the last sheet was handed, for the tests.
   static var lastItems: [[String: Any]] = []
 
   static func describe(_ item: Any) -> [String: Any] {
     guard let url = item as? URL else { return ["kind": "text"] }
     if !url.isFileURL {
-      var d: [String: Any] = ["kind": "url", "scheme": url.scheme ?? "", "length": url.absoluteString.count]
-      #if DEBUG
-      d["url"] = url.absoluteString // tests only: the link holds its key
-      #endif
-      return d
+      return ["kind": "url", "scheme": url.scheme ?? "", "length": url.absoluteString.count, "url": url.absoluteString]
     }
     let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType ?? UTType(filenameExtension: url.pathExtension)
     return [
@@ -217,6 +268,7 @@ enum ShareChannel {
       "path": url.path,
     ]
   }
+  #endif
 
   static func clean() {
     try? FileManager.default.removeItem(at: folder)
@@ -537,22 +589,30 @@ enum BlessingInbox {
   static let maxBytes = 512 * 1024
   static var waiting: [[String: Any]] = []
   static var listening = false
+  private static var reading = 0
 
   static func ready(_ result: FlutterResult) {
     listening = true
     let w = waiting
     waiting = []
     result(w)
-    cleanInbox()
+    if reading == 0 { cleanInbox() }
   }
 
-  /// A file from iOS (any thread-safe point on the main thread).
+  /// A file from iOS: read off the main thread so an iCloud or provider download never stalls the UI.
   static func receive(_ url: URL) {
-    let item = read(url)
-    if listening, let c = ShareChannel.channel {
-      c.invokeMethod("incoming", arguments: item)
-    } else {
-      waiting.append(item)
+    reading += 1
+    DispatchQueue.global(qos: .userInitiated).async {
+      let item = read(url)
+      DispatchQueue.main.async {
+        reading = max(0, reading - 1)
+        if listening && reading == 0 { cleanInbox() }
+        if listening, let c = ShareChannel.channel {
+          c.invokeMethod("incoming", arguments: item)
+        } else {
+          waiting.append(item)
+        }
+      }
     }
   }
 
@@ -584,9 +644,9 @@ enum BlessingInbox {
 
   static func removeIfOurs(_ url: URL) {
     let path = url.resolvingSymlinksInPath().path
-    guard path.hasPrefix(home + "/") else { return }
+    let inboxPath = inbox.resolvingSymlinksInPath().path
+    guard path.hasPrefix(inboxPath + "/") else { return }
     try? FileManager.default.removeItem(atPath: path)
-    cleanInbox()
   }
 
   /// Documents/Inbox, where iOS puts the copies it hands an app; nothing of ours lives there.

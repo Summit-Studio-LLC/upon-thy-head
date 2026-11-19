@@ -28,6 +28,9 @@ enum LockChannel {
 
   static var leftAt: Date?
   static var cover: UIImageView?
+  static var coverEpoch: UInt64 = 0
+  static var mayLockUnanswered: UInt64 = 0
+  static let surelyUnlockedSeconds = 30.0
   static var observers: [NSObjectProtocol] = []
 
   static func register(messenger: FlutterBinaryMessenger) {
@@ -79,7 +82,10 @@ enum LockChannel {
       }
     case "cover":
       coverOn = args["on"] as? Bool ?? false
-      if !coverOn { lift() }
+      if !coverOn {
+        mayLockUnanswered = 0
+        lift()
+      }
       result(nil)
     case "version":
       let info = Bundle.main.infoDictionary ?? [:]
@@ -154,23 +160,49 @@ enum LockChannel {
         let away = leftAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
         let background = leftAt != nil
         leftAt = nil
-        guard let channel else { return lift() }
-        var lifted = false
-        let liftOnce = {
-          if lifted { return }
-          lifted = true
+        let mayLock = background && away >= surelyUnlockedSeconds
+        coverEpoch &+= 1
+        let epoch = coverEpoch
+        if mayLock { mayLockUnanswered = epoch }
+        guard let channel else {
+          if UIApplication.shared.applicationState == .active && !mayLock && mayLockUnanswered == 0 {
+            lift()
+          }
+          return
+        }
+        var answered = false
+        let unanswered = {
+          guard !answered,
+                epoch == coverEpoch,
+                UIApplication.shared.applicationState == .active,
+                !mayLock,
+                mayLockUnanswered == 0 else { return }
           lift()
         }
-        channel.invokeMethod("active", arguments: ["away": away, "background": background]) { _ in liftOnce() }
-        // never leave the app covered if Dart does not answer
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { liftOnce() }
+        channel.invokeMethod("active", arguments: ["away": away, "background": background]) { reply in
+          if reply is FlutterError || (reply as? NSObject) === FlutterMethodNotImplemented {
+            unanswered()
+            return
+          }
+          answered = true
+          if mayLockUnanswered != 0 && epoch >= mayLockUnanswered {
+            mayLockUnanswered = 0
+          }
+          if epoch == coverEpoch && UIApplication.shared.applicationState == .active {
+            lift()
+          }
+        }
+        // never leave the app covered if Dart does not answer, unless it was away long enough to lock
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { unanswered() }
       },
     ]
   }
 
   /// The plain sky (assets/sky/cover.jpg: the locked sky with nothing drawn over it) over everything.
   static func place(on scene: UIWindowScene?) {
-    guard coverOn, cover == nil else { return }
+    guard coverOn else { return }
+    coverEpoch &+= 1
+    guard cover == nil else { return }
     guard let window = (scene ?? activeScene())?.windows.first(where: { $0.isKeyWindow }) ?? activeScene()?.windows.first else { return }
     let view = UIImageView(frame: window.bounds)
     view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -179,7 +211,9 @@ enum LockChannel {
     view.backgroundColor = UIColor(red: 0x0B / 255, green: 0x09 / 255, blue: 0x07 / 255, alpha: 1)
     let key = FlutterDartProject.lookupKey(forAsset: "assets/sky/cover.jpg")
     if let path = Bundle.main.path(forResource: key, ofType: nil) { view.image = UIImage(contentsOfFile: path) }
+    view.isUserInteractionEnabled = true
     view.accessibilityElementsHidden = true
+    view.accessibilityViewIsModal = true
     window.addSubview(view)
     cover = view
   }
@@ -227,9 +261,12 @@ final class LocationChannel: NSObject, CLLocationManagerDelegate {
       result(status())
     case "request":
       guard manager.authorizationStatus == .notDetermined else { return result(status()) }
+      let first = answered.isEmpty
       answered.append { result($0) }
-      LockChannel.systemPrompt += 1
-      manager.requestWhenInUseAuthorization()
+      if first {
+        LockChannel.systemPrompt += 1
+        manager.requestWhenInUseAuthorization()
+      }
     case "locate":
       guard status() == "granted" else { return result(nil) }
       located.append { result($0) }
