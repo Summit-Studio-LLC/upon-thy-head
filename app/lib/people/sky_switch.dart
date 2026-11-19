@@ -1,104 +1,165 @@
-import 'dart:ui' show ImageFilter;
+import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../strings.dart';
 import '../theme.dart';
+import '../widgets/pull_down.dart';
 
 /// The switch at the top left of home: whose sky is showing ("For me", "For Emma") and a small
-/// chevron, in a capsule of glass drawn by the app itself, so it sits over the live sky the same way
-/// on iPhone and Android: the sky behind it blurred, a soft edge, a faint light along its top. Its
-/// fill and its pressed state are the "New blessing" pill's. A tap opens the menu ([onTap]).
+/// chevron, in a capsule of liquid glass (package:liquid_glass_widgets), the sky bending through
+/// it. A tap morphs the capsule into its menu, the package's glass menu: For me and each family
+/// member with their count line and a tick on the one showing, then Add a family member and Manage
+/// family ([menu]). A row tapped is passed to [onChosen]; a tap outside closes it unchanged.
+///
+/// The capsule's words stop growing at 1.6× the usual size; the menu's rows follow the person's
+/// own text size, two lines at most for a name, and the menu scrolls when it is taller than the
+/// screen.
 class SkySwitch extends StatefulWidget {
-  const SkySwitch({super.key, required this.palette, required this.label, required this.onTap});
+  const SkySwitch({
+    super.key,
+    required this.palette,
+    required this.label,
+    required this.menu,
+    required this.onChosen,
+    this.onOpening,
+    this.onClosed,
+  });
 
   final Palette palette;
 
   /// "For me", "For Emma".
   final String label;
-  final VoidCallback onTap;
+
+  /// The rows, read each time the menu opens.
+  final List<PullDownItem> Function() menu;
+
+  /// Before the menu opens: false keeps it shut (locked, or home busy with something else).
+  final Future<bool> Function()? onOpening;
+
+  /// The code of the row tapped.
+  final ValueChanged<String> onChosen;
+
+  /// The menu began to close, with a row chosen or without.
+  final VoidCallback? onClosed;
 
   @override
   State<SkySwitch> createState() => _SkySwitchState();
 }
 
+/// The words of the capsule stop growing here.
+const _capsuleMaxScale = 1.6;
+
 class _SkySwitchState extends State<SkySwitch> {
-  bool _down = false;
+  final _menu = GlassMenuController();
+  List<PullDownItem> _items = const [];
+  bool _opening = false;
+
+  Future<void> _tap() async {
+    if (_menu.isOpen) return _menu.close();
+    if (_opening) return;
+    _opening = true;
+    try {
+      final ok = await (widget.onOpening?.call() ?? Future.value(true));
+      if (!ok || !mounted) return;
+      setState(() => _items = widget.menu());
+      // open once the rows are in, so the menu is sized for them
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _menu.open();
+      });
+    } finally {
+      _opening = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.palette;
-    final radius = BorderRadius.circular(999);
+    final mq = MediaQuery.of(context);
+    final scale = mq.textScaler.scale(16) / 16;
+    // large text: the whole width between the margins, so words are not stacked one to a line
+    final large = scale > largeText;
+    final width = large ? mq.size.width - 32 : math.min(300.0, mq.size.width - 32);
+    return GlassMenu(
+      controller: _menu,
+      items: [for (final it in _items) ..._row(it, scale, large)],
+      menuWidth: width,
+      menuAlignment: GlassMenuAlignment.topLeft,
+      autoAdjustToScreen: true,
+      menuPadding: const EdgeInsets.all(16),
+      menuSemanticLabel: widget.label,
+      // dim and quiet: no bright glare under the finger
+      glowIntensity: 0,
+      selectionColor: p.ink.withValues(alpha: .10),
+      onClose: widget.onClosed,
+      triggerBuilder: (context, _) => _capsule(context),
+    );
+  }
+
+  List<Widget> _row(PullDownItem it, double scale, bool large) {
+    final p = widget.palette;
+    final lines = large ? 2 : 1;
+    // the row's height as drawn, so the menu is measured to fit its rows exactly
+    final words = 21 * scale * lines + (it.sub == null ? 0 : 1 + 17 * scale);
+    return [
+      if (it.groupStart) const GlassMenuDivider(),
+      GlassMenuItem(
+        key: Key('pull-down-${it.code}'),
+        title: it.label,
+        subtitle: it.sub,
+        maxLines: lines,
+        height: math.max(44, 16 + words),
+        titleStyle: sans(16, 21, p.ink),
+        subtitleStyle: sans(13, 17, p.ink2),
+        // the app's own tick and plus, where iPhone's menus put the tick: before the name
+        icon: PullDownMarkGlyph(key: const Key('pull-down-mark'), mark: it.mark, ticked: it.ticked, color: p.ink),
+        iconSize: 14,
+        semanticsSelected: it.ticked,
+        semanticLabel: it.semantics ?? it.label,
+        onTap: () => widget.onChosen(it.code),
+      ),
+    ];
+  }
+
+  Widget _capsule(BuildContext context) {
+    final p = widget.palette;
     return Semantics(
       button: true,
       label: Strings.skySwitchLabel(widget.label),
       excludeSemantics: true,
-      onTap: widget.onTap,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _down = true),
-        onTapCancel: () => setState(() => _down = false),
-        onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _down ? .97 : 1,
-          duration: const Duration(milliseconds: 200),
-          curve: easeOut,
-          child: DecoratedBox(
-            // a shadow so faint it reads only as the glass standing off the sky
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 18, offset: Offset(0, 6))],
-            ),
-            child: ClipRRect(
-              borderRadius: radius,
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: AnimatedContainer(
-                  key: const Key('sky-switch-glass'),
-                  duration: const Duration(milliseconds: 200),
-                  decoration: BoxDecoration(
-                    borderRadius: radius,
-                    color: p.ink.withValues(alpha: _down ? .15 : .09),
-                    border: Border.all(color: p.ink.withValues(alpha: .16), width: .75),
-                  ),
-                  // the faint highlight: light caught along the top edge, gone by the middle
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [p.ink.withValues(alpha: .12), p.ink.withValues(alpha: .02), p.ink.withValues(alpha: 0)],
-                        stops: const [0, .5, 1],
-                      ),
-                    ),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 44),
-                      padding: const EdgeInsets.fromLTRB(17, 6, 14, 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              widget.label,
-                              key: const Key('sky-switch-label'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: serif(23, 28, p.ink, tracking: -.008),
-                            ),
-                          ),
-                          const SizedBox(width: 9),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: SizedBox(width: 11, height: 7, child: CustomPaint(painter: _Chevron(p.ink2))),
-                          ),
-                        ],
-                      ),
-                    ),
+      onTap: () => unawaited(_tap()),
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: _capsuleMaxScale,
+        child: GlassButton.custom(
+          key: const Key('sky-switch-glass'),
+          onTap: () => unawaited(_tap()),
+          excludeFromSemantics: true,
+          shape: const LiquidRoundedRectangle(borderRadius: 999),
+          // a gentle give under the finger, as the capsule is wide
+          stretch: .2,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.fromLTRB(17, 6, 14, 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    key: const Key('sky-switch-label'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: serif(23, 28, p.ink, tracking: -.008),
                   ),
                 ),
-              ),
+                const SizedBox(width: 9),
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: SizedBox(width: 11, height: 7, child: CustomPaint(painter: _Chevron(p.ink2))),
+                ),
+              ],
             ),
           ),
         ),

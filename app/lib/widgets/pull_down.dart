@@ -292,6 +292,25 @@ class _RowState extends State<_Row> {
   }
 }
 
+/// The tick (or the plus) a row shows on its left, on its own: the glass menu of home's capsule
+/// draws its rows with the same marks (people/sky_switch.dart).
+class PullDownMarkGlyph extends StatelessWidget {
+  const PullDownMarkGlyph({super.key, required this.mark, required this.ticked, required this.color});
+  final PullDownMark mark;
+  final bool ticked;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 14,
+        height: 14,
+        child: switch (mark) {
+          PullDownMark.plus => CustomPaint(painter: _Plus(color)),
+          PullDownMark.none => ticked ? CustomPaint(painter: _Tick(color)) : null,
+        },
+      );
+}
+
 class _Tick extends CustomPainter {
   _Tick(this.color);
   final Color color;

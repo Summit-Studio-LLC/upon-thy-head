@@ -125,7 +125,7 @@ void main() {
 
     Future<void> openMenu() async {
       await tap('sky-switch', settle: 700);
-      expect(find.byKey(const Key('pull-down')), findsOneWidget, reason: 'the menu did not open');
+      expect(find.byKey(Key('pull-down-${SkyMenu.me}')), findsOneWidget, reason: 'the menu did not open');
     }
 
     Future<void> showSky(String ring) async {
@@ -326,7 +326,7 @@ void main() {
         expect(text(find.byKey(const Key('locked-line'))), Strings.locked);
         await t.tap(find.byKey(const Key('locked-head')));
         await wait(800);
-        expect(find.byKey(const Key('pull-down')), findsNothing, reason: 'the menu does not open while locked');
+        expect(find.byKey(Key('pull-down-${SkyMenu.me}')), findsNothing, reason: 'the menu does not open while locked');
         await shot('11-locked');
         debugPrint('ACT face match');
         await until(() => find.byType(SkySwitch).evaluate().isNotEmpty, seconds: 60, what: 'unlocking');

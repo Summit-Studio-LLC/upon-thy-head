@@ -49,6 +49,11 @@ void onScreen(WidgetTester t, Finder f, Size screen) {
   }
 }
 
+/// The open glass menu of the capsule: the panel screen readers know by its name.
+Finder menuPanel() => find.ancestor(
+    of: find.byKey(const Key('pull-down-me')),
+    matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.scopesRoute == true)).first;
+
 /// No word of a page's title broken across lines: never more lines than words.
 void wholeWords(WidgetTester t, String key) {
   final para = t.renderObject<RenderParagraph>(find.descendant(of: find.byKey(Key(key)), matching: find.byType(RichText)).first);
@@ -68,54 +73,70 @@ void main() {
         alignment: Alignment.topLeft,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 60, 16, 0),
-          child: Builder(
-            builder: (c) => SkySwitch(
-              key: const Key('sky-switch'),
-              palette: p,
-              label: f.title(showing),
-              onTap: () async => chosen(await showPullDownItems(c, palette: p, items: f.menu(showing), width: 300, align: PullDownAlign.start)),
-            ),
+          child: SkySwitch(
+            key: const Key('sky-switch'),
+            palette: p,
+            label: f.title(showing),
+            menu: () => f.menu(showing),
+            onChosen: chosen,
           ),
         ),
       );
     }
 
-    testWidgets('a tap opens the menu under it; a row chooses; a tap outside chooses nothing', (t) async {
+    testWidgets('a tap morphs the capsule into its menu; a row chooses; a tap outside chooses nothing', (t) async {
       final picked = <String?>[];
       await show(t, home(picked.add));
       expect(find.text('For Emma'), findsOneWidget);
       await t.tap(find.byKey(const Key('sky-switch')));
       await t.pumpAndSettle();
-      expect(find.byKey(const Key('pull-down')), findsOneWidget);
-      expect(t.getRect(find.byKey(const Key('pull-down'))).top, greaterThan(t.getRect(find.byKey(const Key('sky-switch'))).bottom),
-          reason: 'it hangs from the capsule');
-      expect(t.getRect(find.byKey(const Key('pull-down'))).left, closeTo(t.getRect(find.byKey(const Key('sky-switch'))).left, .5),
-          reason: 'from its leading edge');
+      expect(menuPanel(), findsOneWidget);
+      // as iPhone's own glass menus: it grows out of the capsule, over it, from its top leading corner
+      final capsule = t.getRect(find.byKey(const Key('sky-switch')));
+      expect(t.getRect(menuPanel()).top, closeTo(capsule.top, 1), reason: 'it grows from the capsule');
+      expect(t.getRect(menuPanel()).left, closeTo(capsule.left, 1), reason: 'from its leading edge');
       for (final label in ['For me', 'For James', 'Add a family member', 'Manage family']) {
-        expect(find.descendant(of: find.byKey(const Key('pull-down')), matching: find.text(label)), findsOneWidget, reason: label);
+        expect(find.descendant(of: menuPanel(), matching: find.text(label)), findsOneWidget, reason: label);
+      }
+      // the count lines, and the tick on the sky showing only
+      expect(find.descendant(of: find.byKey(const Key('pull-down-me')), matching: find.text(countLine(const []))), findsOneWidget);
+      for (final (code, ticked) in [('me', false), ('p:e', true), ('p:j', false), ('add', false)]) {
+        final mark = t.widget<PullDownMarkGlyph>(find.descendant(of: find.byKey(Key('pull-down-$code')), matching: find.byType(PullDownMarkGlyph)));
+        expect(mark.ticked, ticked, reason: code);
       }
       await t.tap(find.byKey(const Key('pull-down-p:j')));
       await t.pumpAndSettle();
       expect(picked, ['p:j']);
-      expect(find.byKey(const Key('pull-down')), findsNothing);
+      expect(find.byKey(const Key('pull-down-me')), findsNothing);
 
       await t.tap(find.byKey(const Key('sky-switch')));
       await t.pumpAndSettle();
       await t.tapAt(const Offset(390, 860));
       await t.pumpAndSettle();
-      expect(picked, ['p:j', null]);
+      expect(picked, ['p:j']);
+      expect(find.byKey(const Key('pull-down-me')), findsNothing);
+    });
+
+    testWidgets('Manage family only once someone has been added', (t) async {
+      await show(t, home((_) {}, showing: '', people: const []));
+      await t.tap(find.byKey(const Key('sky-switch')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('pull-down-add')), findsOneWidget);
+      expect(find.byKey(const Key('pull-down-manage')), findsNothing);
     });
 
     testWidgets('VoiceOver hears whose sky it is and what the capsule does; the chosen row is selected', (t) async {
       final s = t.ensureSemantics();
       await show(t, home((_) {}));
       expect(find.bySemanticsLabel('For Emma. Choose whose blessings are shown'), findsOneWidget);
-      expect(t.getSemantics(find.byKey(const Key('sky-switch'))), isSemantics(isButton: true, hasTapAction: true),
+      expect(t.getSemantics(find.byKey(const Key('sky-switch-glass'))), isSemantics(isButton: true, hasTapAction: true, label: 'For Emma. Choose whose blessings are shown'),
           reason: 'VoiceOver and TalkBack can press it');
       await t.tap(find.byKey(const Key('sky-switch')));
       await t.pumpAndSettle();
       final row = t.getSemantics(find.byKey(const Key('pull-down-p:e')));
-      expect(row, isSemantics(isSelected: true, hasTapAction: true));
+      expect(row, isSemantics(isSelected: true, hasTapAction: true, label: 'For Emma', value: countLine(const [])));
+      expect(t.getSemantics(find.byKey(const Key('pull-down-p:j'))), isSemantics(isSelected: false, hasTapAction: true, label: 'For James'));
+      expect(t.getSemantics(find.byKey(const Key('pull-down-add'))), isSemantics(isButton: true, hasTapAction: true, label: 'Add a family member'));
       s.dispose();
     });
 
@@ -129,12 +150,12 @@ void main() {
             onScreen(t, find.byKey(const Key('sky-switch')), screen);
             await t.tap(find.byKey(const Key('sky-switch')));
             await t.pumpAndSettle();
-            onScreen(t, find.byKey(const Key('pull-down')), screen);
-            final menu = t.getRect(find.byKey(const Key('pull-down')));
+            onScreen(t, menuPanel(), screen);
+            final menu = t.getRect(menuPanel());
             expect(menu.bottom, lessThanOrEqualTo(screen.height + .5));
             // the last row can be reached (the menu scrolls when it is taller than the room)
             await t.scrollUntilVisible(find.byKey(const Key('pull-down-manage')), 60,
-                scrollable: find.descendant(of: find.byKey(const Key('pull-down')), matching: find.byType(Scrollable)));
+                scrollable: find.descendant(of: menuPanel(), matching: find.byType(Scrollable)));
             await t.tap(find.byKey(const Key('pull-down-manage')));
             await t.pumpAndSettle();
           });
@@ -306,49 +327,49 @@ void main() {
                 alignment: Alignment.topLeft,
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(24, pad.top, 16, 0),
-                  child: MediaQuery.withClampedTextScaling(
-                    maxScaleFactor: 1.6,
-                    child: Builder(
-                      builder: (c) => SkySwitch(
-                        key: const Key('sky-switch'),
-                        palette: p,
-                        label: f.title('l'),
-                        // the menu is a route over the app: at the person's own size, as on home
-                        onTap: () async => picked.add(await showPullDownItems(c, palette: p, items: f.menu('l'), width: 300, align: PullDownAlign.start)),
-                      ),
-                    ),
+                  // as on home: the capsule's words stop at 1.6×, its menu is at the person's own size
+                  child: SkySwitch(
+                    key: const Key('sky-switch'),
+                    palette: p,
+                    label: f.title('l'),
+                    menu: () => f.menu('l'),
+                    onChosen: picked.add,
                   ),
                 ),
               ),
               screen: screen,
               scale: 3.1,
               padding: pad);
+          // the capsule's words: one line, no larger than 1.6×
+          final word = t.renderObject<RenderParagraph>(find.descendant(of: find.byKey(const Key('sky-switch-label')), matching: find.byType(RichText)));
+          expect(word.text.style!.fontSize! * word.textScaler.scale(1), lessThanOrEqualTo(23 * 1.6 + .01));
+          expect(word.maxLines, 1);
           await t.tap(find.byKey(const Key('sky-switch')));
           await t.pumpAndSettle();
-          final menu = t.getRect(find.byKey(const Key('pull-down')));
+          final menu = t.getRect(menuPanel());
           expect(menu.left, closeTo(16, .5));
           expect(menu.width, closeTo(screen.width - 32, .5), reason: 'the full width between the margins');
           expect(menu.top, greaterThanOrEqualTo(pad.top));
           expect(menu.bottom, lessThanOrEqualTo(screen.height - pad.bottom + .5), reason: 'inside the safe area');
-          final scroll = find.descendant(of: find.byKey(const Key('pull-down')), matching: find.byType(Scrollable));
+          final scroll = find.descendant(of: menuPanel(), matching: find.byType(Scrollable));
           for (final code in ['me', 'p:j', 'p:l', 'add', 'manage']) {
             final row = find.byKey(Key('pull-down-$code'));
             await t.scrollUntilVisible(row, 80, scrollable: scroll);
             await t.pumpAndSettle();
             final r = t.getRect(row);
             expect(r.top >= menu.top - .5 && r.bottom <= menu.bottom + .5, isTrue, reason: '$code can be brought wholly into view: $r in $menu');
-            for (final key in ['pull-down-label', 'pull-down-sub']) {
-              final text = find.descendant(of: row, matching: find.byKey(Key(key)));
-              if (text.evaluate().isEmpty) continue;
-              final para = t.renderObject<RenderParagraph>(find.descendant(of: text, matching: find.byType(RichText)));
-              final line = key == 'pull-down-label' ? 3.1 * 21 : 3.1 * 17;
-              expect(para.size.height, lessThanOrEqualTo(2 * line + 1), reason: '$code: "${para.text.toPlainText()}" in at most two lines');
+            // the name in two lines at most; the count line under it in one (the package's own limit)
+            final texts = find.descendant(of: row, matching: find.byType(RichText));
+            for (var i = 0; i < texts.evaluate().length; i++) {
+              final para = t.renderObject<RenderParagraph>(texts.at(i));
+              final line = i == 0 ? 3.1 * 21 : 3.1 * 17;
+              expect(para.size.height, lessThanOrEqualTo((i == 0 ? 2 : 1) * line + 1), reason: '$code: "${para.text.toPlainText()}" in at most ${i == 0 ? 2 : 1} lines');
             }
-            // the tick (or plus) sits beside the name's first line
-            final mark = find.descendant(of: row, matching: find.byKey(const Key('pull-down-mark')));
-            final label = t.getRect(find.descendant(of: row, matching: find.byKey(const Key('pull-down-label'))));
-            final m = t.getRect(mark);
-            expect(m.center.dy, inInclusiveRange(label.top, label.top + 3.1 * 21), reason: '$code: the mark beside the first line');
+            // the tick (or plus) sits before the name, within the row
+            final m = t.getRect(find.descendant(of: row, matching: find.byKey(const Key('pull-down-mark'))));
+            final label = t.getRect(texts.first);
+            expect(m.right, lessThanOrEqualTo(label.left), reason: '$code: the mark before the name');
+            expect(m.center.dy, inInclusiveRange(label.top, label.bottom), reason: '$code: the mark beside the name');
           }
           await t.tap(find.byKey(const Key('pull-down-manage')));
           await t.pumpAndSettle();

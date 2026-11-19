@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:upon_thy_head/data/blessing.dart';
 import 'package:upon_thy_head/data/samples.dart';
 import 'package:upon_thy_head/data/settings.dart';
+import 'package:upon_thy_head/home/head_buttons.dart';
 import 'package:upon_thy_head/home/home_screen.dart';
 import 'package:upon_thy_head/home/ruler.dart';
 import 'package:upon_thy_head/home/timeline.dart';
@@ -181,6 +182,7 @@ void main() {
             t,
             Column(children: [
               NewBlessingButton(palette: p, onTap: () => pressed.add('new')),
+              HeadButtons(palette: p, onMore: () => pressed.add('more'), list: false, onList: () => pressed.add('list')),
               UnlockButton(palette: p, onTap: () => pressed.add('unlock')),
               ReviewBadge(palette: p, count: 2, onTap: () => pressed.add('review')),
               SizedBox(
@@ -189,9 +191,11 @@ void main() {
               ),
             ]));
         await activate(t, Strings.newBlessing);
+        await activate(t, Strings.more);
+        await activate(t, Strings.showAsList);
         await activate(t, Strings.unlock);
         await activate(t, Strings.toReviewLabel(2));
-        expect(pressed, ['new', 'unlock', 'review']);
+        expect(pressed, ['new', 'more', 'list', 'unlock', 'review']);
         // the ruler is a slider: its value is the blessing in focus, and a swipe up or down turns
         final ruler = nodeLabelled(t, Strings.rulerLabel);
         expect(ruler.getSemanticsData().flagsCollection.isSlider, isTrue);

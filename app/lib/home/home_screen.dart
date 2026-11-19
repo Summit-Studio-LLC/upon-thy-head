@@ -14,6 +14,7 @@ import '../data/blessing.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import '../lock/lock.dart';
+import 'head_buttons.dart';
 import 'locked.dart';
 import '../not_yet.dart';
 import '../onboarding/first_run.dart';
@@ -60,7 +61,6 @@ import '../widgets/balanced_text.dart';
 import '../widgets/edge_swipe.dart';
 import '../widgets/fade.dart';
 import '../widgets/icons.dart';
-import '../widgets/pull_down.dart';
 import '../widgets/scrims.dart';
 import '../widgets/measure.dart';
 import 'pass_along.dart';
@@ -169,9 +169,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Stage _personFrom = Stage.home;
   final GlobalKey<PersonLayerState> _personKey = GlobalKey();
 
-  /// The sky's menu is being opened or is open, and whether it is on the screen (it is closed at
-  /// once if the app locks).
-  bool _skyMenuOpen = false, _skyMenuShown = false;
+  /// The sky's menu is being opened or is open (it goes at once if the app locks: the capsule and
+  /// the glass menu it morphs into leave the tree with the head).
+  bool _skyMenuOpen = false;
 
   /// When the ring showing begins: a family member's birth, if given.
   DateTime? get _begins => _family.person(_ring)?.born?.local;
@@ -407,12 +407,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Locked: nothing of any blessing stays on screen or in the sky. A recording under way, or its
   /// after-Amen screen, stays; only its own new light is in the sky.
   void _hideBlessings() {
-    // the sky's menu, with its names and counts, goes at once
+    // the sky's menu, with its names and counts, goes at once: the locked head has no capsule, and
+    // the menu goes with it
     _skyMenuOpen = false;
-    if (_skyMenuShown) {
-      _skyMenuShown = false;
-      Navigator.of(context).pop();
-    }
     _personKey.currentState?.closeSheet();
     // the system share sheet goes too, with anything made for it
     unawaited(_share.dismiss());
@@ -1977,27 +1974,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// The capsule: the menu of skies, with Add a family member and Manage family. Never while
   /// locked: nothing of any family member is shown or reachable then.
-  Future<void> _openSkyMenu(BuildContext anchor) async {
-    if (_locked || _stage != Stage.home || _skyMenuOpen || _recoveredSheet || _receiving) return;
+  /// Before the capsule's menu opens: the family read afresh, and false to keep it shut.
+  Future<bool> _openingSkyMenu() async {
+    if (_locked || _stage != Stage.home || _skyMenuOpen || _recoveredSheet || _receiving) return false;
     _skyMenuOpen = true;
     await _reloadFamily();
-    if (!mounted || _locked || !anchor.mounted) {
+    if (!mounted || _locked) {
       _skyMenuOpen = false;
-      return;
+      return false;
     }
-    _skyMenuShown = true;
-    final code = await showPullDownItems(
-      anchor,
-      palette: widget.palette,
-      items: _family.menu(_ring),
-      width: 300,
-      align: PullDownAlign.start,
-      barrierLabel: Strings.close,
-    );
+    return true;
+  }
+
+  /// A row of the capsule's menu chosen.
+  Future<void> _skyMenuChosen(String code) async {
     final open = _skyMenuOpen;
-    _skyMenuOpen = _skyMenuShown = false;
+    _skyMenuOpen = false;
     // closed by the lock: nothing chosen
-    if (!open || code == null || !mounted || _locked || _stage != Stage.home) return;
+    if (!open || !mounted || _locked || _stage != Stage.home) return;
     final ring = SkyMenu.ringOf(code);
     if (ring != null) {
       if (ring != _ring) await _switchSky(ring);
@@ -2676,16 +2670,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               // buttons, and a long name ends in an ellipsis
               Transform.translate(
                 offset: const Offset(-6, -3),
-                child: MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.6,
-                  child: Builder(
-                    builder: (context) => SkySwitch(
-                      key: const Key('sky-switch'),
-                      palette: p,
-                      label: _family.title(_ring),
-                      onTap: () => unawaited(_openSkyMenu(context)),
-                    ),
-                  ),
+                // (its words stop growing at 1.6×; its menu follows the person's own size)
+                child: SkySwitch(
+                  key: const Key('sky-switch'),
+                  palette: p,
+                  label: _family.title(_ring),
+                  menu: () => _family.menu(_ring),
+                  onOpening: _openingSkyMenu,
+                  onChosen: (code) => unawaited(_skyMenuChosen(code)),
+                  onClosed: () => _skyMenuOpen = false,
                 ),
               ),
               const SizedBox(height: 4),
@@ -2703,30 +2696,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
         ),
-        // settings: a quiet "more", in the same weight as the list toggle beside it
+        // settings ("more") and the list toggle beside it, in one group of liquid glass
         Transform.translate(
-          offset: const Offset(0, -2),
-          child: IconBtn(
-            key: const Key('more'),
-            icon: Glyph.more,
-            color: p.ink,
+          offset: const Offset(0, -3),
+          child: HeadButtons(
             palette: p,
-            semantics: Strings.more,
-            onTap: _openSettings,
+            onMore: _openSettings,
+            list: _blessings.isNotEmpty || _list ? _list : null,
+            onList: () => setState(() => _list = !_list),
           ),
         ),
-        if (_blessings.isNotEmpty || _list)
-          Transform.translate(
-            offset: const Offset(0, -2),
-            child: IconBtn(
-              key: const Key('list'),
-              icon: _list ? Glyph.sky : Glyph.list,
-              color: p.ink,
-              palette: p,
-              semantics: _list ? Strings.showAsSky : Strings.showAsList,
-              onTap: () => setState(() => _list = !_list),
-            ),
-          ),
       ],
     );
   }

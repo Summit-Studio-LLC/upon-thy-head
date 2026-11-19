@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'data/audio.dart';
 import 'data/samples.dart';
@@ -31,8 +32,16 @@ Future<void> main() async {
   SystemChrome.setSystemUIOverlayStyle(systemBars);
   // Android: the sky under the status and navigation bars, whose sizes come as padding (as on iPhone)
   unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-  runApp(UponThyHeadApp(store: await openAppStore(seed: seedSamplesFlag, dense: seedSamples == 'dense')));
+  // liquid glass on home's capsule and buttons (package:liquid_glass_widgets): its shaders loaded
+  // before the first frame, and its glass dark, as the app is
+  await LiquidGlassWidgets.initialize();
+  runApp(glassScope(UponThyHeadApp(store: await openAppStore(seed: seedSamplesFlag, dense: seedSamples == 'dense'))));
 }
+
+/// The liquid glass package's scope around the app: its glass always the dark kind, as the app is,
+/// and Reduce Motion and Reduce Transparency honoured (the package reads them).
+Widget glassScope(Widget app) =>
+    LiquidGlassWidgets.wrap(child: app, theme: const GlassThemeData(brightness: Brightness.dark));
 
 /// The store in the documents folder; with [seed], the five samples (or with
 /// [dense], the 120) go into it if it is empty.

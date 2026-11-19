@@ -1,7 +1,7 @@
 name: upon_thy_head
 description: "Upon Thy Head. A written record of priesthood blessings, kept on the device."
 publish_to: 'none'
-version: 0.1.0+8
+version: 0.1.0+9
 
 environment:
   sdk: ^3.12.2
@@ -14,6 +14,11 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.6
   sqlite3: ^3.5.2
+  # liquid glass for the home's capsule, its menu and the icon group (home/home_screen.dart); pinned
+  # exactly, the package changes fast
+  liquid_glass_widgets: 1.17.5
+  # the package draws a few of its own glyphs from this font
+  cupertino_icons: ^1.0.9
 
 dev_dependencies:
   flutter_test:
