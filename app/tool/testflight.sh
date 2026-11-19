@@ -45,16 +45,22 @@ if ! perl -e 'alarm shift; exec @ARGV' 10 codesign -f -s "Apple Distribution: Su
 fi
 rm -rf "$SCRAP"
 
-rm -rf build/ios/ipa
-# Flutter archives and then tries to export. Its export fails on a Mac with no App Store profile
-# for this app yet, so the export is always done again below with the key that may make one.
-flutter build ipa --release || true
 ARCHIVE=build/ios/archive/Runner.xcarchive
-[ -d "$ARCHIVE" ] || { echo "the archive was not built"; exit 1; }
+rm -rf build/ios/ipa build/ios/archive
+mkdir -p build/ios/ipa
+# Flutter prepares the Xcode project (version, build number, plugins) and Xcode archives and exports.
+# Xcode is given the Admin key, so it fetches or makes the profiles itself: the Mac's own Xcode
+# sign-in is not used, and a capability added to the entitlements is switched on for the App ID
+# without a visit to the developer portal (App Attest was the first; `flutter build ipa` stopped on
+# "Provisioning profile doesn't include the App Attest capability").
+AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEYS/AuthKey_$SIGN_KEY.p8"
+  -authenticationKeyID $SIGN_KEY -authenticationKeyIssuerID $ISSUER)
+flutter build ios --release --config-only
+xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" archive "${AUTH[@]}" \
+  > build/ios/archive.log 2>&1 || { grep -E 'error:|FAILED' build/ios/archive.log | sort -u | head -20; echo "the archive was not built (build/ios/archive.log)"; exit 1; }
 
-if ! ls build/ios/ipa/*.ipa >/dev/null 2>&1; then
-  mkdir -p build/ios/ipa
-  cat > build/ios/ipa/ExportOptions.plist <<'EOF'
+cat > build/ios/ipa/ExportOptions.plist <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -66,11 +72,9 @@ if ! ls build/ios/ipa/*.ipa >/dev/null 2>&1; then
   <key>uploadSymbols</key><true/>
 </dict></plist>
 EOF
-  xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath build/ios/ipa \
-    -exportOptionsPlist build/ios/ipa/ExportOptions.plist -allowProvisioningUpdates \
-    -authenticationKeyPath "$KEYS/AuthKey_$SIGN_KEY.p8" -authenticationKeyID $SIGN_KEY \
-    -authenticationKeyIssuerID $ISSUER
-fi
+xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath build/ios/ipa \
+  -exportOptionsPlist build/ios/ipa/ExportOptions.plist "${AUTH[@]}" \
+  > build/ios/export.log 2>&1 || { grep -E 'error:|FAILED' build/ios/export.log | sort -u | head -20; echo "the export failed (build/ios/export.log)"; exit 1; }
 IPA=$(ls build/ios/ipa/*.ipa | head -1)
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
