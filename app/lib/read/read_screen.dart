@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 
 import '../data/blessing.dart';
 import '../share/links.dart';
@@ -69,13 +70,40 @@ class ReadLayer extends StatefulWidget {
   /// Past this many points of scroll, the top goes solid behind the back button.
   static const double scrolledAt = 132;
 
+  /// The pull down to go home: the page moves this much of the finger's travel (the resistance),
+  /// goes home once it has moved [pullHome] points, or [pullFlick] points with a flick of
+  /// [pullFlickSpeed] points a second, and counts only a pull begun at rest at the top: not
+  /// scrolled, and still for [pullRest].
+  static const double pullGive = .6, pullHome = 120, pullFlick = 48, pullFlickSpeed = 1100;
+  static const Duration pullRest = Duration(milliseconds: 400);
+
   @override
   State<ReadLayer> createState() => ReadLayerState();
 }
 
-class ReadLayerState extends State<ReadLayer> {
+class ReadLayerState extends State<ReadLayer> with SingleTickerProviderStateMixin {
   final ScrollController _scroll = ScrollController();
   bool _scrolled = false, _deleting = false, _sharing = false, _sentSheet = false;
+
+  // The pull down to go home (the owner's ask, 2026-11-18: "it needs to be intentional"). The page
+  // only moves for a finger that came down while it rested at its very top; a scroll that reaches
+  // the top, a flick that carries it there, or the bounce never count.
+  /// How far the page has been pulled down, in points as drawn.
+  late final AnimationController _pull = AnimationController.unbounded(vsync: this);
+  _Pull _phase = _Pull.none;
+  int? _pointer;
+  int _down = 0;
+  Offset _travel = Offset.zero;
+  double _from = 0;
+  Duration _downAt = Duration.zero;
+  VelocityTracker? _speed;
+  /// The page moved lately (a scroll, a coast, the bounce): not yet at rest.
+  Timer? _moving;
+  /// The pull went home; the page stays where it was let go while the fade takes it.
+  bool _gone = false;
+
+  /// Tests: how far the page is pulled down now.
+  double get pulled => _pull.value;
 
   /// The delete question's words: its links, and what went wrong.
   int _live = 0;
@@ -88,6 +116,8 @@ class ReadLayerState extends State<ReadLayer> {
     _scroll.addListener(() {
       final s = _scroll.offset > ReadLayer.scrolledAt;
       if (s != _scrolled) setState(() => _scrolled = s);
+      _moving?.cancel();
+      _moving = Timer(ReadLayer.pullRest, () => _moving = null);
     });
   }
 
@@ -99,17 +129,116 @@ class ReadLayerState extends State<ReadLayer> {
       if (_scroll.hasClients) _scroll.jumpTo(0);
       _scrolled = false;
       _deleting = _sharing = _sentSheet = false;
+      _gone = false;
+      _pull.value = 0;
     }
     if (!widget.on && oldWidget.on) {
       _deleting = _sharing = _sentSheet = false;
+      // taken away mid-pull (a lock, a file arriving): back in place
+      if (!_gone && _phase != _Pull.none) {
+        _phase = _Pull.none;
+        _pointer = null;
+        _pull.value = 0;
+      }
     }
   }
 
   @override
   void dispose() {
+    _moving?.cancel();
+    _pull.dispose();
     _scroll.dispose();
     super.dispose();
   }
+
+  bool get _still => MediaQuery.of(context).disableAnimations;
+
+  void _pointerDown(PointerDownEvent e) {
+    _down++;
+    if (_down > 1) {
+      // a second finger: not a pull
+      if (_phase == _Pull.armed || _phase == _Pull.pulling) _settle(false);
+      return;
+    }
+    // a fresh touch: whatever the last one held is let go
+    _phase = _Pull.none;
+    _pointer = null;
+    final atRest = _scroll.hasClients && _scroll.offset.abs() < .5 && _moving == null;
+    if (!widget.on || _gone || Sheet.anyUp || !atRest) return;
+    _phase = _Pull.armed;
+    _pointer = e.pointer;
+    _travel = Offset.zero;
+    _downAt = e.timeStamp;
+    _speed = VelocityTracker.withKind(e.kind)..addPosition(e.timeStamp, e.position);
+  }
+
+  void _pointerMove(PointerMoveEvent e) {
+    if (e.pointer != _pointer) return;
+    _travel += e.delta;
+    _speed?.addPosition(e.timeStamp, e.position);
+    if (_phase == _Pull.armed) {
+      if (_travel.distance < kTouchSlop) {
+        // held still first: a press for selecting text, not a pull
+        if (e.timeStamp - _downAt > kLongPressTimeout) _phase = _Pull.none;
+        return;
+      }
+      // down, and more down than across (the edge swipe is across); anything else is a scroll
+      if (_travel.dy > 0 && _travel.dy > _travel.dx.abs() && !Sheet.anyUp) {
+        _phase = _Pull.pulling;
+        _from = _travel.dy;
+        _pull.stop();
+      } else {
+        _phase = _Pull.none;
+        return;
+      }
+    }
+    if (_phase != _Pull.pulling || _still) return;
+    _pull.value = math.max(0.0, _travel.dy - _from) * ReadLayer.pullGive;
+  }
+
+  void _pointerUp(PointerUpEvent e) {
+    _down = math.max(0, _down - 1);
+    if (e.pointer != _pointer) return;
+    _pointer = null;
+    if (_phase == _Pull.armed) _phase = _Pull.none;
+    if (_phase != _Pull.pulling) return;
+    final shown = math.max(0.0, _travel.dy - _from) * ReadLayer.pullGive;
+    final v = _speed?.getVelocity().pixelsPerSecond.dy ?? 0;
+    _settle(shown >= ReadLayer.pullHome || (shown >= ReadLayer.pullFlick && v >= ReadLayer.pullFlickSpeed));
+  }
+
+  void _pointerCancel(PointerCancelEvent e) {
+    _down = math.max(0, _down - 1);
+    if (e.pointer != _pointer) return;
+    _pointer = null;
+    if (_phase == _Pull.pulling || _phase == _Pull.armed) _settle(false);
+  }
+
+  /// Let go: home, exactly as the back button, with the page held where it was so the fade carries
+  /// it on; or back to its place, nothing changed. The scroll stays held until the next touch, so
+  /// the release does not bounce.
+  void _settle(bool home) {
+    _phase = _Pull.released;
+    _pointer = null;
+    if (home && widget.on && !Sheet.anyUp) {
+      _gone = true;
+      widget.onBack();
+      return;
+    }
+    if (_still) {
+      _pull.value = 0;
+    } else {
+      unawaited(_pull.animateTo(0, duration: const Duration(milliseconds: 260), curve: easeOut));
+    }
+  }
+
+  /// What the scroll may do now: everything; nothing past the top (a touch that may yet be a pull);
+  /// or nothing at all (a pull under way).
+  _Hold _hold() => switch (_phase) {
+        _Pull.none => _Hold.none,
+        _Pull.armed => _Hold.top,
+        _Pull.pulling || _Pull.released => _Hold.all,
+      };
 
   /// Android's back: the share or delete sheet goes, if one is up. True when one went.
   bool closeSheet() {
@@ -174,19 +303,30 @@ class ReadLayerState extends State<ReadLayer> {
     return LayoutBuilder(builder: (context, box) {
       final h = box.maxHeight;
       final spacer = 252 + dy;
-      return Stack(children: [
+      final layer = Stack(children: [
         Positioned.fill(
-          child: SingleChildScrollView(
-            key: const Key('read-scroll'),
-            controller: _scroll,
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              SizedBox(height: spacer),
-              ConstrainedBox(
-                constraints: BoxConstraints(minHeight: h - spacer + 16),
-                child: _page(p, b),
+          child: Listener(
+            onPointerDown: _pointerDown,
+            onPointerMove: _pointerMove,
+            onPointerUp: _pointerUp,
+            onPointerCancel: _pointerCancel,
+            // the page follows a pull down, and the sky shows through as it goes
+            child: AnimatedBuilder(
+              animation: _pull,
+              builder: (context, child) => _pull.value <= 0 ? child! : Transform.translate(offset: Offset(0, _pull.value), child: child),
+              child: SingleChildScrollView(
+                key: const Key('read-scroll'),
+                controller: _scroll,
+                physics: _PullPhysics(_hold, parent: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics())),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  SizedBox(height: spacer),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: h - spacer + 16),
+                    child: _page(p, b),
+                  ),
+                ]),
               ),
-            ]),
+            ),
           ),
         ),
         // the sky darkens a little under the status bar and the back button
@@ -329,6 +469,14 @@ class ReadLayerState extends State<ReadLayer> {
           ),
         ),
       ]);
+      // fades by half over the distance that goes home: the same change the page makes as it closes
+      return AnimatedBuilder(
+        animation: _pull,
+        builder: (context, child) => _pull.value <= 0
+            ? child!
+            : Opacity(opacity: 1 - .5 * math.min(1.0, _pull.value / ReadLayer.pullHome), child: child),
+        child: layer,
+      );
     });
   }
 
@@ -458,6 +606,38 @@ class ReadLayerState extends State<ReadLayer> {
         ]),
       ),
     ]);
+  }
+}
+
+enum _Pull { none, armed, pulling, released }
+
+enum _Hold { none, top, all }
+
+/// The page's own scrolling, held still while a pull down to go home has it (ReadLayerState._hold).
+class _PullPhysics extends ScrollPhysics {
+  const _PullPhysics(this.hold, {super.parent});
+  final _Hold Function() hold;
+
+  @override
+  _PullPhysics applyTo(ScrollPhysics? ancestor) => _PullPhysics(hold, parent: buildParent(ancestor));
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    switch (hold()) {
+      case _Hold.all:
+        return value - position.pixels;
+      case _Hold.top when value < position.minScrollExtent && value < position.pixels:
+        return value - math.min(position.pixels, position.minScrollExtent);
+      default:
+        return super.applyBoundaryConditions(position, value);
+    }
+  }
+
+  @override
+  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
+    // let go of a pull: no bounce at the top
+    if (hold() == _Hold.all && position.pixels >= position.minScrollExtent && position.pixels <= position.maxScrollExtent) return null;
+    return super.createBallisticSimulation(position, velocity);
   }
 }
 
