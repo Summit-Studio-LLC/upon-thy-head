@@ -2,11 +2,48 @@
 // and how a request's sender is counted without being remembered.
 
 import { createHmac, randomBytes } from "node:crypto";
-import { type Answer, Limiter, LIMITS } from "../../../lib/links/service.ts";
+import { resendAlert } from "../../../lib/links/alerts.ts";
+import { APPLE_APP_ATTEST_ROOT, PlayDecoder } from "../../../lib/links/proof.ts";
+import { type Answer, type Deps, type Proof, Limiter, LIMITS } from "../../../lib/links/service.ts";
 import { theStore } from "../../../lib/links/store.ts";
 
 const limiter = new Limiter();
-export const deps = () => ({ store: theStore(), limiter, now: () => Date.now() });
+
+/**
+ * Proof of the app, from the environment (the full list is in PROTOCOL.md §4 "Proof of the app"):
+ *   LINKS_PASS_SECRET             signs challenges and passes; at least 32 characters. Unset: no proof offered
+ *   LINKS_REQUIRE_PROOF=1         refuse to make a link without a pass
+ *   APP_ATTEST_ALLOW_DEVELOPMENT=1  accept App Attest's development environment (Xcode builds)
+ *   PLAY_INTEGRITY_PROJECT_NUMBER + PLAY_INTEGRITY_SERVICE_ACCOUNT (the JSON key): Android's proof
+ */
+let proof: Proof | undefined;
+function proofOf(env = process.env): Proof {
+  if (proof) return proof;
+  const secret = (env.LINKS_PASS_SECRET ?? "").length >= 32 ? new Uint8Array(Buffer.from(env.LINKS_PASS_SECRET!, "utf8")) : null;
+  const project = (env.PLAY_INTEGRITY_PROJECT_NUMBER ?? "").trim();
+  const decoder = /^\d{6,20}$/.test(project) ? PlayDecoder.from(env.PLAY_INTEGRITY_SERVICE_ACCOUNT) : null;
+  proof = {
+    secret,
+    require: env.LINKS_REQUIRE_PROOF === "1",
+    appleRoot: APPLE_APP_ATTEST_ROOT,
+    allowDevelopment: env.APP_ATTEST_ALLOW_DEVELOPMENT === "1",
+    play: decoder ? { project, decode: (token, now) => decoder.decode(token, now) } : null,
+  };
+  return proof;
+}
+
+/**
+ * The service's dependencies. `defer` is Next's after() in a route, so warnings and counts are
+ * written after the answer has gone.
+ */
+export const deps = (defer?: (task: () => Promise<unknown>) => void): Deps => ({
+  store: theStore(),
+  limiter,
+  now: () => Date.now(),
+  proof: proofOf(),
+  alert: resendAlert(),
+  defer,
+});
 
 /** On every answer from the service: never cached, never framed, never treated as a page. */
 export const HEADERS = {
@@ -59,8 +96,8 @@ export function respond(answer: Answer): Response {
 }
 
 /** The body, read no further than one byte past the cap. */
-export async function bodyOf(request: Request): Promise<Uint8Array | "too_big"> {
-  if (Number(request.headers.get("content-length") ?? 0) > LIMITS.maxBytes) return "too_big";
+export async function bodyOf(request: Request, cap: number = LIMITS.maxBytes): Promise<Uint8Array | "too_big"> {
+  if (Number(request.headers.get("content-length") ?? 0) > cap) return "too_big";
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -69,7 +106,7 @@ export async function bodyOf(request: Request): Promise<Uint8Array | "too_big"> 
     const { done, value } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > LIMITS.maxBytes) {
+    if (size > cap) {
       await reader.cancel();
       return "too_big";
     }

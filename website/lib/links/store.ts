@@ -33,6 +33,13 @@ export interface Store {
   sweep(now: number): Promise<number>;
   /** Add to a day's totals (day is "2026-11-16", UTC) and return them. Totals carry no identity. */
   spend(day: string, links: number, bytes: number): Promise<Spent>;
+  /**
+   * Add `by` to one of a day's named counts ("links:proven", "proof:ios:ok", …) and return it.
+   * Like the totals, a count says how many, never who. Dropped with the day's totals.
+   */
+  count(day: string, what: string, by?: number): Promise<number>;
+  /** Every named count of a day. */
+  counts(day: string): Promise<Record<string, number>>;
 }
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
@@ -82,6 +89,16 @@ export class MemoryStore implements Store {
     const now = { links: was.links + links, bytes: was.bytes + bytes };
     this.days.set(day, now);
     return now;
+  }
+  private tallies = new Map<string, Record<string, number>>();
+  async count(day: string, what: string, by = 1) {
+    const t = this.tallies.get(day) ?? {};
+    t[what] = (t[what] ?? 0) + by;
+    this.tallies.set(day, t);
+    return t[what];
+  }
+  async counts(day: string) {
+    return { ...this.tallies.get(day) };
   }
   /** For tests: how many copies are held. */
   get size() {
@@ -142,6 +159,22 @@ export class FileStore implements Store {
     await writeFile(`${file}.tmp`, JSON.stringify(now));
     await rename(`${file}.tmp`, file);
     return now;
+  }
+  async count(day: string, what: string, by = 1) {
+    await mkdir(this.dir, { recursive: true });
+    const file = path.join(this.dir, `${day}.counts.day`);
+    const t = await this.counts(day);
+    t[what] = (t[what] ?? 0) + by;
+    await writeFile(`${file}.tmp`, JSON.stringify(t));
+    await rename(`${file}.tmp`, file);
+    return t[what];
+  }
+  async counts(day: string) {
+    try {
+      return JSON.parse(await readFile(path.join(this.dir, `${day}.counts.day`), "utf8")) as Record<string, number>;
+    } catch {
+      return {};
+    }
   }
 }
 
@@ -207,13 +240,26 @@ export class UpstashStore implements Store {
     await this.run("EXPIRE", key, 3 * 86400);
     return total;
   }
+  async count(day: string, what: string, by = 1) {
+    const n = await this.run<number>("HINCRBY", `count:${day}`, what, by);
+    await this.run("EXPIRE", `count:${day}`, 3 * 86400);
+    return n;
+  }
+  async counts(day: string) {
+    const flat = (await this.run<string[] | null>("HGETALL", `count:${day}`)) ?? [];
+    const out: Record<string, number> = {};
+    for (let i = 0; i + 1 < flat.length; i += 2) out[flat[i]] = Number(flat[i + 1]);
+    return out;
+  }
 }
 
 /** One SQL statement with its values; the rows that come back. */
 export type Query = (text: string, values: unknown[]) => Promise<Record<string, unknown>[]>;
 
 /**
- * Neon Postgres. Two small tables, made on first use: the locked copies, and each day's totals.
+ * Neon Postgres. Three small tables, made on first use: the locked copies, each day's totals, and
+ * each day's named counts (added 2026-11-18 with CREATE TABLE IF NOT EXISTS, so a live database
+ * gains it on the first request and nothing already there changes).
  * Postgres does not erase a row when its time comes, so an expired copy stays until the daily
  * sweep; the service never hands out an expired copy (it checks `expires` itself).
  */
@@ -221,6 +267,7 @@ export class PostgresStore implements Store {
   private query: Query;
   private copies: string;
   private days: string;
+  private tallies: string;
   private ready: Promise<unknown> | null = null;
 
   /** `prefix` names the tables (letters and underscores only), so a test can use its own. */
@@ -229,6 +276,7 @@ export class PostgresStore implements Store {
     this.query = query;
     this.copies = `${prefix}_copies`;
     this.days = `${prefix}_days`;
+    this.tallies = `${prefix}_counts`;
   }
 
   static at(url: string, prefix = "link") {
@@ -241,6 +289,7 @@ export class PostgresStore implements Store {
       await this.query(`CREATE TABLE IF NOT EXISTS ${this.copies} (id text PRIMARY KEY, bytes bytea NOT NULL, expires bigint NOT NULL, stop_hash text NOT NULL)`, []);
       await this.query(`CREATE INDEX IF NOT EXISTS ${this.copies}_expires ON ${this.copies} (expires)`, []);
       await this.query(`CREATE TABLE IF NOT EXISTS ${this.days} (day text PRIMARY KEY, links bigint NOT NULL DEFAULT 0, bytes bigint NOT NULL DEFAULT 0)`, []);
+      await this.query(`CREATE TABLE IF NOT EXISTS ${this.tallies} (day text NOT NULL, what text NOT NULL, n bigint NOT NULL DEFAULT 0, PRIMARY KEY (day, what))`, []);
     })().catch((error) => {
       this.ready = null; // try again on the next request
       throw error;
@@ -273,7 +322,9 @@ export class PostgresStore implements Store {
     await this.tables();
     const rows = await this.query(`WITH gone AS (DELETE FROM ${this.copies} WHERE expires <= $1 RETURNING 1) SELECT count(*)::int AS n FROM gone`, [now]);
     // a day's totals are only needed for that day; keep three, as the other stores do
-    await this.query(`DELETE FROM ${this.days} WHERE day < $1`, [new Date(now - 3 * 86400 * 1000).toISOString().slice(0, 10)]);
+    const old = new Date(now - 3 * 86400 * 1000).toISOString().slice(0, 10);
+    await this.query(`DELETE FROM ${this.days} WHERE day < $1`, [old]);
+    await this.query(`DELETE FROM ${this.tallies} WHERE day < $1`, [old]);
     return Number(rows[0]?.n ?? 0);
   }
   async spend(day: string, links: number, bytes: number) {
@@ -283,6 +334,20 @@ export class PostgresStore implements Store {
       [day, links, bytes],
     );
     return { links: Number(rows[0]?.links ?? 0), bytes: Number(rows[0]?.bytes ?? 0) };
+  }
+  async count(day: string, what: string, by = 1) {
+    await this.tables();
+    const rows = await this.query(
+      `INSERT INTO ${this.tallies} (day, what, n) VALUES ($1, $2, $3) ON CONFLICT (day, what) DO UPDATE SET n = ${this.tallies}.n + EXCLUDED.n RETURNING n`,
+      [day, what, by],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+  async counts(day: string) {
+    await this.tables();
+    const out: Record<string, number> = {};
+    for (const row of await this.query(`SELECT what, n FROM ${this.tallies} WHERE day = $1`, [day])) out[String(row.what)] = Number(row.n);
+    return out;
   }
 }
 

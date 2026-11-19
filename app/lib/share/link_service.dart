@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import 'link_format.dart';
+import 'proof.dart';
 
 /// The link service (website/PROTOCOL.md §4): create, read and stop a locked copy. It only ever
 /// sees the locked bytes, a link's id, and (to stop one) its stop token in the Authorization header.
@@ -93,13 +94,88 @@ DateTime? _utc(Object? v) {
   return DateTime.tryParse(v)?.toUtc();
 }
 
+final _pass = RegExp(r'^p1\.[A-Za-z0-9_-]{22}\.(\d{1,12})\.[A-Za-z0-9_-]{43}$');
+
 /// The service over HTTPS (or plain HTTP to this Mac in tests), with dart:io's client: no cookies,
 /// no device information, nothing but the request itself.
+///
+/// Making a link carries a pass, proof that the request comes from this app (PROTOCOL.md §4,
+/// "Proof of the app"), when one can be had: the pass kept from before while it lasts, otherwise a
+/// new one from [prover], given at most [proofTimeout]. With none, the link is asked for without
+/// one, which the service accepts until it is told to require proof. [prover] is the native one for
+/// the real (https) service and none for any other address unless given (tests).
 class HttpLinkService implements LinkService {
-  HttpLinkService({String base = linkService, this.timeout = const Duration(seconds: 20)}) : _base = Uri.parse(base);
+  HttpLinkService({
+    String base = linkService,
+    this.timeout = const Duration(seconds: 20),
+    AppProver? prover,
+    this.proofTimeout = const Duration(seconds: 6),
+  })  : _base = Uri.parse(base),
+        prover = prover ?? (Uri.parse(base).scheme == 'https' ? const NativeAppProver() : null);
 
   final Uri _base;
   final Duration timeout;
+  final AppProver? prover;
+  final Duration proofTimeout;
+
+  String? _keptPass;
+  bool _passRead = false;
+
+  /// When [pass] stops being good, from the expiry written in it; null if it is not a pass.
+  static DateTime? passExpiry(String pass) {
+    final m = _pass.firstMatch(pass);
+    if (m == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(int.parse(m.group(1)!) * 1000, isUtc: true);
+  }
+
+  /// The kept pass while it has more than an hour left, otherwise a new one (or null).
+  Future<String?> _usablePass() async {
+    final p = prover;
+    if (p == null) return null;
+    if (!_passRead) {
+      _keptPass = await p.keptPass();
+      _passRead = true;
+    }
+    final kept = _keptPass, ends = kept == null ? null : passExpiry(kept);
+    if (kept != null && ends != null && ends.isAfter(DateTime.now().toUtc().add(const Duration(hours: 1)))) return kept;
+    return _newPass();
+  }
+
+  /// Prove the app afresh: a challenge, the native proof, and the service's pass. Null when any step
+  /// cannot be done within [proofTimeout].
+  Future<String?> _newPass() async {
+    final p = prover;
+    if (p == null) return null;
+    _keptPass = null;
+    String? fresh;
+    try {
+      fresh = await _prove(p).timeout(proofTimeout, onTimeout: () => null);
+    } catch (_) {
+      fresh = null;
+    }
+    _keptPass = fresh;
+    _passRead = true;
+    await p.keepPass(fresh);
+    return fresh;
+  }
+
+  Future<String?> _prove(AppProver p) async {
+    final c = await _send('POST', _at('/api/proof/challenge'));
+    if (c == null || c.status != 200 || !_isJson(c.headers)) return null;
+    final j = jsonDecode(utf8.decode(c.body));
+    if (j is! Map || j['challenge'] is! String) return null;
+    final challenge = j['challenge'] as String;
+    final android = j['android'];
+    final project = android is Map && android['project'] is String ? android['project'] as String : null;
+    final fields = await p.prove(challenge, androidProject: project);
+    if (fields == null) return null;
+    final body = Uint8List.fromList(utf8.encode(jsonEncode({...fields, 'challenge': challenge})));
+    final r = await _send('POST', _at('/api/proof'), body: body, headers: {'Content-Type': 'application/json'});
+    if (r == null || r.status != 200 || !_isJson(r.headers)) return null;
+    final a = jsonDecode(utf8.decode(r.body));
+    final pass = a is Map ? a['pass'] : null;
+    return pass is String && _pass.hasMatch(pass) ? pass : null;
+  }
 
   Uri _at(String path) => _base.replace(path: path);
 
@@ -178,13 +254,15 @@ class HttpLinkService implements LinkService {
   @override
   Future<CreateResult> create(Uint8List locked) async {
     if (locked.length > linkMaxBytes) return const CreateFailed(LinkTrouble.tooBig);
-    final headers = {
-      'Content-Type': 'application/octet-stream',
-      // PROOF OF THE APP goes here, before the link goes live (docs/decisions-and-parked-ideas.md,
-      // "Before the link goes live"; PROTOCOL.md §5): an App Attest assertion on iPhone, a Play
-      // Integrity token on Android, as one more header on this request. Nothing else changes.
-    };
-    final r = await _send('POST', _at('/api/b'), body: locked, headers: headers);
+    Future<({int status, Uint8List body, HttpHeaders headers})?> post(String? pass) => _send('POST', _at('/api/b'),
+        body: locked, headers: {'Content-Type': 'application/octet-stream', 'Blessing-Pass': ?pass});
+    final pass = await _usablePass();
+    var r = await post(pass);
+    // a pass the service no longer takes (its secret changed, or it ran out): prove once more, and
+    // ask again with the new pass, or with none if none could be had
+    if (r != null && pass != null && r.status == 401 && _isJson(r.headers) && _error(r.body) == 'pass') {
+      r = await post(await _newPass());
+    }
     if (r == null) return const CreateFailed(LinkTrouble.offline);
     if (r.status == 201 && _isJson(r.headers)) {
       try {

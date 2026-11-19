@@ -4,6 +4,8 @@
 // detail and no log line of its own. The route handlers in app/api are thin wrappers round this.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { Alert } from "./alerts.ts";
+import { PROOF, challengeIsGood, makeChallenge, makePass, passId, passIdFor, verifyAppAttest, verifyIntegrityVerdict } from "./proof.ts";
 import type { Store } from "./store.ts";
 
 export const LIMITS = {
@@ -30,6 +32,12 @@ export const LIMITS = {
    */
   readAll: [Number(process.env.LINKS_READS_PER_MINUTE ?? 3000), 60 * 1000] as const,
   createAll: [Number(process.env.LINKS_CREATES_PER_MINUTE ?? 120), 60 * 1000] as const,
+  /** Proof of the app: a challenge, then a proof, about once a week per phone. */
+  challenge: [20, 10 * 60 * 1000] as const,
+  prove: [10, 10 * 60 * 1000] as const,
+  proofAll: [300, 60 * 1000] as const,
+  /** The day's use, as a share of the allowance, at which the owner is warned (once each a day). */
+  warnAt: [50, 90] as const,
 };
 
 export const ID = /^[A-Za-z0-9_-]{22}$/;
@@ -101,7 +109,31 @@ export class Limiter {
 /** The one name everyone is counted under for the ceilings that ignore who is asking. */
 const EVERYONE = "*";
 
-export type Deps = { store: Store | null; limiter: Limiter; now: () => number; random?: (n: number) => Uint8Array };
+/** Proof of the app (lib/links/proof.ts). Absent, or with no secret, no proof is offered. */
+export type Proof = {
+  /** Signs challenges and passes (LINKS_PASS_SECRET). */
+  secret: Uint8Array | null;
+  /** Refuse to make a link without a pass (LINKS_REQUIRE_PROOF=1). */
+  require: boolean;
+  /** The App Attest root certificate (PEM): Apple's, or a test's own. */
+  appleRoot: string;
+  /** Accept App Attest's development environment (APP_ATTEST_ALLOW_DEVELOPMENT=1). */
+  allowDevelopment: boolean;
+  /** Play Integrity, when it is set up: the Cloud project number the app asks with, and Google's decoder. */
+  play: { project: string; decode: (token: string, now: number) => Promise<unknown | null> } | null;
+};
+
+export type Deps = {
+  store: Store | null;
+  limiter: Limiter;
+  now: () => number;
+  random?: (n: number) => Uint8Array;
+  proof?: Proof;
+  /** Sends the owner a warning. Absent, none is sent. */
+  alert?: Alert;
+  /** Runs bookkeeping after the answer has gone (Next's after()). Errors are swallowed. */
+  defer?: (task: () => Promise<unknown>) => void;
+};
 
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 const hashOf = (token: string) => createHash("sha256").update(Buffer.from(token, "base64url")).digest("base64url");
@@ -109,9 +141,44 @@ const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z")
 const refuse = (status: number, error: string, headers?: Record<string, string>): Answer => ({ status, headers, json: { error } });
 const slow = (seconds: number) => refuse(429, "slow_down", { "Retry-After": String(seconds) });
 const unavailable = () => refuse(503, "unavailable", { "Retry-After": "3600" });
+const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** Run `task` after answering, never letting it fail or slow the answer. */
+function later(deps: Deps, task: () => Promise<unknown>) {
+  const safe = () => task().catch(() => {});
+  if (deps.defer) deps.defer(safe);
+  else void safe();
+}
+
+/** Warn the owner, once a threshold a day, when this request carried the day's use across it. */
+async function warnIfCrossed(deps: Deps, day: string, spent: { links: number; bytes: number }, added: { links: number; bytes: number }) {
+  if (!deps.store) return;
+  for (const [what, total, step, allowance] of [
+    ["links", spent.links, added.links, LIMITS.dayLinks],
+    ["bytes", spent.bytes, added.bytes, LIMITS.dayBytes],
+  ] as const) {
+    for (const percent of LIMITS.warnAt) {
+      const line = (allowance * percent) / 100;
+      if (!(total - step < line && total >= line)) continue;
+      // the count makes it once a day even if two servers see the crossing
+      if ((await deps.store.count(day, `warned:${what}:${percent}`)) !== 1 || !deps.alert) continue;
+      await deps.alert(
+        `Upon Thy Head: ${percent}% of today's link ${what} used`,
+        [
+          `Today (${day}, UTC) the link service has passed ${percent}% of its daily allowance of ${what}.`,
+          ``,
+          `Links: ${spent.links} of ${LIMITS.dayLinks}`,
+          `Bytes: ${spent.bytes} of ${LIMITS.dayBytes}`,
+          ``,
+          `At 100% no more links can be made until midnight UTC. GET /api/status for the day's counts.`,
+        ].join("\n"),
+      );
+    }
+  }
+}
 
 /** POST /api/b */
-export async function create(deps: Deps, input: { contentType: string | null; body: Uint8Array | "too_big"; client: string }): Promise<Answer> {
+export async function create(deps: Deps, input: { contentType: string | null; body: Uint8Array | "too_big"; client: string; pass?: string | null }): Promise<Answer> {
   const now = deps.now();
   if ((input.contentType ?? "").split(";")[0].trim().toLowerCase() !== "application/octet-stream") return refuse(415, "type");
   if (input.body === "too_big" || input.body.length > LIMITS.maxBytes) return refuse(413, "too_big");
@@ -122,9 +189,26 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
     deps.limiter.take("create-day", input.client, LIMITS.createDay, now);
   if (wait) return slow(wait);
   if (!deps.store) return unavailable();
+  const store = deps.store;
+  const day = dayOf(now);
 
-  const day = new Date(now).toISOString().slice(0, 10);
-  const spent = await deps.store.spend(day, 1, input.body.length);
+  // Proof of the app: a pass the server signed, or (unless proof is required) none.
+  let pass: string | null = null;
+  if (input.pass) {
+    pass = deps.proof?.secret ? passId(deps.proof.secret, input.pass, now) : null;
+    if (!pass) {
+      later(deps, () => store.count(day, "pass:refused"));
+      return refuse(401, "pass");
+    }
+    const passWait = deps.limiter.take("create-pass", pass, LIMITS.create, now) || deps.limiter.take("create-pass-day", pass, LIMITS.createDay, now);
+    if (passWait) return slow(passWait);
+  } else if (deps.proof?.require) {
+    later(deps, () => store.count(day, "links:refused_no_proof"));
+    return refuse(403, "proof");
+  }
+
+  const spent = await store.spend(day, 1, input.body.length);
+  later(deps, () => warnIfCrossed(deps, day, spent, { links: 1, bytes: input.body.length }));
   if (spent.links > LIMITS.dayLinks || spent.bytes > LIMITS.dayBytes) {
     const midnight = Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10) + 1);
     return refuse(503, "full", { "Retry-After": String(Math.ceil((midnight - now) / 1000)) });
@@ -135,7 +219,8 @@ export async function create(deps: Deps, input: { contentType: string | null; bo
   const expires = Math.floor((now + LIMITS.lifeMs) / 1000) * 1000;
   for (let attempt = 0; attempt < 3; attempt++) {
     const id = b64url(random(16));
-    if (await deps.store.put(id, { bytes: input.body, expires, stopHash: hashOf(stop) })) {
+    if (await store.put(id, { bytes: input.body, expires, stopHash: hashOf(stop) })) {
+      later(deps, () => store.count(day, pass ? "links:proven" : "links:unproven"));
       return { status: 201, json: { id, expires: iso(expires), stop } };
     }
   }
@@ -179,6 +264,108 @@ export async function stop(deps: Deps, input: { id: string; authorization: strin
   if (a.length !== b.length || !timingSafeEqual(a, b)) return refuse(403, "wrong_token");
   await deps.store.remove(input.id);
   return { status: 204 };
+}
+
+/**
+ * POST /api/proof/challenge: a challenge to prove against. With Play Integrity set up, also the
+ * Cloud project number the app asks Google with; without it the Android app sends no proof.
+ */
+export async function challenge(deps: Deps, input: { client: string }): Promise<Answer> {
+  const now = deps.now();
+  const wait = deps.limiter.takeWithCeiling("challenge", input.client, LIMITS.challenge, LIMITS.proofAll, now);
+  if (wait) return slow(wait);
+  if (!deps.proof?.secret) return unavailable();
+  const c = makeChallenge(deps.proof.secret, now, deps.random);
+  return { status: 200, json: { challenge: c.challenge, expires: iso(c.expires), ...(deps.proof.play ? { android: { project: deps.proof.play.project } } : {}) } };
+}
+
+/**
+ * POST /api/proof, JSON: {"platform":"ios","challenge","keyId","attestation"} (attestation in
+ * base64) or {"platform":"android","challenge","token"}. A proof that verifies gets a pass.
+ */
+export async function prove(deps: Deps, input: { contentType: string | null; body: Uint8Array | "too_big"; client: string }): Promise<Answer> {
+  const now = deps.now();
+  if ((input.contentType ?? "").split(";")[0].trim().toLowerCase() !== "application/json") return refuse(415, "type");
+  if (input.body === "too_big" || input.body.length > PROOF.maxBody) return refuse(413, "too_big");
+  const wait = deps.limiter.takeWithCeiling("prove", input.client, LIMITS.prove, LIMITS.proofAll, now);
+  if (wait) return slow(wait);
+  const proof = deps.proof;
+  if (!proof?.secret || !deps.store) return unavailable();
+  const store = deps.store, day = dayOf(now);
+
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(Buffer.from(input.body).toString("utf8"));
+    if (!j || typeof j !== "object") throw new Error();
+  } catch {
+    return refuse(400, "format");
+  }
+  const platform = j.platform === "ios" || j.platform === "android" ? j.platform : null;
+  if (!platform || typeof j.challenge !== "string") return refuse(400, "format");
+  const failed = (reason: string) => {
+    later(deps, async () => {
+      await store.count(day, `proof:${platform}:failed`);
+      await store.count(day, `proof:${platform}:failed:${reason}`);
+    });
+    return refuse(400, "proof");
+  };
+  if (!challengeIsGood(proof.secret, j.challenge, now)) return failed("challenge");
+
+  let verdict;
+  if (platform === "ios") {
+    if (typeof j.keyId !== "string" || typeof j.attestation !== "string" || j.keyId.length > 100) return refuse(400, "format");
+    verdict = verifyAppAttest({
+      attestation: new Uint8Array(Buffer.from(j.attestation, "base64")),
+      keyId: j.keyId,
+      challenge: j.challenge,
+      now,
+      root: proof.appleRoot,
+      allowDevelopment: proof.allowDevelopment,
+    });
+  } else {
+    if (typeof j.token !== "string" || j.token.length > 16384) return refuse(400, "format");
+    if (!proof.play) {
+      later(deps, () => store.count(day, "proof:android:not_set_up"));
+      return refuse(503, "not_set_up");
+    }
+    let payload: unknown = null;
+    try {
+      payload = await proof.play.decode(j.token, now);
+    } catch {
+      return unavailable();
+    }
+    verdict = payload ? verifyIntegrityVerdict(payload, j.challenge, now) : ({ ok: false, reason: "decode" } as const);
+  }
+  if (!verdict.ok) return failed(verdict.reason);
+  later(deps, () => store.count(day, `proof:${platform}:ok`));
+  const p = makePass(proof.secret, passIdFor(proof.secret, verdict.what), now);
+  return { status: 200, json: { pass: p.pass, expires: iso(p.expires) } };
+}
+
+/** GET /api/status, for the owner: today's and yesterday's totals and counts. Nothing about who. */
+export async function status(deps: Deps): Promise<Answer> {
+  if (!deps.store) return unavailable();
+  const now = deps.now();
+  const one = async (day: string) => {
+    const [spent, counts] = await Promise.all([deps.store!.spend(day, 0, 0), deps.store!.counts(day)]);
+    return {
+      day,
+      links: spent.links,
+      bytes: spent.bytes,
+      allowance: { links: LIMITS.dayLinks, bytes: LIMITS.dayBytes },
+      used: { links: Math.round((spent.links / LIMITS.dayLinks) * 1000) / 10, bytes: Math.round((spent.bytes / LIMITS.dayBytes) * 1000) / 10 },
+      counts,
+    };
+  };
+  return {
+    status: 200,
+    json: {
+      today: await one(dayOf(now)),
+      yesterday: await one(dayOf(now - 86400000)),
+      proof: { offered: !!deps.proof?.secret, required: !!deps.proof?.require, android: !!deps.proof?.play, development: !!deps.proof?.allowDevelopment },
+      warnings: !!deps.alert,
+    },
+  };
 }
 
 /** The scheduled clean-up: erase every copy past its time. */

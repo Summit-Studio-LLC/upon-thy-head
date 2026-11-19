@@ -99,6 +99,8 @@ JSON, `{"error":"<code>"}`. Send no cookies, no account, and no information abou
 ### Create: `POST /api/b`
 
 Request: header `Content-Type: application/octet-stream`; body: the locked copy (§3), raw bytes.
+Optionally header `Blessing-Pass: <pass>`, proof that the request comes from the app (see "Proof of
+the app" below).
 
 `201 Created`, `Content-Type: application/json`:
 
@@ -120,6 +122,8 @@ Request: header `Content-Type: application/octet-stream`; body: the locked copy 
 | 429 | `slow_down` | too many from this network; `Retry-After: <seconds>` | say to try again shortly; offer the file |
 | 503 | `full` | the day's budget for everyone is spent; `Retry-After` runs to midnight UTC | offer the file |
 | 503 | `unavailable` | storage is not reachable | offer the file |
+| 401 | `pass` | the pass is not one the server signed, or it has expired | prove again once and ask again (with no pass if none could be had) |
+| 403 | `proof` | no pass, while the service requires proof (`LINKS_REQUIRE_PROOF=1`) | "could not make a link"; offer the file |
 
 No connection at all is the drawn "No internet, so a link cannot be made now" with "Send as a file".
 
@@ -153,6 +157,71 @@ Request: header `Authorization: Bearer <stop token>`.
 | 429 | `slow_down` | `Retry-After` |
 | 503 | `unavailable` | try again later; the link is still live |
 
+### Proof of the app (added 2026-11-18)
+
+Making a link can carry proof that the request comes from this app: Apple's App Attest on iPhone and
+iPad, Google's Play Integrity (standard request) on Android. The server keeps nothing about a device
+for it. It hands out a stateless challenge, checks the proof once, and answers with a **pass**: a
+token it signs, good for seven days, kept nowhere by the server. The phone keeps the pass (Keychain
+on iOS, the app's private preferences on Android) and sends it with each link. When it expires, or
+the server refuses it, the phone proves itself again with a fresh key. Opening and stopping a link
+never need a pass. Until `LINKS_REQUIRE_PROOF=1` is set, a link without a pass is still made.
+
+**`POST /api/proof/challenge`** (no body) → `200`:
+
+    {"challenge":"c1.<expiry>.<random>.<mac>","expires":"2026-11-18T18:08:22Z","android":{"project":"123456789012"}}
+
+- The challenge is good for five minutes. It is signed with the server's secret
+  (`LINKS_PASS_SECRET`); nothing is stored.
+- `android` is there only when Play Integrity is set up: the Cloud project number the app asks
+  Google with. Without it the Android app sends no proof.
+- `503 unavailable` when no secret is set: the app carries on with no pass.
+
+**`POST /api/proof`**, `Content-Type: application/json`, at most 32 KiB:
+
+    {"platform":"ios","challenge":"…","keyId":"<base64, as DCAppAttestService gave it>","attestation":"<base64>"}
+    {"platform":"android","challenge":"…","token":"<the Play Integrity token>"}
+
+→ `200` `{"pass":"p1.<pass id>.<expiry>.<mac>","expires":"2026-11-25T18:03:22Z"}`.
+
+- iOS: `clientDataHash` is SHA-256 of the challenge's UTF-8 bytes. The server checks the certificate
+  chain to Apple's App Attest root, the nonce (SHA-256 of authenticator data ‖ clientDataHash) in
+  the leaf certificate, that the key id is SHA-256 of the leaf's public key and equals the
+  credential id, the app id hash for `7R77MUH4FF.dev.summitstudio.uponThyHead`, a zero counter, and
+  the production environment (development only with `APP_ATTEST_ALLOW_DEVELOPMENT=1`). The key is
+  used for this one proof and never again.
+- Android: `requestHash` is SHA-256 of the challenge, base64url without padding. Google decodes the
+  token (`decodeIntegrityToken`, with the service account); the server requires the package
+  `dev.summitstudio.uponthyhead`, the same requestHash, a timestamp within the challenge's life,
+  `PLAY_RECOGNIZED`, and `MEETS_DEVICE_INTEGRITY`.
+- The pass id is derived from what was proven (the one-time key, or the challenge a token was bound
+  to), so the same proof sent twice gives the same pass id, not a second allowance.
+
+| status | error | when |
+|---|---|---|
+| 400 | `proof` | the proof did not verify (counted, by platform and reason) |
+| 400 | `format` | the body is not one of the two shapes |
+| 415 | `type` | not `application/json` |
+| 413 | `too_big` | over 32 KiB |
+| 429 | `slow_down` | `Retry-After` |
+| 503 | `not_set_up` | an Android proof while Play Integrity is not set up |
+| 503 | `unavailable` | no secret set, storage not reachable, or Google not reachable |
+
+A valid pass is limited like a network: 10 links in 10 minutes and 40 a day per pass id, on top of
+the network's own limits. Challenges: 20 per network in 10 minutes; proofs: 10; both under a shared
+ceiling of 300 a minute.
+
+**`GET /api/status`**, with `Authorization: Bearer <CRON_SECRET>`, for the owner: today's and
+yesterday's links and bytes, the allowance and the share of it used, and the day's counts:
+`links:proven`, `links:unproven`, `links:refused_no_proof`, `pass:refused`, `proof:ios:ok`,
+`proof:ios:failed`, `proof:ios:failed:<reason>` (`challenge`, `format`, `chain`, `nonce`, `key`,
+`app`, `counter`, `environment`), the same for `android` (`request`, `app`, `device`, `decode`),
+`proof:android:not_set_up`, and `warned:<links|bytes>:<50|90>`. Counts say how many, never who.
+
+**Warnings:** when the day's links or bytes pass 50% and again 90% of the allowance, the owner gets
+one email per threshold per day through Resend (`RESEND_API_KEY`, `ALERT_TO`, `ALERT_FROM`), with
+counts only. It is sent after the link's answer has gone, and a failure to send changes nothing.
+
 ### What the server keeps, and for how long
 
 For each link, exactly three things: the locked bytes, the expiry, and the SHA-256 of the stop
@@ -161,7 +230,8 @@ The copy is erased when it is stopped, when it is asked for after its expiry, by
 at the moment of expiry, and by a clean-up that runs once a day.
 
 Per UTC day it also keeps two totals for everyone together (how many links, how many bytes), to
-enforce the day's budget. They carry no identity and are dropped after three days.
+enforce the day's budget, and the named counts listed under `GET /api/status`. They carry no
+identity and are dropped after three days. Nothing is kept for a proof or a pass.
 
 To count requests per network, the address a request came from is mixed with a secret made new each
 time the server starts, and only that mix is held, in memory, for the length of a rate-limit window
@@ -194,7 +264,11 @@ link's id but never its key.
   Vercel Firewall for `POST /api/b`** (it counts across all instances, at the edge). The daily
   budget is in the store and does hold across instances.
 
-### What proof that a request comes from the real app would add, later
+### Proof that a request comes from the real app (built 2026-11-18: see "Proof of the app" in §4)
+
+What was written before it was built, kept for the reasoning. As built, the server keeps no
+per-device key: it checks one proof and hands back a signed pass instead.
+
 
 Apple's App Attest and Google's Play Integrity let the app attach, to each create request, a
 statement signed by Apple or Google that it comes from an unmodified copy of this app on a real

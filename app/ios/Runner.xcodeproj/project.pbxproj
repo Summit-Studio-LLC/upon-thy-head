@@ -12,6 +12,7 @@
 		A1B2C3D400000000000005A2 /* Share.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000005A1 /* Share.swift */; };
 		A1B2C3D400000000000006A2 /* Link.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000006A1 /* Link.swift */; };
 		C0FFEE0000000000000000A2 /* PhoneCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE0000000000000000A1 /* PhoneCheck.swift */; };
+		C0FFEE0000000000000000D2 /* Proof.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE0000000000000000D1 /* Proof.swift */; };
 		C0FFEE0000000000000000B2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0FFEE0000000000000000B1 /* PrivacyInfo.xcprivacy */; };
 		A1B2C3D40000000000000008 /* Playback.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000007 /* Playback.swift */; };
 		A1B2C3D40000000000000004 /* SpeechChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000003 /* SpeechChannel.swift */; };
@@ -61,6 +62,7 @@
 		A1B2C3D400000000000006A1 /* Link.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Link.swift; sourceTree = "<group>"; };
 		A1B2C3D400000000000006B1 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		C0FFEE0000000000000000A1 /* PhoneCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneCheck.swift; sourceTree = "<group>"; };
+		C0FFEE0000000000000000D1 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
 		C0FFEE0000000000000000B1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A1B2C3D40000000000000007 /* Playback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Playback.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000003 /* SpeechChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechChannel.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 				A1B2C3D400000000000006A1 /* Link.swift */,
 				A1B2C3D400000000000006B1 /* Runner.entitlements */,
 				C0FFEE0000000000000000A1 /* PhoneCheck.swift */,
+				C0FFEE0000000000000000D1 /* Proof.swift */,
 				C0FFEE0000000000000000B1 /* PrivacyInfo.xcprivacy */,
 				A1B2C3D40000000000000007 /* Playback.swift */,
 				A1B2C3D40000000000000003 /* SpeechChannel.swift */,
@@ -371,6 +374,7 @@
 				A1B2C3D400000000000007A2 /* Shortcuts.swift in Sources */,
 				A1B2C3D400000000000006A2 /* Link.swift in Sources */,
 				C0FFEE0000000000000000A2 /* PhoneCheck.swift in Sources */,
+				C0FFEE0000000000000000D2 /* Proof.swift in Sources */,
 				A1B2C3D40000000000000008 /* Playback.swift in Sources */,
 				A1B2C3D40000000000000004 /* SpeechChannel.swift in Sources */,
 				A1B2C3D40000000000000002 /* OnDeviceSpeech.swift in Sources */,

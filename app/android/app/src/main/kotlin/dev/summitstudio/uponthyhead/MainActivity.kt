@@ -141,6 +141,7 @@ class MainActivity : FlutterActivity() {
         player.setMethodCallHandler(PlayerChannel.get(this))
         PlayerChannel.get(this).channel = player
         MethodChannel(m, "upon_thy_head/link").setMethodCallHandler(LinkChannel(applicationContext))
+        MethodChannel(m, "upon_thy_head/proof").setMethodCallHandler(ProofChannel(applicationContext))
         val share = MethodChannel(m, "upon_thy_head/share")
         ShareChannel.channel = share
         share.setMethodCallHandler { call, result -> ShareChannel.handle({ this }, applicationContext, call, result) }

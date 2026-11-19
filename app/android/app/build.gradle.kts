@@ -41,6 +41,11 @@ kotlin {
     }
 }
 
+dependencies {
+    // Play Integrity, standard request: proof that a link request comes from this app (ProofChannel.kt)
+    implementation("com.google.android.play:integrity:1.4.0")
+}
+
 flutter {
     source = "../.."
 }
