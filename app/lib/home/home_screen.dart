@@ -1563,7 +1563,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final kept = await keepRing(_store, a, place: _where?.place ?? saltLakeTemple);
         debugPrint('receive: kept ${kept.length} of a ring');
         _ringBusy = false;
-        await _switchSky('');
+        // the person's own sky, turned to the newest of those just kept
+        await _switchSky('', focusId: kept.isEmpty ? null : kept.last);
         return;
       } else if (a is ArrivalDifferent) {
         final mine = a.mine;
@@ -1979,12 +1980,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _setBlessings(list, focus: list.length - 1);
   }
 
-  /// Turn to [ring]'s sky: its ring, count line, ruler and list.
-  Future<void> _switchSky(String ring) async {
+  /// Turn to [ring]'s sky: its ring, count line, ruler and list; on blessing [focusId] if given,
+  /// else its newest.
+  Future<void> _switchSky(String ring, {String? focusId}) async {
     await _reloadFamily();
     if (!mounted || _locked) return;
     _aside = null;
     _setRing(ring);
+    final i = focusId == null ? -1 : _blessings.indexWhere((b) => b.id == focusId);
+    if (i >= 0) _setBlessings(_blessings, focus: i);
     _engine.setView(SkyView.home);
     _lookHome(_engine.focus);
     setState(() {

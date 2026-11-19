@@ -97,5 +97,34 @@ void main() {
     await tester.tap(find.byKey(const Key('ring-arrival-keep')));
     await until(find.byKey(const Key('kept-for-you')));
     await shot('04-kept-for-you-by');
+    // a few seconds on: the sky has turned to the ring, the newest kept in focus
+    await wait(3000);
+    await shot('05-kept-settled');
+
+    // a phone with blessings of its own (the three newest): the two oldest arrive, and home turns
+    // to the newer of those two, not to the phone's own newest
+    await tester.pumpWidget(const SizedBox());
+    await wait(500);
+    final own = await freshSeededStore();
+    for (final p in await own.people()) {
+      await own.removePerson(p.id);
+    }
+    final mine = [for (final b in await own.list()) b]..sort((a, b) => a.utc.compareTo(b.utc));
+    for (final b in mine.take(2)) {
+      await own.delete(b.id);
+    }
+    await tester.pumpWidget(UponThyHeadApp(store: own, stats: false, demo: false, lock: unlockedLock()));
+    await until(find.byKey(const Key('sky')));
+    await wait(1500);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'upon_thy_head/share', const StandardMethodCodec().encodeMethodCall(MethodCall('incoming', {'link': made.url})), (_) {});
+    await until(find.byKey(const Key('ring-arrival-title')), seconds: 40);
+    await tester.tap(find.byKey(const Key('ring-arrival-continue')));
+    await wait(1200);
+    await tester.tap(find.byKey(const Key('ring-arrival-keep')));
+    await until(find.byKey(const Key('kept-for-you')));
+    await wait(3000);
+    await shot('06-more-kept-settled');
+    debugPrint('expected in focus: ${mine[1].title}');
   });
 }
