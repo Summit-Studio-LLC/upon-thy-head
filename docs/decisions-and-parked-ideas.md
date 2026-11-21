@@ -6,6 +6,12 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ### 2026-11-21
 
+- **Version 1.0 (build 12) is released (Noah: "let's release first, and then push an update tomorrow").** Apple approved it the same day it was submitted; it was released through Apple's API and reads "Ready for Distribution". The store page is `https://apps.apple.com/app/id6836352663`; Apple can take up to a day to show it everywhere.
+  - **Released with known faults,** all fixed on `master` for the update: the Spanish family menu's count line is cut off, the date bar's year labels run together on a ring spanning many years, Continue on the welcome is below the screen at large text, and the largest-text layout faults.
+  - **Released before the rest of the final evaluation had run.** The link, share, Spanish, review, polish, drafts, recovery, file and shortcut scripts were started after approval and run on `master`; any fault they find that build 12 shares goes into the update.
+  - **The update (1.1):** build 13's layout fixes, polish with the phone's own model, and the polish animation. Not to be submitted until Noah has tried the model on his iPhone Air.
+  - **Owed on the website once the store page is live:** the download button (`download` in `website/app/content.ts`) and the link page's "coming to iPhone and Android" wording.
+
 - **Polish's light over the words (built 2026-11-21; Noah: "polishing should have a nice loading animation").** No spinner: the progress is shown on the blessing's own words on the review page (`lib/review/polish_light.dart`).
   - **While the model works:** the piece of the words with it (the same pieces of up to 1,200 characters it is sent in) carries a slow, soft band of gold light passing over it, a little downhill, behind the letters and warming them toward gold; between passes the piece keeps a faint steady glow. Pieces not yet reached are dimmed toward the page (36%); finished pieces are as always. Each change of piece fades over about a second. `Polish.runWithModel` and `ModelSource.find` now take `onPiece(index, pieces)`: each piece as it is sent, then `pieces.length` when all are answered; never after a cancel or with no model.
   - **The label:** a small gold light, drawn like a blessing's light on the sky, breathing four seconds in and six out (the sky's own breath), before "Polishing…". It grows with the text size, to twice its size at most.
