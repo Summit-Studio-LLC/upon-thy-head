@@ -357,14 +357,25 @@ void main() {
             await t.scrollUntilVisible(row, 80, scrollable: scroll);
             await t.pumpAndSettle();
             final r = t.getRect(row);
-            expect(r.top >= menu.top - .5 && r.bottom <= menu.bottom + .5, isTrue, reason: '$code can be brought wholly into view: $r in $menu');
-            // the name in two lines at most; the count line under it in one (the package's own limit)
-            final texts = find.descendant(of: row, matching: find.byType(RichText));
+            // (the test's own font draws every letter a full square wide, so a long count line here can
+            // make a row taller than the menu, which no real font does; then its top is in view)
+            if (r.height <= menu.height) {
+              expect(r.top >= menu.top - .5 && r.bottom <= menu.bottom + .5, isTrue, reason: '$code can be brought wholly into view: $r in $menu');
+            } else {
+              expect(r.top < menu.bottom && r.bottom > menu.top, isTrue, reason: '$code can be brought into view: $r in $menu');
+            }
+            // the name in two lines at most, and the count line under it whole, in as many lines as it
+            // needs (the app draws these words itself, as the package cuts a count line to one)
+            final own = find.byKey(Key('pull-down-words-$code'));
+            final texts = find.descendant(of: own.evaluate().isEmpty ? row : own, matching: find.byType(RichText));
             for (var i = 0; i < texts.evaluate().length; i++) {
               final para = t.renderObject<RenderParagraph>(texts.at(i));
               final line = i == 0 ? 3.1 * 21 : 3.1 * 17;
-              expect(para.size.height, lessThanOrEqualTo((i == 0 ? 2 : 1) * line + 1), reason: '$code: "${para.text.toPlainText()}" in at most ${i == 0 ? 2 : 1} lines');
+              if (i == 0) expect(para.size.height, lessThanOrEqualTo(2 * line + 1), reason: '$code: "${para.text.toPlainText()}" in at most 2 lines');
+              if (i > 0) expect(para.didExceedMaxLines, isFalse, reason: '$code: "${para.text.toPlainText()}" whole, not cut short');
             }
+            // a count line wider than the row wraps, not one line ending in "…"
+            if (code == 'me') expect(t.renderObject<RenderParagraph>(texts.at(1)).size.height, greaterThan(3.1 * 17 + 1), reason: 'the long count line wraps');
             // the tick (or plus) sits before the name, within the row
             final m = t.getRect(find.descendant(of: row, matching: find.byKey(const Key('pull-down-mark'))));
             final label = t.getRect(texts.first);

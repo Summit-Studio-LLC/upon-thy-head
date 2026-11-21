@@ -398,7 +398,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     final dy = math.max(62.0, mq.viewPadding.top) - 62;
     final keyboard = mq.viewInsets.bottom;
     final pinned = _pinned && keyboard > 0;
-    const barHeight = 56.0;
+    // at the largest text sizes on a narrow phone the bar's time goes under its line, and the bar grows to hold it
+    final barHeight = 56.0 + (ListenBar.stackedTimeHeight(context, p, mq.size.width - 2 * Widths.side(mq.size.width, 16, Widths.reading)) ?? 0);
     return LayoutBuilder(
       builder: (context, box) {
         final h = box.maxHeight;
@@ -1107,6 +1108,30 @@ class ListenBar extends StatelessWidget {
   /// Its controls' keys start with this ('listen-play', 'pinned-play', ...).
   final String keys;
 
+  static TextStyle _timeStyle(Palette p) => sans(13, 18, p.ink2).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+
+  /// How tall the time line is when it has to go under the controls at [width], or null when it fits
+  /// beside them. At the largest text sizes on a narrow phone it does not, and the pinned bar above
+  /// the keyboard needs to know so it can grow to hold it.
+  static double? stackedTimeHeight(BuildContext context, Palette p, double width) {
+    // the widest a recording's time gets (under a hundred minutes), so the choice does not flip as it plays
+    final tp = TextPainter(
+      text: TextSpan(text: '00:00 / 00:00', style: _timeStyle(p)),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    // play and back are 44 each, then 8 and 12 of space, 4 at the end; the line keeps at least 64
+    final fits = width - 44 - 44 - 8 - 12 - 4 - tp.width >= 64;
+    if (fits) {
+      tp.dispose();
+      return null;
+    }
+    tp.layout(maxWidth: math.max(1.0, width - 4));
+    final h = tp.height;
+    tp.dispose();
+    return h + 6;
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = palette;
@@ -1116,8 +1141,7 @@ class ListenBar extends StatelessWidget {
         final d = player.duration, at = player.position.clamp(0, d == 0 ? 0 : d).toDouble();
         final f = d > 0 ? at / d : 0.0;
         final time = '${clockTime(at)} / ${clockTime(d)}';
-        return Row(
-          children: [
+        final controls = <Widget>[
             IconBtn(
               key: Key('$keys-play'),
               icon: player.playing ? Glyph.pause : Glyph.play,
@@ -1174,18 +1198,38 @@ class ListenBar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Semantics(
-              label: Strings.elapsed(clockTime(at), clockTime(d)),
-              excludeSemantics: true,
-              child: Text(
-                time,
-                key: Key('$keys-time'),
-                style: sans(13, 18, p.ink2).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
+        ];
+        final timeLabel = Semantics(
+          label: Strings.elapsed(clockTime(at), clockTime(d)),
+          excludeSemantics: true,
+          child: Text(
+            time,
+            key: Key('$keys-time'),
+            style: _timeStyle(p),
+          ),
+        );
+        return LayoutBuilder(
+          builder: (context, box) {
+            // too big to sit beside the line: the time goes under it, at the right, and may wrap
+            if (stackedTimeHeight(context, p, box.maxWidth) != null) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(children: controls),
+                  Padding(padding: const EdgeInsets.only(right: 4, bottom: 6), child: timeLabel),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                ...controls,
+                const SizedBox(width: 12),
+                timeLabel,
+                const SizedBox(width: 4),
+              ],
+            );
+          },
         );
       },
     );

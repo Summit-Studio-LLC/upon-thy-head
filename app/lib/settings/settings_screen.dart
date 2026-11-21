@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -242,6 +243,24 @@ class SettingsLayer extends StatelessWidget {
                   Text(Strings.aboutBody, style: sans(15, 22, p.ink2)),
                   const SizedBox(height: 6),
                   Text(version.isEmpty ? '' : Strings.version(version), key: const Key('settings-version'), style: hint),
+                  // the website's privacy policy and terms, in the phone's own browser (App Review asks
+                  // that the policy be reachable from inside the app)
+                  const SizedBox(height: 6),
+                  Transform.translate(
+                    offset: const Offset(-12, 0),
+                    child: _GoldWord(key: const Key('settings-privacy'), label: Strings.privacy, palette: p, onTap: () => unawaited(NativeLockApi.openPage('privacy'))),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(-12, 0),
+                    child: _GoldWord(key: const Key('settings-terms'), label: Strings.terms, palette: p, onTap: () => unawaited(NativeLockApi.openPage('terms'))),
+                  ),
+                  // who made the sky, the type and (on Android) the speech engine, as their licences ask; quiet, last
+                  const SizedBox(height: 6),
+                  Text(Strings.credits, key: const Key('settings-credits'), style: hint),
+                  if (Phone.android) ...[
+                    const SizedBox(height: 6),
+                    Text(Strings.creditsAndroid, key: const Key('settings-credits-android'), style: hint),
+                  ],
                 ]),
                 hairline(),
                 // ---- phone check: test builds only, never in English or Spanish strings for people ----

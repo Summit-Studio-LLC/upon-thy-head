@@ -89,6 +89,12 @@ enum LockChannel {
     case "openSettings":
       if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
       result(nil)
+    case "openPage":
+      // Settings' Privacy and Terms, in Safari: only these two addresses, chosen by name. Safari
+      // loads the page; the app itself makes no network call for it.
+      let pages = ["privacy": "https://uponthyhead.app/privacy", "terms": "https://uponthyhead.app/terms"]
+      if let page = pages[args["name"] as? String ?? ""], let url = URL(string: page) { UIApplication.shared.open(url) }
+      result(nil)
     case "debugCovered":
       result(cover != nil)
     default:

@@ -252,6 +252,17 @@ class LockChannel(private val activity: () -> Activity?, private val context: Co
                 context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 result.success(null)
             }
+            // Settings' Privacy and Terms, in the phone's browser: only these two addresses, chosen by
+            // name. The browser loads the page; the app itself makes no network call for it.
+            "openPage" -> {
+                val page = mapOf("privacy" to "https://uponthyhead.app/privacy", "terms" to "https://uponthyhead.app/terms")[call.argument<String>("name")]
+                if (page != null) {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(page)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+                result.success(null)
+            }
             // the iPhone's Face ID question; Android has none (the first run proves the lock with one unlock)
             "askBiometrics" -> onMethodCall(MethodCall("biometry", null), result)
             else -> result.notImplemented()

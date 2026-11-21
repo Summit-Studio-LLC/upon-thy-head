@@ -136,6 +136,12 @@ class SkyEngine extends ChangeNotifier {
   bool _dragging = false;
   bool reduceMotion = false;
 
+  /// How far down the canvas home's head reaches (whose sky, its count line, More and the list) on
+  /// a screen wider than it is tall; 0 elsewhere. Set by home after each layout.
+  double clearTop = 0;
+  double _fit = 1;
+  (Size, double, double)? _fitFor;
+
   /// True once the person has dragged away from the blessing in focus.
   bool get free => _free;
   bool _free = false;
@@ -420,6 +426,54 @@ class SkyEngine extends ChangeNotifier {
     }
   }
 
+  /// Reduce Motion, as a new light arrives on home: no zoom and no turn. The camera takes home's
+  /// framing at once and the lights fade in over it, a plain cross-fade in place of the motion.
+  void crossFade() {
+    fov = _goalFov;
+    cy = _goal.cy;
+    _bump = 0;
+    lights = 0;
+  }
+
+  /// How much to zoom home's sky in (1: not at all) so the ring at declination [dec] keeps below
+  /// [top] across a canvas of [size]. A ring curves up toward the pole on both sides of the light
+  /// in focus; on a wide screen (an iPad in landscape) the sides reach so far that, at the
+  /// latitudes of most homes, the line and its lights ran behind the controls at the top. Zooming
+  /// in narrows the sides until they clear, at home's own framing; never past [most].
+  static double fitBelow(Size size, double dec, double top, {double fov = 90, double cy = .2, double most = .3}) {
+    if (top <= 0 || size.width <= size.height) return 1;
+    // a margin for the lights' cores and their dates
+    final below = top + 16;
+    final cd = math.cos(dec), sd = math.sin(dec);
+    bool clear(double s) {
+      final ty = 2 * math.tan(fov * deg / 4) * s, tx = ty * size.width / size.height;
+      // the camera on the ring at right ascension 0: forward (cd, 0, sd), right (0, -1, 0), up (-sd, 0, cd)
+      for (var i = 0; i < 1440; i++) {
+        final t = i / 1440 * tau, vx = cd * math.cos(t), vy = cd * math.sin(t);
+        final z = vx * cd + sd * sd;
+        if (z < .05) continue;
+        final k = 2 / (1.0001 + z);
+        final x = (-vy * k / tx * .5 + .5) * size.width;
+        final y = (1 - ((-sd * vx + cd * sd) * k / ty + cy) * .5 - .5) * size.height;
+        if (x >= 0 && x <= size.width && y >= 0 && y <= below) return false;
+      }
+      return true;
+    }
+
+    if (clear(1)) return 1;
+    if (!clear(most)) return most;
+    var lo = most, hi = 1.0;
+    for (var j = 0; j < 12; j++) {
+      final m = (lo + hi) / 2;
+      if (clear(m)) {
+        lo = m;
+      } else {
+        hi = m;
+      }
+    }
+    return lo;
+  }
+
   /// Refresh the camera basis for a canvas of [size].
   void basis(Size size) {
     _size = size;
@@ -433,7 +487,16 @@ class SkyEngine extends ChangeNotifier {
     ux = -sd * ca;
     uy = -sd * sa;
     uz = cd;
-    ty = 2 * math.tan((fov + _bump) * deg / 4);
+    // home's zoom for a wide screen (see [fitBelow]), worked out again only when the screen, the
+    // head or the ring changes; it eases in and out with home's names, as the camera goes to and from home
+    final ringDec = _blessings.isEmpty ? 0.0 : _blessings.first.dec;
+    final key = (size, clearTop, ringDec);
+    if (key != _fitFor) {
+      _fitFor = key;
+      _fit = _blessings.isEmpty ? 1 : fitBelow(size, ringDec, clearTop, fov: SkyView.home.fov, cy: SkyView.home.cy);
+    }
+    final zoom = 1 - (1 - _fit) * names.clamp(0.0, 1.0);
+    ty = 2 * math.tan((fov + _bump) * deg / 4) * zoom;
     tx = ty * size.width / size.height;
   }
 

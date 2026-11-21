@@ -282,6 +282,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ReviewLayerState> _reviewKey = GlobalKey();
   final GlobalKey<ReadLayerState> _readKey = GlobalKey();
 
+  /// Home's head, measured after layout so a wide screen's ring can keep below it.
+  final GlobalKey _headKey = GlobalKey();
+
+  /// On a screen wider than tall (an iPad in landscape) the sky is told where the head ends, so the
+  /// ring is sized to pass below it (SkyEngine.fitBelow); a phone held upright is left as it is.
+  void _measureHead() {
+    if (!mounted) return;
+    final size = MediaQuery.sizeOf(context);
+    final box = _headKey.currentContext?.findRenderObject();
+    final bottom = size.width > size.height && box is RenderBox && box.hasSize ? box.localToGlobal(Offset(0, box.size.height)).dy : 0.0;
+    _engine.clearTop = bottom;
+  }
+
   /// The remembered language, and where recordings go; read once at start.
   late final Future<(Settings, String)> _speechSetup = Future.wait<Object>([
     Settings.open(),
@@ -1020,12 +1033,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return i;
   }
 
-  /// "Save for later": the new blessing joins the sky and the sky comes back.
+  /// "Save for later": the new blessing joins the sky and the sky comes back (Reduce Motion: it
+  /// fades in, and the sky neither turns nor zooms).
   Future<void> _saveForLater() async {
     final i = await _joinSky();
     if (i == null) return;
     _engine.setView(SkyView.home);
     _lookHome(i);
+    if (_engine.reduceMotion) _engine.crossFade();
     setState(() {
       _showNow();
       _stage = Stage.home;
@@ -1178,6 +1193,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final i = _blessings.indexWhere((x) => x.id == b.id);
     _engine.setView(SkyView.home);
     if (i >= 0) _engine.setFocus(i, instant: _engine.reduceMotion);
+    if (_engine.reduceMotion) _engine.crossFade();
     setState(() {
       _showNow();
       _stage = Stage.home;
@@ -2311,6 +2327,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final reading = _locked ? null : (_aside ?? (_blessings.isEmpty ? null : _blessings[_engine.focus.clamp(0, _blessings.length - 1)]));
     if (_inbox.isNotEmpty) _scheduleArrival();
     if (_shortcut != null) _scheduleShortcut();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHead());
     return PopScope(
       canPop: _backLeavesApp,
       onPopInvokedWithResult: (didPop, _) {
@@ -2404,7 +2421,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                    Positioned(left: 24, right: 12, top: top, child: _head(p)),
+                    Positioned(left: 24, right: 12, top: top, child: KeyedSubtree(key: _headKey, child: _head(p))),
                   ],
                 ),
               ),

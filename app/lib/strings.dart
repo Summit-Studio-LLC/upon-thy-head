@@ -240,6 +240,10 @@ class Strings {
   static String get useMyLocation => _w.useMyLocation;
   static String get about => _w.about;
   static String get aboutBody => Phone.android ? _w.aboutBodyAndroid : _w.aboutBody;
+  static String get privacy => _w.privacy;
+  static String get terms => _w.terms;
+  static String get credits => _w.credits;
+  static String get creditsAndroid => _w.creditsAndroid;
   static String version(String v) => _w.version(v);
   static String fullDate(DateTime d) => _w.fullDate(d);
   static String get share => _w.share;
@@ -575,6 +579,9 @@ extension WordsCatalogue on Words {
         'useMyLocation': useMyLocation,
         'about': about,
         'aboutBody': aboutBody,
+        'privacy': privacy,
+        'terms': terms,
+        'credits': credits,
         'share': share,
         'shareTitle': shareTitle,
         'asText': asText,
@@ -686,6 +693,7 @@ extension WordsCatalogue on Words {
         'faceIdKeepReason': faceIdKeepReason,
         'sameAsPhoneAndroid': sameAsPhoneAndroid,
         'aboutBodyAndroid': aboutBodyAndroid,
+        'creditsAndroid': creditsAndroid,
         'notifications': notifications,
         'notificationsWhy': notificationsWhy,
         'screenLock': screenLock,
@@ -1094,6 +1102,13 @@ class Words {
   String get useMyLocation => 'Use my location';
   String get about => 'About';
   String get aboutBody => 'Your words stay on this iPhone. Nothing leaves it unless you share it.';
+  String get privacy => 'Privacy';
+  String get terms => 'Terms';
+  /// What the app ships that others made, as their licences ask (the HYG Database's CC BY-SA asks for credit).
+  String get credits => 'The sky is the real one. Stars and their names: the HYG Database by David Nash, CC BY-SA 4.0. '
+      'Constellation figures: d3-celestial by Olaf Frohn, BSD 3-Clause License. '
+      'The Milky Way: NASA/Goddard Space Flight Center Scientific Visualization Studio, with Gaia data from ESA/Gaia/DPAC. '
+      'Typeface: Newsreader by Production Type, SIL Open Font License 1.1.';
   String version(String v) => 'Version $v';
 
   // ---- sharing (share/share.dart) ----
@@ -1236,6 +1251,8 @@ class Words {
   // ---- Android (docs/android-plan.md 9; the iPhone's strings above stay as they are) ----
   String get sameAsPhoneAndroid => 'Same as this phone';
   String get aboutBodyAndroid => 'Your words stay on this phone. Nothing leaves it unless you share it.';
+  /// Android writes the words on the phone with these; the iPhone uses its own speech recognition.
+  String get creditsAndroid => 'Speech on Android: whisper.cpp, OpenAI Whisper and Silero VAD, MIT License.';
   String get notifications => 'Notifications';
   String get notificationsWhy => 'So you can see that it is still recording when the phone is locked.';
   String get screenLock => 'Screen lock';
@@ -1851,6 +1868,15 @@ class _Spanish implements Words {
   @override
   String get aboutBody => 'Tus palabras se quedan en este iPhone. Nada sale de él a menos que lo compartas.';
   @override
+  String get privacy => 'Privacidad';
+  @override
+  String get terms => 'Términos';
+  @override
+  String get credits => 'El cielo es el cielo real. Las estrellas y sus nombres: la base de datos HYG de David Nash, CC BY-SA 4.0. '
+      'Las figuras de las constelaciones: d3-celestial de Olaf Frohn, licencia BSD de 3 cláusulas. '
+      'La Vía Láctea: NASA/Goddard Space Flight Center Scientific Visualization Studio, con datos de Gaia de ESA/Gaia/DPAC. '
+      'Tipografía: Newsreader de Production Type, SIL Open Font License 1.1.';
+  @override
   String version(String v) => 'Versión $v';
 
   // ---- compartir ----
@@ -2114,6 +2140,8 @@ class _Spanish implements Words {
   String get sameAsPhoneAndroid => 'Igual que este teléfono';
   @override
   String get aboutBodyAndroid => 'Tus palabras se quedan en este teléfono. Nada sale de él a menos que lo compartas.';
+  @override
+  String get creditsAndroid => 'La voz en Android: whisper.cpp, OpenAI Whisper y Silero VAD, licencia MIT.';
   @override
   String get notifications => 'Notificaciones';
   @override

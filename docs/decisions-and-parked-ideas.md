@@ -6,6 +6,16 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ### 2026-11-20
 
+- **Six fixes before the store build; the app is now 1.0.0 (build 12).**
+  - **Review page:** at the largest text on a narrow phone the listen row's time goes under the line instead of overflowing. The iPad layout test had been skipping this case; the skip is gone.
+  - **iPad in landscape:** home measures where its top controls end and, on a screen wider than it is tall, zooms the sky just enough for the ring to pass 16 points below them. Portrait screens are untouched. Limit (the builder's choice): never more than about 3.3×, so above roughly 60° latitude the line can still reach the controls.
+  - **Glass menu at large text:** the pinned glass package holds the count line to one line, so at large text the app draws the name and count itself and the count wraps as far as it needs (it can be three lines on a phone).
+  - **Reduce Motion:** when a blessing is kept, the camera goes straight to home's framing and the lights fade in.
+  - **Privacy and Terms in Settings, under About.** App Review guideline 5.1.1(i) asks that the privacy policy be reachable inside the app. Only the name "privacy" or "terms" crosses the lock channel; the two addresses are in the Swift and Kotlin code, so the channel can open nothing else. The browser loads the page; the app still makes no network call but the link service.
+  - **Credits in Settings, under About:** the HYG Database (CC BY-SA 4.0, which requires the credit), d3-celestial's constellation figures (BSD 3-Clause), NASA's Milky Way with Gaia data, Newsreader; on Android also whisper.cpp, Whisper and Silero VAD (MIT).
+  - **Proven:** analyzer clean, 638 unit and widget tests pass, one look at the iPad in landscape on a simulator. **Not proven:** the Kotlin change was not compiled; Privacy and Terms were not opened on a device; the Reduce Motion fade was not seen by eye.
+  - **Open:** BSD 3-Clause asks for its notice and licence text, not only a credit line; a licences page (in the app or on the website) would settle it. The Milky Way picture's source is taken from the prototype's own credits; the file carries none.
+
 - **Getting ready for Apple's review (Noah: "please get on it. let's open up the browser and begin submitting things").** Asked whether the app was ready for review, the answer was no: the listing in App Store Connect was empty, the website had no privacy or help page, and the final evaluation had not run.
   - **Website:** `/privacy` and `/support` added (Apple requires both addresses). They are plain reading pages like `/terms`; the three share `website/app/plain-page.tsx`, and their words are in `website/app/content.ts`. Every sentence on the privacy page describes what the app and the link service do today, so the code and that page change together.
   - **The listing, filled through Apple's API** (scripts kept in the session's scratch folder, not the repo): description, promotional text and keywords in English (U.S.), Spanish (Mexico) and Spanish (Spain); subtitle "Keep your priesthood blessings" / "Guarda tus bendiciones"; support, marketing and privacy addresses; copyright "2026 Summit Studio, LLC"; review notes that walk the reviewer through recording, entering and family, and say what leaves the phone.

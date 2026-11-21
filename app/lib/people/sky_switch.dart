@@ -84,7 +84,7 @@ class _SkySwitchState extends State<SkySwitch> {
     final width = large ? mq.size.width - 32 : math.min(300.0, mq.size.width - 32);
     return GlassMenu(
       controller: _menu,
-      items: [for (final it in _items) ..._row(it, scale, large)],
+      items: [for (final it in _items) ..._row(it, scale, large, width)],
       menuWidth: width,
       menuAlignment: GlassMenuAlignment.topLeft,
       autoAdjustToScreen: true,
@@ -98,23 +98,57 @@ class _SkySwitchState extends State<SkySwitch> {
     );
   }
 
-  List<Widget> _row(PullDownItem it, double scale, bool large) {
+  List<Widget> _row(PullDownItem it, double scale, bool large, double menuWidth) {
     final p = widget.palette;
     final lines = large ? 2 : 1;
+    final titleStyle = sans(16, 21, p.ink), subStyle = sans(13, 17, p.ink2);
+    final mark = PullDownMarkGlyph(key: const Key('pull-down-mark'), mark: it.mark, ticked: it.ticked, color: p.ink);
+    // The package draws a row's count line on one line only. At large text a long one would end in
+    // "…" (at the very largest it can need three lines on a phone), so there the row's words are
+    // drawn here, in the slot the package gives the tick, wide enough to fill the row (the menu's 12
+    // each side, the row's 16 each side, the package's 12 after the tick, one to spare), and the
+    // count line wraps as far as it needs. The package's own words are kept but not seen, so a
+    // screen reader still hears the name and then the count line, as before.
+    final ownWords = large && it.sub != null;
+    final slot = menuWidth - 24 - 32 - 12 - 1;
+    var subLines = 1;
+    if (ownWords) {
+      final tp = TextPainter(text: TextSpan(text: it.sub, style: subStyle), textDirection: TextDirection.ltr, textScaler: TextScaler.linear(scale))
+        ..layout(maxWidth: math.max(1.0, slot - 14 - 12));
+      subLines = math.max(1, tp.computeLineMetrics().length);
+      tp.dispose();
+    }
     // the row's height as drawn, so the menu is measured to fit its rows exactly
-    final words = 21 * scale * lines + (it.sub == null ? 0 : 1 + 17 * scale);
+    final words = 21 * scale * lines + (it.sub == null ? 0 : 1 + 17 * scale * subLines);
+    const hidden = Color(0x00000000);
     return [
       if (it.groupStart) const GlassMenuDivider(),
       GlassMenuItem(
         key: Key('pull-down-${it.code}'),
         title: it.label,
         subtitle: it.sub,
-        maxLines: lines,
+        maxLines: ownWords ? 1 : lines,
         height: math.max(44, 16 + words),
-        titleStyle: sans(16, 21, p.ink),
-        subtitleStyle: sans(13, 17, p.ink2),
+        titleStyle: ownWords ? titleStyle.copyWith(color: hidden) : titleStyle,
+        subtitleStyle: ownWords ? subStyle.copyWith(color: hidden, fontSize: .01, height: 1) : subStyle,
         // the app's own tick and plus, where iPhone's menus put the tick: before the name
-        icon: PullDownMarkGlyph(key: const Key('pull-down-mark'), mark: it.mark, ticked: it.ticked, color: p.ink),
+        icon: !ownWords
+            ? mark
+            : SizedBox(
+                key: Key('pull-down-words-${it.code}'),
+                width: slot,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // beside the name's first line
+                  Padding(padding: EdgeInsets.only(top: math.max(0, (21 * scale - 14) / 2)), child: mark),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(it.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
+                      Text(it.sub!, style: subStyle),
+                    ]),
+                  ),
+                ]),
+              ),
         iconSize: 14,
         semanticsSelected: it.ticked,
         semanticLabel: it.semantics ?? it.label,

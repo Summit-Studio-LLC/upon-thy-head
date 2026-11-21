@@ -77,6 +77,19 @@ class NativeLockApi implements LockApi {
   /// Android: the phone's own screen-lock settings (a phone with no screen lock).
   static Future<void> openSecurity() => _channel.invokeMethod<void>('openSecurity');
 
+  /// The website's privacy policy or terms, [name] "privacy" or "terms", in the phone's own browser,
+  /// leaving the app. Only a name crosses the channel: the two addresses live in the native code,
+  /// which opens nothing else. (The browser loads the page; the app itself makes no network call.)
+  static Future<void> openPage(String name) async {
+    try {
+      await _channel.invokeMethod<void>('openPage', {'name': name});
+    } on MissingPluginException {
+      // a test, or a platform without the channel: nothing to open
+    } on PlatformException {
+      // no browser to open it in: nothing to show
+    }
+  }
+
   /// Tests: whether the cover is up now.
   static Future<bool> debugCovered() async => await _channel.invokeMethod<bool>('debugCovered') ?? false;
 }
