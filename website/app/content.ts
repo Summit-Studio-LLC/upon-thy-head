@@ -125,6 +125,8 @@ export const en = {
         heading: "Upon Thy Head",
         links: [
           { label: "Home", href: "/" },
+          { label: "Help", href: "/support" },
+          { label: "Privacy", href: "/privacy" },
           { label: "Terms", href: "/terms" },
         ],
       },
@@ -227,6 +229,201 @@ export const en = {
           [
             "If these terms change, the new ones will be on this page with a new date. Questions go to ",
             { link: "Summit Studio", href: "https://www.summitstudio.dev/contact" },
+            ".",
+          ],
+        ],
+      },
+    ],
+  },
+  // The privacy page. Every sentence here is a promise the app and the link service must keep:
+  // change the code and this page together.
+  privacy: {
+    title: "Privacy",
+    description: "What the app Upon Thy Head and uponthyhead.app know about you: nothing. Your blessings stay on your phone.",
+    changed: "Last changed 20 November 2026.",
+    intro:
+      "This is the privacy policy for the app Upon Thy Head and for this website. In short: your blessings stay on your phone, there is no account, and we collect nothing about you.",
+    back: "Upon Thy Head",
+    sections: [
+      {
+        heading: "What stays on your phone",
+        body: [
+          [
+            "Everything you put in the app is kept in the app’s own storage on your phone or tablet: the words of each blessing, its date, who gave it, the names of your family members, and your settings. None of it is sent to us. We have no copy and no way to read it.",
+          ],
+          [
+            "A recording is kept only until you have read the words through. Then it is erased. Recordings are left out of iCloud and computer backups.",
+          ],
+          [
+            "If you back up your iPhone or iPad with iCloud or a computer, the written blessings are part of that backup, as with any app. That backup is between you and Apple. On Android the app’s data is not included in Google’s backup.",
+          ],
+        ],
+      },
+      {
+        heading: "What the app asks your phone for",
+        body: [
+          [
+            "The microphone, only while you are recording a blessing. The sound is written down by the phone itself. It is not sent to us, to Apple, to Google or to anyone else. On Android the app downloads a speech model once, the first time it is needed; after that the writing needs no connection.",
+          ],
+          [
+            "Your location, once, if you allow it, and only roughly. It is used to set the sky to the place where your first blessing was given. It is kept on the phone and never sent anywhere. The app works without it.",
+          ],
+          [
+            "Face ID, your fingerprint or your screen lock, to open the app. The phone does the checking and tells the app only yes or no.",
+          ],
+        ],
+      },
+      {
+        heading: "When you share a blessing as a link",
+        body: [
+          [
+            "This is the only time anything leaves your phone for our servers, and it happens only when you choose it. The phone locks a copy of the blessing and sends the locked copy to this site, which keeps it for 30 days so the other person can open it. The key is the part of the link after the #. It never reaches us, so we cannot read the copy.",
+          ],
+          [
+            "With the locked copy we keep the day it stops and a value that lets your phone stop it early. We keep nothing about you, your phone or the person you send it to. You can stop a link from the app at any time, and the copy is removed at once.",
+          ],
+          [
+            "Sharing a blessing as a file, as text or as a PDF does not involve us at all. It goes wherever you send it.",
+          ],
+        ],
+      },
+      {
+        heading: "Keeping the link service from being misused",
+        body: [
+          [
+            "To stop one sender from overloading the service, it counts requests from each internet address for a short time. The address is mixed with a secret and only the mix is held, in memory. It is never stored and never written to a log of ours.",
+          ],
+          [
+            "The app can also prove to the service that it is a real copy of Upon Thy Head, using Apple’s App Attest or Google’s Play Integrity. This tells us only that the app is real. Nothing about your phone is kept.",
+          ],
+        ],
+      },
+      {
+        heading: "This website",
+        body: [
+          [
+            "This site has no analytics, no advertising, no tracking and no cookies. It is hosted by Vercel, and locked copies of shared blessings are stored with Neon. As with any website, the hosting company’s systems see your internet address in order to send you the page, and may keep technical logs for a short time. We do not use them to learn who you are.",
+          ],
+        ],
+      },
+      {
+        heading: "What we do not do",
+        body: [
+          [
+            "There is no account and nothing to sign in to. There are no ads. Nothing in the app tracks you or measures how you use it. We do not sell or pass on information about you, because we have none.",
+          ],
+        ],
+      },
+      {
+        heading: "Children",
+        body: [
+          [
+            "A parent can keep a child’s blessings in the app on the parent’s own phone. The app collects nothing from anyone, children included.",
+          ],
+        ],
+      },
+      {
+        heading: "Removing what you have kept",
+        body: [
+          [
+            "Delete a blessing in the app and it is gone from the phone. Remove the app and everything it kept is removed with it. A shared link stops when you stop it, or by itself after 30 days, and the locked copy is then removed from our servers.",
+          ],
+        ],
+      },
+      {
+        heading: "Changes and questions",
+        body: [
+          [
+            "If this policy changes, the new one will be on this page with a new date. Questions go to ",
+            { link: "hello@summitstudio.dev", href: "mailto:hello@summitstudio.dev" },
+            " or to ",
+            { link: "Summit Studio", href: "https://www.summitstudio.dev/contact" },
+            ".",
+          ],
+        ],
+      },
+    ],
+  },
+  // The help page: where to write, and the questions people are likely to have.
+  support: {
+    title: "Help",
+    description: "Help with the app Upon Thy Head, and how to reach Summit Studio.",
+    changed: "",
+    intro:
+      "Upon Thy Head is made by Summit Studio. If something is not working, or you have a question that is not answered here, write to us and a person will answer.",
+    back: "Upon Thy Head",
+    sections: [
+      {
+        heading: "Write to us",
+        body: [
+          [
+            { link: "hello@summitstudio.dev", href: "mailto:hello@summitstudio.dev" },
+            ". It helps to say which phone or tablet you have. Please do not send us the words of a blessing; we never need them to help you.",
+          ],
+        ],
+      },
+      {
+        heading: "The app will not record",
+        body: [
+          [
+            "The app needs the microphone and, on iPhone and iPad, speech recognition. If you answered “Don’t Allow” the first time, open the Settings app, find Upon Thy Head, and turn on Microphone and Speech Recognition.",
+          ],
+          [
+            "Set the phone near the person giving the blessing, face up, and press Begin. It keeps listening with the screen locked.",
+          ],
+        ],
+      },
+      {
+        heading: "Some words were written wrongly",
+        body: [
+          [
+            "The writing is done by the phone and it can mishear. Before you keep a blessing, read it through and correct anything that is wrong. You can listen to the recording while you read. You can also correct the words later, from the blessing itself.",
+          ],
+        ],
+      },
+      {
+        heading: "I have a blessing that is already written down",
+        body: [
+          [
+            "Choose to enter a past blessing, then type or paste the words and give the date. If you only know the year, or the month and year, that is enough.",
+          ],
+        ],
+      },
+      {
+        heading: "Keeping blessings for my children",
+        body: [
+          [
+            "Touch “For me” at the top of the home screen and add a family member. Each one has their own sky. When a child is grown, open Manage family and hand their blessings over: the app makes one link that puts all of them on the child’s own phone.",
+          ],
+        ],
+      },
+      {
+        heading: "A link I was sent will not open",
+        body: [
+          [
+            "A link works for 30 days, or until the person who sent it stops it. After that the blessing is no longer there to open. Ask them to send it again. The whole link is needed, including everything after the #.",
+          ],
+        ],
+      },
+      {
+        heading: "I lost my phone, or removed the app",
+        body: [
+          [
+            "Your blessings are kept only on your phone, so we have no copy to give back. If you restore a new iPhone or iPad from a backup of the old one, the written blessings come back with it.",
+          ],
+          [
+            "To keep a copy somewhere else, open a blessing, choose to share it, and save it as a file or a PDF.",
+          ],
+        ],
+      },
+      {
+        heading: "More",
+        body: [
+          [
+            "How the app treats what you keep in it is on the ",
+            { link: "privacy page", href: "/privacy" },
+            ". The terms are on the ",
+            { link: "terms page", href: "/terms" },
             ".",
           ],
         ],
