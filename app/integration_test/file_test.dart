@@ -359,7 +359,7 @@ void main() {
       };
       expect(readBlessingFile(json(edited)), isA<BlessingReadOk>());
       write('Comfort before surgery (edited).blessing', json(edited));
-      write('Newer.blessing', json({...surgery, 'version': 2, 'id': 'newer', 'voice': 'something new'}));
+      write('Newer.blessing', json({...surgery, 'version': blessingFormatVersion + 1, 'id': 'newer', 'voice': 'something new'}));
       write('Rubbish.blessing', [...utf8.encode('This is not a blessing at all.\n'), 0, 255, 254, 1, 2, 3]);
       final big = {...surgery, 'id': 'big', 'words': List.filled(60000, 'Long words. ').join(), 'changes': []};
       final bigBytes = json(big);
