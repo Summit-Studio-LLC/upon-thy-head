@@ -4,6 +4,22 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ## Decisions
 
+### 2026-11-20
+
+- **Getting ready for Apple's review (Noah: "please get on it. let's open up the browser and begin submitting things").** Asked whether the app was ready for review, the answer was no: the listing in App Store Connect was empty, the website had no privacy or help page, and the final evaluation had not run.
+  - **Website:** `/privacy` and `/support` added (Apple requires both addresses). They are plain reading pages like `/terms`; the three share `website/app/plain-page.tsx`, and their words are in `website/app/content.ts`. Every sentence on the privacy page describes what the app and the link service do today, so the code and that page change together.
+  - **The listing, filled through Apple's API** (scripts kept in the session's scratch folder, not the repo): description, promotional text and keywords in English (U.S.), Spanish (Mexico) and Spanish (Spain); subtitle "Keep your priesthood blessings" / "Guarda tus bendiciones"; support, marketing and privacy addresses; copyright "2026 Summit Studio, LLC"; review notes that walk the reviewer through recording, entering and family, and say what leaves the phone.
+  - **Choices nobody ruled on (mine; each can be changed in App Store Connect):**
+    - Categories: Lifestyle first, Productivity second.
+    - Age rating: every answer "none", which gives 4+. Sharing a blessing by link with a person you choose was not counted as user-generated content or messaging.
+    - Price: free. Countries: all 174 except China mainland, which now asks every new app for a security assessment and a filing on generated content.
+    - Release: held for Noah's button after approval, not automatic.
+    - Content rights: "uses third-party content, with the rights", because the app ships the HYG star catalogue (CC BY-SA 4.0) and NASA's Milky Way.
+    - Keywords include "LDS" and "SUD", which people search for although the Church asks that they not be used as names. They are never shown on the page.
+    - App Privacy: "No, we do not collect data from this app", saved but not published. Apple's own definition of "collect" is data sent off the device and stored "in a readable form"; the only thing the service stores is a locked copy it cannot read. Publishing is a declaration in Noah's name, so the Publish button is left to him.
+  - **Found while doing it, and sent to the builder:** the app showed no credit for the star data (the licence requires one) and had no link to the privacy policy inside the app (App Review guideline 5.1.1(i) requires one). Both go in Settings, under About.
+  - **Left for Noah:** the review contact (name, phone, email), the App Privacy Publish button, the Digital Services Act status (Apple shows this app as "non-trader"; an LLC offering an app is probably a trader, and a trader's address, phone and email are shown to people in the European Union), and Submit.
+
 ### 2026-11-18
 
 - **Pull down on a blessing's reading page to go home (Noah: "it needs to be intentional").**
