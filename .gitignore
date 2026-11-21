@@ -3,3 +3,5 @@
 # Simulator screenshots and films from test runs (about 850 MB). Every one is
 # written again by the scripts in app/tool/, so they stay on disk and out of git.
 design/sim/
+# the App Store screenshots: made again by app/tool/store_shots.sh
+design/store/
