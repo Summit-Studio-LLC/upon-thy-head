@@ -9,6 +9,7 @@ import '../data/blessing.dart';
 import '../not_yet.dart';
 import '../people/person.dart';
 import '../people/whose_choice.dart';
+import '../polish/model.dart';
 import '../polish/polish.dart';
 import '../record/model_offer.dart';
 import '../record/session.dart';
@@ -118,6 +119,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   /// until they change.
   String? _nothingFor;
 
+  /// The phone's own model is polishing the words ("Polishing…"); leaving the page stops it.
+  PolishWork? _work;
+
+  /// The phone has a model that takes this blessing's language, so polish uses it as well as the
+  /// rules. Asked as the page opens; until it answers, polish is the rules alone.
+  bool _modelReady = false;
+
   Blessing? get _b => widget.blessing;
 
   /// The words are still being written from the recording.
@@ -199,6 +207,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
+    _work?.cancel();
     for (final c in [_scroll, _title, _from, _for, _tag, _words]) {
       c.dispose();
     }
@@ -226,7 +235,22 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     _finishing = false;
     _dating = false;
     if (_scroll.hasClients) _scroll.jumpTo(0);
+    _stopPolish();
+    _askModel(b);
     _loadAudio();
+  }
+
+  /// Whether the phone's model can polish [b]'s words (never one entered from a written copy).
+  Future<void> _askModel(Blessing b) async {
+    _modelReady = false;
+    if (b.entered) return;
+    final ready = await phoneModel.ready(b.language);
+    if (mounted && _b?.id == b.id) setState(() => _modelReady = ready);
+  }
+
+  void _stopPolish() {
+    _work?.cancel();
+    _work = null;
   }
 
   void _setQuietly(TextEditingController c, String text) {
@@ -245,6 +269,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   }
 
   void _close() {
+    _stopPolish();
     FocusManager.instance.primaryFocus?.unfocus();
     widget.player.unload();
     _finishing = false;
@@ -298,7 +323,21 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     final b = _b;
     if (b == null) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    Polish.run(b);
+    if (_modelReady) {
+      if (_work != null) return;
+      final work = _work = PolishWork();
+      setState(() {});
+      final person = [for (final p in widget.people) if (p.id == b.personId) p.name];
+      final n = await Polish.runWithModel(b, model: phoneModel, names: Polish.namesOf(b, person), work: work);
+      if (_work == work) _work = null;
+      // left the page, or another blessing opened in the meantime: nothing was added
+      if (n == null || !mounted || !widget.on || _b?.id != b.id) {
+        if (mounted) setState(() {});
+        return;
+      }
+    } else {
+      Polish.run(b);
+    }
     _dirty = true;
     await flush();
     if (!mounted) return;
@@ -956,6 +995,13 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
         detail: Strings.polishedRow(kept, b.changes.length),
         onTap: () => widget.onChanges?.call(),
       );
+    } else if (_work != null) {
+      child = Container(
+        key: const Key('review-polishing'),
+        height: 44,
+        alignment: Alignment.centerLeft,
+        child: Semantics(liveRegion: true, child: Text(Strings.polishing, style: sans(15, 20, p.ink3))),
+      );
     } else if (_nothingFor == b.rawText) {
       child = Container(
         height: 44,
@@ -967,7 +1013,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
         offset: const Offset(-12, 0),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: _QuietAction(key: const Key('review-polish'), label: Strings.polishWords, hint: Strings.polishWordsHint, palette: p, onTap: _polish),
+          child: _QuietAction(key: const Key('review-polish'), label: Strings.polishWords, hint: _modelReady ? Strings.polishWordsHintModel : Strings.polishWordsHint, palette: p, onTap: _polish),
         ),
       );
     }

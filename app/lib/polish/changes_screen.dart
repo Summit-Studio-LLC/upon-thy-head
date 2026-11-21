@@ -12,6 +12,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/swap_text.dart';
 import 'change.dart';
+import 'model.dart';
 
 /// The changes screen (the prototype's "Review changes", design/prototype/shots/05-review-changes.png):
 /// the polished words with every change marked, by size, and a sheet to step through them, restore
@@ -67,6 +68,18 @@ String kindWords(ChangeKind k) => switch (k) {
       ChangeKind.grammar => Strings.kindGrammar,
       ChangeKind.punctuation => Strings.kindPunctuation,
     };
+
+/// What a change did, in words. The phone's model makes only punctuation (with capitals and
+/// paragraphs) and one word for another (stored as `grammar`, so files stay readable by every
+/// version); these are named by what they did.
+String changeWords(Change c) {
+  if (c.source != ModelSource.name) return kindWords(c.kind);
+  if (c.kind == ChangeKind.grammar) return Strings.kindWord;
+  if (c.kind != ChangeKind.punctuation) return kindWords(c.kind);
+  if (c.now.contains('\n') && !c.was.contains('\n')) return Strings.kindParagraph;
+  if (c.now.toLowerCase() == c.was.toLowerCase()) return Strings.kindCapital;
+  return Strings.kindPunctuation;
+}
 
 /// The underline of a change (the prototype's `.e`: 2 px, 6 px under the text): drawn from [x0] to
 /// [x1] under the line whose baseline is at [baseline]. [size] null: a restored change, a thin
@@ -682,7 +695,7 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
 
   String _label(int n) {
     final c = _changes[n];
-    return Strings.changeLabel(sizeChange(c.size), kindWords(c.kind), c.shownWas, c.shownNow, c.kept);
+    return Strings.changeLabel(sizeChange(c.size), changeWords(c), c.shownWas, c.shownNow, c.kept);
   }
 
   int? _hit(_Layout l, Offset at) {
@@ -741,7 +754,7 @@ class ChangesLayerState extends State<ChangesLayer> with TickerProviderStateMixi
                           liveRegion: true,
                           child: Wrap(crossAxisAlignment: WrapCrossAlignment.end, children: [
                             MarkedLabel(sizeChange(shown.size), key: const Key('sheet-size'), style: sans(13, 20, p.ink), size: shown.size),
-                            Text(' ${kindWords(shown.kind)}', key: const Key('sheet-kind'), style: label),
+                            Text(' ${changeWords(shown)}', key: const Key('sheet-kind'), style: label),
                           ]),
                         ),
                       ),

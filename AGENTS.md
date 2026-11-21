@@ -17,7 +17,7 @@ A free app for iPhone, iPad and Android that turns a priesthood blessing into a 
 
 1. **The words stay on the device.** No analytics, crash reporters, ad or tracking SDKs, and no network call other than the link service (`uponthyhead.app`) and, on Android, the one-time speech model download. Do not add a dependency that phones home.
 2. **Nothing of a blessing leaves the app's own screens** unless the person shares it: no names, dates, titles, words or counts in logs, notifications, Spotlight, launcher shortcuts, widgets or the app switcher.
-3. **Never summarise or reword a blessing.** The exact words as written are always recoverable. Polish only removes filler sounds and repeated short words, and shows what it changed.
+3. **Never summarise or reword a blessing.** The exact words as written are always recoverable. Polish removes filler sounds and repeated short words and, with the phone's own model, mends punctuation, capitals, paragraphs and single misheard words, never more (`lib/polish/model_check.dart`); it shows what it changed.
 4. **The link service sees only locked bytes.** The key travels after the `#` in the link and never reaches the server. The service stores nothing about a device or a person and writes no logs of its own.
 5. **While the app is locked, nothing of any blessing or family member shows**, including to a screen reader.
 6. **Free, no ads, no account.**

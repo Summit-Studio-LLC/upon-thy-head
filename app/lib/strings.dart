@@ -217,6 +217,11 @@ class Strings {
   static String get kindReworded => _w.kindReworded;
   static String get kindGrammar => _w.kindGrammar;
   static String get kindPunctuation => _w.kindPunctuation;
+  static String get kindWord => _w.kindWord;
+  static String get kindCapital => _w.kindCapital;
+  static String get kindParagraph => _w.kindParagraph;
+  static String get polishing => _w.polishing;
+  static String get polishWordsHintModel => _w.polishWordsHintModel;
   static String changeLabel(String size, String kind, String was, String now, bool kept) => _w.changeLabel(size, kind, was, now, kept);
   static String polishedFrom(int kept) => _w.polishedFrom(kept);
   static String get reviewChanges => _w.reviewChanges;
@@ -560,6 +565,11 @@ extension WordsCatalogue on Words {
         'kindReworded': kindReworded,
         'kindGrammar': kindGrammar,
         'kindPunctuation': kindPunctuation,
+        'kindWord': kindWord,
+        'kindCapital': kindCapital,
+        'kindParagraph': kindParagraph,
+        'polishing': polishing,
+        'polishWordsHintModel': polishWordsHintModel,
         'reviewChanges': reviewChanges,
         'locked': locked,
         'unlock': unlock,
@@ -1063,6 +1073,15 @@ class Words {
   String get kindReworded => 'Reworded';
   String get kindGrammar => 'Grammar corrected';
   String get kindPunctuation => 'Punctuation';
+  String get kindWord => 'Word corrected';
+  String get kindCapital => 'Capital letter';
+  String get kindParagraph => 'New paragraph';
+
+  /// While the phone's own model polishes the words; leaving the page stops it.
+  String get polishing => 'Polishing…';
+
+  /// "Polish the words" on a phone whose own model polishes as well as the rules.
+  String get polishWordsHintModel => 'Leaves out filler sounds and stumbled-over words, adds punctuation, and puts right words that were misheard. Every change can be undone.';
 
   /// VoiceOver, for a marked change in the words.
   String changeLabel(String size, String kind, String was, String now, bool kept) =>
@@ -1806,6 +1825,16 @@ class _Spanish implements Words {
   String get kindGrammar => 'Gramática corregida';
   @override
   String get kindPunctuation => 'Puntuación';
+  @override
+  String get kindWord => 'Palabra corregida';
+  @override
+  String get kindCapital => 'Mayúscula';
+  @override
+  String get kindParagraph => 'Párrafo nuevo';
+  @override
+  String get polishing => 'Puliendo…';
+  @override
+  String get polishWordsHintModel => 'Quita las muletillas y las palabras repetidas sin querer, añade la puntuación y corrige las palabras que se oyeron mal. Cada cambio se puede deshacer.';
   @override
   String changeLabel(String size, String kind, String was, String now, bool kept) =>
       '$size. $kind. Original: $was. Pulido: ${now.isEmpty ? leftOut : now}. '

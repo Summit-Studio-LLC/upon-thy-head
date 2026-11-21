@@ -14,7 +14,8 @@ import UIKit
 ///  - `audio` → {"en": path, "es": path} of the prepared recordings in the bundle
 ///  - `arguments` → the launch arguments (`--open-phone-check` opens the page at launch)
 ///  - `device` → model identifier, iOS version, refresh rate, storage
-///  - `engines` → what each engine reports for each locale (see `engines()`)
+///  - `engines` → what each engine reports for each locale (see `engines()`), and under `model` whether
+///    the phone's own language model can polish, and why not (PhoneModel.swift)
 ///  - `transcribe` {path, language, engine} → {text, locale, ms, seconds}; error "unavailable" or "failed"
 ///  - `download` {locale}: start the new engine's model download; `progress` {locale} → {fraction, done, error}
 ///  - `preciseLocation` → whether the person turned Precise Location on for the app
@@ -194,6 +195,7 @@ enum PhoneCheck {
       }
     }
     out["chosen"] = chosen
+    out["model"] = PhoneModelChannel.report()
     return out
   }
 

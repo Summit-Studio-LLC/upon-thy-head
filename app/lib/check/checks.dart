@@ -138,9 +138,13 @@ class _Engines {
         chosen = {
           for (final e in (m['chosen'] as Map).entries)
             e.key as String: (engine: (e.value as Map)['engine'] as String, locale: (e.value as Map)['locale'] as String),
-        };
+        },
+        model = (m['model'] as Map? ?? const {}).cast<String, Object?>();
 
   final bool present, available;
+
+  /// The phone's own language model, for polish (ios/Runner/PhoneModel.swift).
+  final Map<String, Object?> model;
   final Map<String, String> analyzer, recognizer;
   final Map<String, ({String engine, String locale})> chosen;
 
@@ -190,7 +194,26 @@ Future<CheckOutcome> _engines() async {
           'and the older one can write ${c.locale} on the phone.');
     }
   }
+  lines.add(_modelWords(e.model));
   return CheckOutcome(lines);
+}
+
+/// What the phone's language model reports, in words.
+String _modelWords(Map<String, Object?> m) {
+  if (m['available'] == true) {
+    final langs = [if (m['en'] == true) 'English', if (m['es'] == true) 'Spanish'];
+    return 'Polish with Apple\'s on-device model: available, for ${langs.isEmpty ? 'neither English nor Spanish' : langs.join(' and ')}'
+        '${m['languages'] is List ? ' (it takes: ${(m['languages'] as List).join(', ')})' : ''}.';
+  }
+  final why = switch (m['reason']) {
+    'system' => 'it needs iOS 26',
+    'deviceNotEligible' => 'this phone cannot run Apple Intelligence',
+    'appleIntelligenceNotEnabled' => 'Apple Intelligence is turned off',
+    'modelNotReady' => 'the model is not ready yet (often still downloading)',
+    null => 'this build does not report it',
+    final r => 'iOS says "$r"',
+  };
+  return 'Polish with Apple\'s on-device model: not available, because $why. Polish uses the rules alone.';
 }
 
 // ---- 3. the prepared recordings ----
