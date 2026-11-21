@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
@@ -105,8 +108,8 @@ class _PillBtnState extends State<PillBtn> {
       // an iPad: a pill that spans its column on a phone keeps to a phone's width, centred
       child: Center(
       heightFactor: 1,
-      child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: Widths.pill),
+      child: _PhoneWidth(
+      max: Widths.pill,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _down = true),
@@ -192,3 +195,46 @@ class _LightTextBtnState extends State<LightTextBtn> {
   }
 }
 
+
+/// Holds a pill to [max] wide where its space has an edge (a pill spanning its column), and leaves
+/// it its own width where the space has none (a pill beside other things in a row, as Stop on Your
+/// links). A plain width limit would make the second kind [max] wide and push its neighbours out.
+class _PhoneWidth extends SingleChildRenderObjectWidget {
+  const _PhoneWidth({required this.max, super.child});
+
+  final double max;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderPhoneWidth(max);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderPhoneWidth renderObject) => renderObject.max = max;
+}
+
+class _RenderPhoneWidth extends RenderProxyBox {
+  _RenderPhoneWidth(this._max);
+
+  double _max;
+  set max(double v) {
+    if (v == _max) return;
+    _max = v;
+    markNeedsLayout();
+  }
+
+  BoxConstraints _inner(BoxConstraints c) =>
+      c.maxWidth.isFinite ? c.copyWith(minWidth: math.min(c.minWidth, _max), maxWidth: math.min(c.maxWidth, _max)) : c;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      child == null ? constraints.smallest : constraints.constrain(child!.getDryLayout(_inner(constraints)));
+
+  @override
+  void performLayout() {
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child!.layout(_inner(constraints), parentUsesSize: true);
+    size = constraints.constrain(child!.size);
+  }
+}
