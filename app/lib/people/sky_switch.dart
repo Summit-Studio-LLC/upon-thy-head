@@ -15,8 +15,8 @@ import '../widgets/pull_down.dart';
 /// family ([menu]). A row tapped is passed to [onChosen]; a tap outside closes it unchanged.
 ///
 /// The capsule's words stop growing at 1.6× the usual size; the menu's rows follow the person's
-/// own text size, two lines at most for a name, and the menu scrolls when it is taller than the
-/// screen.
+/// own text size, every line whole (wrapping, never "…"), and the menu scrolls when it is taller
+/// than the screen.
 class SkySwitch extends StatefulWidget {
   const SkySwitch({
     super.key,
@@ -100,26 +100,37 @@ class _SkySwitchState extends State<SkySwitch> {
 
   List<Widget> _row(PullDownItem it, double scale, bool large, double menuWidth) {
     final p = widget.palette;
-    final lines = large ? 2 : 1;
     final titleStyle = sans(16, 21, p.ink), subStyle = sans(13, 17, p.ink2);
     final mark = PullDownMarkGlyph(key: const Key('pull-down-mark'), mark: it.mark, ticked: it.ticked, color: p.ink);
-    // The package draws a row's count line on one line only. At large text a long one would end in
-    // "…" (at the very largest it can need three lines on a phone), so there the row's words are
-    // drawn here, in the slot the package gives the tick, wide enough to fill the row (the menu's 12
-    // each side, the row's 16 each side, the package's 12 after the tick, one to spare), and the
-    // count line wraps as far as it needs. The package's own words are kept but not seen, so a
-    // screen reader still hears the name and then the count line, as before.
-    final ownWords = large && it.sub != null;
+    // The package draws a row's words on one line each (two at most for the name) and ends what
+    // does not fit in "…": a count line naming a month ("Seis bendiciones desde junio de 2024")
+    // at the usual size, and at large text the names, "Add a family member" and the count lines.
+    // So whenever a row's words would not fit the package's lines, they are drawn here instead, in
+    // the slot the package gives the tick, wide enough to fill the row (the menu's 12 each side,
+    // the row's 16 each side, the package's 12 after the tick, one to spare), each line wrapping as
+    // far as it needs and never cut short. The package's own words are kept but not seen, so a
+    // screen reader still hears the name and then the count line, as before. A row that fits is
+    // left to the package, as it always was.
     final slot = menuWidth - 24 - 32 - 12 - 1;
-    var subLines = 1;
-    if (ownWords) {
-      final tp = TextPainter(text: TextSpan(text: it.sub, style: subStyle), textDirection: TextDirection.ltr, textScaler: TextScaler.linear(scale))
-        ..layout(maxWidth: math.max(1.0, slot - 14 - 12));
-      subLines = math.max(1, tp.computeLineMetrics().length);
+    int linesOf(String text, TextStyle style, double width) {
+      final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: TextScaler.linear(scale))
+        ..layout(maxWidth: math.max(1.0, width));
+      final n = math.max(1, tp.computeLineMetrics().length);
       tp.dispose();
+      return n;
     }
+
+    // whether the package's own one line holds each: its words are as wide as the row less the
+    // tick's 14 and the 12 after it
+    final packageWidth = menuWidth - 24 - 32 - 14 - 12;
+    final fits = linesOf(it.label, titleStyle, packageWidth) == 1 && (it.sub == null || linesOf(it.sub!, subStyle, packageWidth) == 1);
+    final ownWords = large || !fits;
+    // drawn here, they are as wide as the slot less the tick and the 12 after it
+    final ownWidth = slot - 14 - 12;
+    final titleLines = ownWords ? linesOf(it.label, titleStyle, ownWidth) : 1;
+    final subLines = it.sub == null ? 0 : (ownWords ? linesOf(it.sub!, subStyle, ownWidth) : 1);
     // the row's height as drawn, so the menu is measured to fit its rows exactly
-    final words = 21 * scale * lines + (it.sub == null ? 0 : 1 + 17 * scale * subLines);
+    final words = 21 * scale * titleLines + (it.sub == null ? 0 : 1 + 17 * scale * subLines);
     const hidden = Color(0x00000000);
     return [
       if (it.groupStart) const GlassMenuDivider(),
@@ -127,7 +138,7 @@ class _SkySwitchState extends State<SkySwitch> {
         key: Key('pull-down-${it.code}'),
         title: it.label,
         subtitle: it.sub,
-        maxLines: ownWords ? 1 : lines,
+        maxLines: 1,
         height: math.max(44, 16 + words),
         titleStyle: ownWords ? titleStyle.copyWith(color: hidden) : titleStyle,
         subtitleStyle: ownWords ? subStyle.copyWith(color: hidden, fontSize: .01, height: 1) : subStyle,
@@ -143,8 +154,11 @@ class _SkySwitchState extends State<SkySwitch> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(it.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
-                      Text(it.sub!, style: subStyle),
+                      Text(it.label, style: titleStyle),
+                      if (it.sub != null) ...[
+                        const SizedBox(height: 1),
+                        Text(it.sub!, style: subStyle),
+                      ],
                     ]),
                   ),
                 ]),

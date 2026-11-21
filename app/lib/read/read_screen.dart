@@ -16,6 +16,7 @@ import '../widgets/balanced_text.dart';
 import '../widgets/buttons.dart';
 import '../widgets/sheet.dart';
 import '../widgets/measure.dart';
+import '../widgets/whole_words.dart';
 
 /// Reading a blessing: the page scrolls up over the sky, where its light sits
 /// alone near the top (SkyView.read). Edit and Delete live here too.
@@ -516,7 +517,7 @@ class ReadLayerState extends State<ReadLayer> with SingleTickerProviderStateMixi
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(b.longDate, key: const Key('read-date'), style: sans(13, 18, p.ink2, tracking: .005)),
           const SizedBox(height: 6),
-          BalancedText(b.shownTitle, textKey: const Key('read-title'), style: serif(34, 38, p.ink, tracking: -.012)),
+          BalancedText(b.shownTitle, textKey: const Key('read-title'), maxScale: titleMaxScale, style: serif(34, 38, p.ink, tracking: -.012)),
           if (b.from.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(Strings.blessingFrom(b.from), key: const Key('read-from'), style: serif(18, 26, p.light, italic: true)),

@@ -4,6 +4,21 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ## Decisions
 
+### 2026-11-21
+
+- **Version 1.0 (build 12) was submitted to Apple at 12:54 am Central** and is waiting for review. Release is manual. The final evaluation was stopped early so the submission could go in; it ran the entry, family, hand-over, iPad, first-run and lock scripts and the looks by eye, and found nothing a reviewer would hit in normal English use. The scripts it did not reach (link, share, Spanish, shortcut, file, review, polish, drafts, recovery and the older ones) are still owed before release.
+
+- **The evaluation's faults, fixed for build 13 (Noah: "You're working on these?").** Two builders, one on home and the family menu, one on the other screens.
+  - **Date bar:** the year labels no longer run together. The bar picks the smallest step from 1, 2, 5, 10, 20, 50 that keeps 8 points between labels, and above a step of 2 it names round years only. Rings of five years or more that fitted before still name every second year.
+  - **Family menu:** a row whose name or count line does not fit on one line draws its own words and wraps, at any text size. This is what every Spanish user saw cut off at normal size. English at normal size is unchanged when the line fits.
+  - **Home caption:** the bottom of home may not rise above a line just under the ring; the caption grows with the text size until it fills that room, then stops. The ring is not shrunk.
+  - **First run:** Continue is pinned at the bottom of the welcome and the words scroll above it. This was a fault in the app, not in the test: at large text Continue was below the screen and nothing showed that the page scrolled.
+  - **Titles and labels never break inside a word.** Large titles stop growing at twice their size and shrink when one word is still too wide (`widgets/whole_words.dart`, also built into the balanced-text widget). Applied to every large title, not only the four the evaluation named.
+  - **Recording start, Unlock, the hand-over sheet, "Use my location":** fixed heights became minimum heights or a scrolling column, so nothing overlaps or is cut at the largest text.
+  - **Settings and the person page:** a night-sky shade covers the strip under the clock and back arrow once the page is scrolled. It is hidden at rest. Home is untouched.
+  - **Proven:** analyzer clean, 831 unit and widget tests pass, every fault screen looked at on a simulator before and after in English and Spanish at the largest text, and normal-size English screens compared with before. **Not proven:** nothing was run on a real phone; the rest of the evaluation scripts have not run on these changes.
+  - **Left as they are:** at the largest text in Spanish the date sheet's Done is below the fold (it scrolls); the date wheel's day, month and year sit tight; home's date line can touch a star name such as "Castor", which also happens at normal size.
+
 ### 2026-11-20
 
 - **Six fixes before the store build; the app is now 1.0.0 (build 12).**

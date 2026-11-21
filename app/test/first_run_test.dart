@@ -626,4 +626,67 @@ void main() {
       expect(t.widget<IgnorePointer>(leaving).ignoring, isTrue);
     });
   });
+
+  // The welcome at large text with Reduce Motion (case 11 of tool/first_run_acceptance.sh, failed
+  // 2026-11-20): its words ran past the screen and Continue with them, below the fold, so a tap on
+  // Continue as it stood on the screen could not be made; and the words, scrolled, ran up under the
+  // clock. Continue now stays on the screen whatever the size, the words scrolling above it, and
+  // nothing is drawn in the status bar's strip.
+  group('the welcome at large text', () {
+    const screen = Size(402, 874), pad = EdgeInsets.only(top: 62, bottom: 34);
+    for (final scale in [1.0, 1.76, 2.35, 3.1]) {
+      testWidgets('text ×$scale, Reduce Motion: Continue on the screen, and one tap of it moves on; nothing under the clock', (t) async {
+        t.view.physicalSize = screen * 3;
+        t.view.devicePixelRatio = 3;
+        addTearDown(t.view.reset);
+        var moved = 0;
+        await t.pumpWidget(MediaQuery(
+          data: MediaQueryData(size: screen, devicePixelRatio: 3, textScaler: TextScaler.linear(scale), padding: pad, viewPadding: pad, disableAnimations: true),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: WelcomeLayer(palette: Palette.lamplight, onContinue: () => moved++),
+          ),
+        ));
+        await t.pump(const Duration(seconds: 3));
+        await t.pump(const Duration(seconds: 2));
+        final cont = find.byKey(const Key('welcome-continue'));
+        final r = t.getRect(cont);
+        expect(r.top >= pad.top && r.bottom <= screen.height, isTrue, reason: 'Continue on the screen: $r');
+        expect(cont.hitTestable(), findsOneWidget);
+        await t.tap(cont);
+        await t.pump();
+        expect(moved, 1, reason: 'one tap moves on');
+        // the words scrolled as far as they go: none above the status bar's strip
+        final scroll = find.descendant(of: find.byKey(const Key('welcome')), matching: find.byType(Scrollable));
+        if (scroll.evaluate().isNotEmpty) {
+          await t.drag(scroll.first, const Offset(0, -3000));
+          await t.pump();
+          final clip = t.getRect(find.byKey(const Key('first-run-words')));
+          expect(clip.top, greaterThanOrEqualTo(pad.top), reason: 'the words are clipped below the clock');
+          expect(t.getRect(cont), r, reason: 'Continue stays put as the words scroll');
+        }
+      });
+    }
+
+    testWidgets('normal text: Continue sits where it always has, under the words', (t) async {
+      t.view.physicalSize = screen * 3;
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MediaQuery(
+        data: const MediaQueryData(size: screen, devicePixelRatio: 3, padding: pad, viewPadding: pad, disableAnimations: true),
+        child: Directionality(textDirection: TextDirection.ltr, child: WelcomeLayer(palette: Palette.lamplight, onContinue: () {})),
+      ));
+      await t.pump(const Duration(seconds: 5));
+      final c = t.getRect(find.byKey(const Key('welcome-continue')));
+      // 42 and half the bottom inset under it, as before
+      expect(c.bottom, closeTo(screen.height - 42 - pad.bottom * .5, .5));
+      // when the words fit (the real font; the test's own draws every letter a full square wide, so
+      // here they may not), the last line sits 36 above it, as before
+      final scroll = t.state<ScrollableState>(find.descendant(of: find.byKey(const Key('welcome')), matching: find.byType(Scrollable)).first);
+      if (scroll.position.maxScrollExtent == 0) {
+        final free = t.getRect(find.byKey(const Key('welcome-free')));
+        expect(c.top - free.bottom, closeTo(36, .5));
+      }
+    });
+  });
 }

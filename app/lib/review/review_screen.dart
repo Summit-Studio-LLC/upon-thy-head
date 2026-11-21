@@ -18,6 +18,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/measure.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 import 'date_sheet.dart';
 import 'player.dart';
 import 'tags.dart';
@@ -531,7 +532,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(Strings.finishTitle, style: serif(22, 28, p.ink)),
+                    WholeWords(Strings.finishTitle, maxScale: titleMaxScale, style: serif(22, 28, p.ink)),
                     const SizedBox(height: 6),
                     // the audio rule: a recording whose words are still to come is kept (recovery.dart)
                     Text(widget.words == WordsState.later ? Strings.finishBodyLater : Strings.finishBody, style: sans(15, 22, p.ink2)),
@@ -619,6 +620,8 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                 placeholder: Strings.titlePlaceholder,
                 placeholderColor: p.ink3,
                 capitalization: TextCapitalization.sentences,
+                // a title: it stops growing at twice its size, and its placeholder is never broken mid-word
+                maxScale: titleMaxScale,
                 action: TextInputAction.next,
                 onSubmitted: () => _fromFocus.requestFocus(),
               ),
@@ -727,6 +730,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     VoidCallback? onSubmitted,
     int? maxLines,
     int minLines = 1,
+    double? maxScale,
   }) {
     final p = widget.palette;
     final dy = math.max(62.0, MediaQuery.viewPaddingOf(context).top) - 62;
@@ -755,10 +759,21 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
               ? (context, s) => m.AdaptiveTextSelectionToolbar.editableText(editableTextState: s)
               : (context, s) => CupertinoAdaptiveTextSelectionToolbar.editableText(editableTextState: s),
         );
+    Widget scaled(Widget child) {
+      if (maxScale == null) return child;
+      return LayoutBuilder(builder: (context, box) {
+        final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: maxScale);
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: wholeWordScaler(placeholder, style, scaler, box.maxWidth, Directionality.of(context))),
+          child: child,
+        );
+      });
+    }
+
     return MergeSemantics(
       child: Semantics(
         label: label,
-        child: Phone.android
+        child: scaled(Phone.android
             ? m.Theme(
                 data: m.ThemeData(
                   brightness: Brightness.dark,
@@ -766,7 +781,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
                 ),
                 child: field,
               )
-            : field,
+            : field),
       ),
     );
   }

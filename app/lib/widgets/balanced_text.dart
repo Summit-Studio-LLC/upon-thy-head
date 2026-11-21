@@ -1,11 +1,13 @@
 import 'package:flutter/widgets.dart';
 
+import 'whole_words.dart';
+
 /// Text that wraps into lines of similar length, as CSS `text-wrap: balance`
 /// does: the fewest lines the full width needs, then the narrowest width that
 /// still fits in that many lines. Keeps a title from leaving one word alone on
 /// its last line ("Healing, the night / of the fever").
 class BalancedText extends StatelessWidget {
-  const BalancedText(this.data, {super.key, required this.style, this.textKey, this.textAlign = TextAlign.start, this.maxHeight});
+  const BalancedText(this.data, {super.key, required this.style, this.textKey, this.textAlign = TextAlign.start, this.maxHeight, this.maxScale});
 
   final String data;
   final TextStyle style;
@@ -18,10 +20,16 @@ class BalancedText extends StatelessWidget {
   /// than the person's own size).
   final double? maxHeight;
 
+  /// The most it grows with the phone's text size, as a multiple of its size (titles:
+  /// [titleMaxScale]). Whatever the size, no word is broken across lines.
+  final double? maxScale;
+
   @override
   Widget build(BuildContext context) {
-    var scaler = MediaQuery.textScalerOf(context);
+    var base = MediaQuery.textScalerOf(context);
+    if (maxScale != null) base = base.clamp(maxScaleFactor: maxScale!);
     return LayoutBuilder(builder: (context, box) {
+      var scaler = base;
       final max = box.maxWidth;
       var width = max;
       if (max.isFinite && maxHeight != null) {
@@ -44,6 +52,7 @@ class BalancedText extends StatelessWidget {
         }
       }
       if (max.isFinite) {
+        scaler = wholeWordScaler(data, style, scaler, max, TextDirection.ltr);
         final tp = TextPainter(text: TextSpan(text: data, style: style), textDirection: TextDirection.ltr, textScaler: scaler);
         int lines(double w) {
           tp.layout(maxWidth: w);

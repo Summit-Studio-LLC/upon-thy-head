@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 import 'buttons.dart';
 import 'measure.dart';
+import 'whole_words.dart';
 
 /// The prototype's `.sheet`: a raised panel rising from the bottom edge.
 /// With [barrier], the rest of the screen dims and a tap on it calls [onDismiss].
@@ -174,7 +175,7 @@ class ConfirmSheet extends StatelessWidget {
       barrier: barrier,
       onDismiss: onSafe,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Text(title, style: serif(22, 28, p.ink)),
+        WholeWords(title, maxScale: titleMaxScale, style: serif(22, 28, p.ink)),
         const SizedBox(height: 6),
         Text(body, style: sans(15, 22, p.ink2)),
         if (note != null) ...[

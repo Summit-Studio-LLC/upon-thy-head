@@ -6,6 +6,8 @@ import '../strings.dart';
 import '../theme.dart';
 import 'icons.dart';
 import 'measure.dart';
+import 'scrims.dart';
+import 'whole_words.dart';
 
 /// A page over the dimmed sky in the Settings family: the back chevron, a large serif title, a line
 /// under it, and its rows ("To pass along", "Your links").
@@ -36,6 +38,10 @@ class OverSkyPage extends StatelessWidget {
     return Stack(children: [
       Positioned.fill(child: IgnorePointer(child: ColoredBox(color: p.ground.withValues(alpha: .55)))),
       Positioned.fill(
+        // scrolled under the status bar and the back button, the words go dark behind them
+        child: ScrolledUnderShade(
+        palette: p,
+        solid: 98 + dy,
         child: SingleChildScrollView(
           key: scrollKey,
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -44,7 +50,7 @@ class OverSkyPage extends StatelessWidget {
           child: Measure(
             max: Widths.form,
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _Title(title, key: titleKey, style: serif(34, 38, p.ink, tracking: -.012)),
+            WholeWords(title, key: titleKey, maxScale: titleMaxScale, style: serif(34, 38, p.ink, tracking: -.012)),
             const SizedBox(height: 8),
             Text(lede, style: sans(15, 22, p.ink2)),
             const SizedBox(height: 24),
@@ -52,6 +58,7 @@ class OverSkyPage extends StatelessWidget {
             ...children,
           ]),
           ),
+        ),
         ),
       ),
       Positioned(
@@ -78,29 +85,6 @@ class OverSkyPage extends StatelessWidget {
         child: IconBtn(key: backKey, icon: Glyph.older, color: p.ink, palette: p, semantics: Strings.back, onTap: onBack),
       ),
     ]);
-  }
-}
-
-/// The page's title at the phone's text size, except that no word of it is ever broken across
-/// lines: at the largest sizes the size steps down just enough for its longest word to fit.
-class _Title extends StatelessWidget {
-  const _Title(this.text, {super.key, required this.style});
-  final String text;
-  final TextStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(builder: (context, box) {
-      var widest = 0.0;
-      for (final word in text.split(RegExp(r'\s+'))) {
-        final tp = TextPainter(text: TextSpan(text: word, style: style), textScaler: scaler, textDirection: Directionality.of(context), maxLines: 1)..layout();
-        widest = math.max(widest, tp.width);
-        tp.dispose();
-      }
-      final fit = widest > box.maxWidth && widest > 0 ? box.maxWidth / widest * .98 : 1.0;
-      return Text(text, style: style, textScaler: fit < 1 ? TextScaler.linear(scaler.scale(style.fontSize!) / style.fontSize! * fit) : scaler);
-    });
   }
 }
 

@@ -7,6 +7,7 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
+import '../widgets/whole_words.dart';
 
 /// What the date sheet chose: how much is known, and the date (the month and day are 1 where they
 /// are not known).
@@ -197,7 +198,7 @@ class DateSheetState extends State<DateSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(Strings.whenGiven, style: serif(26, 32, p.ink)),
+        WholeWords(Strings.whenGiven, maxScale: titleMaxScale, style: serif(26, 32, p.ink)),
         const SizedBox(height: 16),
         PrecisionChoice(palette: p, value: _precision, onChanged: (v) {
           if (v == _precision) return;
@@ -278,7 +279,7 @@ class PrecisionChoice extends StatelessWidget {
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               decoration: BoxDecoration(color: on ? p.ink.withValues(alpha: .16) : const Color(0x00000000), borderRadius: BorderRadius.circular(22)),
-              child: Text(label, textAlign: TextAlign.center, style: sans(15, 20, on ? p.ink : p.ink2, weight: on ? FontWeight.w500 : FontWeight.w400)),
+              child: WholeWords(label, textAlign: TextAlign.center, style: sans(15, 20, on ? p.ink : p.ink2, weight: on ? FontWeight.w500 : FontWeight.w400)),
             ),
           ),
         ),

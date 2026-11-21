@@ -96,10 +96,11 @@ void main() {
       expect(t.getRect(menuPanel()).top, closeTo(capsule.top, 1), reason: 'it grows from the capsule');
       expect(t.getRect(menuPanel()).left, closeTo(capsule.left, 1), reason: 'from its leading edge');
       for (final label in ['For me', 'For James', 'Add a family member', 'Manage family']) {
-        expect(find.descendant(of: menuPanel(), matching: find.text(label)), findsOneWidget, reason: label);
+        // (twice where the app draws a row's words itself, the package's kept unseen for screen readers)
+        expect(find.descendant(of: menuPanel(), matching: find.text(label)), findsAtLeastNWidgets(1), reason: label);
       }
       // the count lines, and the tick on the sky showing only
-      expect(find.descendant(of: find.byKey(const Key('pull-down-me')), matching: find.text(countLine(const []))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('pull-down-me')), matching: find.text(countLine(const []))), findsAtLeastNWidgets(1));
       for (final (code, ticked) in [('me', false), ('p:e', true), ('p:j', false), ('add', false)]) {
         final mark = t.widget<PullDownMarkGlyph>(find.descendant(of: find.byKey(Key('pull-down-$code')), matching: find.byType(PullDownMarkGlyph)));
         expect(mark.ticked, ticked, reason: code);
@@ -308,13 +309,53 @@ void main() {
     });
   });
 
+  // A count line naming a month ("Seis bendiciones desde junio de 2024") ran past the menu at the
+  // usual size and ended in "…" (found 2026-11-21, every Spanish user). Every word is shown whole.
+  group('the menu at the usual size', () {
+    for (final lang in UiLanguage.values) {
+      for (final screen in screens) {
+        testWidgets('$lang, ${screen.width} wide: no line of the menu cut short', (t) async {
+          Strings.use(lang);
+          final mine = [for (var i = 0; i < 6; i++) Blessing(id: 'm$i', title: 'B', from: '', utc: DateTime.utc(2024, 9 + i), utcOffset: Duration.zero, place: samplePlace, rawText: '', firstText: '', language: 'en')];
+          final f = Family([james, emma], mine);
+          await show(
+              t,
+              Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 62, 16, 0),
+                  child: SkySwitch(key: const Key('sky-switch'), palette: p, label: f.title('me'), menu: () => f.menu('me'), onChosen: (_) {}),
+                ),
+              ),
+              screen: screen);
+          await t.tap(find.byKey(const Key('sky-switch')));
+          await t.pumpAndSettle();
+          final menu = t.getRect(menuPanel());
+          for (final code in ['me', 'p:j', 'p:e', 'add', 'manage']) {
+            final row = find.byKey(Key('pull-down-$code'));
+            final own = find.byKey(Key('pull-down-words-$code'));
+            final r = t.getRect(row);
+            expect(r.top >= menu.top - .5 && r.bottom <= menu.bottom + .5, isTrue, reason: '$code in the menu');
+            // the words seen: the app's own when it draws them, else the package's
+            final seen = find.descendant(of: own.evaluate().isEmpty ? row : own, matching: find.byType(RichText));
+            for (final e in seen.evaluate()) {
+              final para = e.renderObject! as RenderParagraph;
+              if (para.text.style?.color?.a == 0) continue;
+              expect(para.didExceedMaxLines, isFalse, reason: '$code: "${para.text.toPlainText()}" whole, not cut short');
+            }
+          }
+        });
+      }
+    }
+  });
+
   group('the largest text', () {
     // the safe area of iPhone 17 Pro, and of a Pixel with its bars
     const safe = {402: EdgeInsets.only(top: 62, bottom: 34), 328: EdgeInsets.only(top: 40, bottom: 24)};
 
     for (final lang in UiLanguage.values) {
       for (final screen in screens) {
-        testWidgets('$lang, ${screen.width} wide, text ×3.1: the menu is the full width, every row reachable, each line at most two lines, the tick beside the name', (t) async {
+        testWidgets('$lang, ${screen.width} wide, text ×3.1: the menu is the full width, every row reachable, every line whole, the tick beside the name', (t) async {
           Strings.use(lang);
           final pad = safe[screen.width.round()]!;
           final long = Person(id: 'l', name: 'Maximiliana Esperanza', created: DateTime.utc(2026));
@@ -364,16 +405,17 @@ void main() {
             } else {
               expect(r.top < menu.bottom && r.bottom > menu.top, isTrue, reason: '$code can be brought into view: $r in $menu');
             }
-            // the name in two lines at most, and the count line under it whole, in as many lines as it
-            // needs (the app draws these words itself, as the package cuts a count line to one)
+            // the name and the count line under it whole, in as many lines as each needs (the app draws
+            // these words itself, as the package cuts them short with "…")
             final own = find.byKey(Key('pull-down-words-$code'));
-            final texts = find.descendant(of: own.evaluate().isEmpty ? row : own, matching: find.byType(RichText));
+            expect(own, findsOneWidget, reason: '$code: drawn by the app at this size');
+            final texts = find.descendant(of: own, matching: find.byType(RichText));
             for (var i = 0; i < texts.evaluate().length; i++) {
               final para = t.renderObject<RenderParagraph>(texts.at(i));
-              final line = i == 0 ? 3.1 * 21 : 3.1 * 17;
-              if (i == 0) expect(para.size.height, lessThanOrEqualTo(2 * line + 1), reason: '$code: "${para.text.toPlainText()}" in at most 2 lines');
-              if (i > 0) expect(para.didExceedMaxLines, isFalse, reason: '$code: "${para.text.toPlainText()}" whole, not cut short');
+              expect(para.didExceedMaxLines, isFalse, reason: '$code: "${para.text.toPlainText()}" whole, not cut short');
             }
+            // the row as tall as its words, so nothing is cut at its foot
+            expect(t.getRect(own).bottom, lessThanOrEqualTo(r.bottom + .5), reason: '$code: its words inside the row');
             // a count line wider than the row wraps, not one line ending in "…"
             if (code == 'me') expect(t.renderObject<RenderParagraph>(texts.at(1)).size.height, greaterThan(3.1 * 17 + 1), reason: 'the long count line wraps');
             // the tick (or plus) sits before the name, within the row

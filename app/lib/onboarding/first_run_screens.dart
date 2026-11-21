@@ -21,34 +21,66 @@ import 'first_run.dart';
 const double firstRunColumn = 460;
 
 /// The words of a first-run screen, from the bottom up so they grow upward at large text sizes,
-/// in one column of comfortable width; scrolls only if they no longer fit.
+/// in one column of comfortable width; scrolls only if they no longer fit. Nothing is drawn in the
+/// status bar's strip: words scrolled up are cut off below the clock, not run under it.
+///
+/// [foot] (the welcome's Continue) stays on the screen under the words whatever the text size, the
+/// words scrolling above it: at large text the welcome ran past the screen and took Continue below
+/// the fold with it (case 11 of tool/first_run_acceptance.sh, 2026-11-20). At the usual size it sits
+/// where it did, as the last thing in the column.
 class FirstRunFrame extends StatelessWidget {
-  const FirstRunFrame({super.key, required this.palette, required this.child, this.scrim = true});
+  const FirstRunFrame({super.key, required this.palette, required this.child, this.scrim = true, this.foot});
   final Palette palette;
   final Widget child;
   final bool scrim;
+  final Widget? foot;
 
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    return Stack(children: [
-      if (scrim) Positioned(left: 0, right: 0, bottom: 0, height: 460, child: BottomScrim(palette: palette)),
-      Positioned.fill(
-        child: LayoutBuilder(
-          builder: (context, box) => SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: box.maxHeight),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(28, mq.viewPadding.top + 24, 28, 42 + mq.viewPadding.bottom * .5),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: firstRunColumn), child: child),
-                ),
-              ),
+    final bottom = 42 + mq.viewPadding.bottom * .5;
+    Widget column(Widget c) => Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: firstRunColumn), child: c),
+        );
+    final words = ClipRect(
+      key: const Key('first-run-words'),
+      child: LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(28, 24, 28, foot == null ? bottom : 0),
+              child: column(child),
             ),
           ),
         ),
+      ),
+    );
+    return Stack(children: [
+      if (scrim) Positioned(left: 0, right: 0, bottom: 0, height: 460, child: BottomScrim(palette: palette)),
+      Positioned.fill(
+        top: mq.viewPadding.top,
+        child: foot == null
+            ? words
+            : Column(children: [
+                // words scrolled down to the foot fade out there rather than end in a cut line (at the
+                // usual size the last 36 points of the words are the gap above Continue, so nothing shows)
+                Expanded(
+                  child: ShaderMask(
+                    blendMode: BlendMode.dstIn,
+                    shaderCallback: (r) => LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: const [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0x00FFFFFF)],
+                      stops: [0, r.height <= 28 ? 0 : 1 - 28 / r.height, 1],
+                    ).createShader(r),
+                    child: words,
+                  ),
+                ),
+                Padding(padding: EdgeInsets.fromLTRB(28, 0, 28, bottom), child: column(foot!)),
+              ]),
       ),
     ]);
   }
@@ -214,6 +246,15 @@ class WelcomeLayer extends StatelessWidget {
     return FirstRunFrame(
       key: const Key('welcome'),
       palette: p,
+      // always on the screen, the words scrolling above it at large text
+      foot: Row(children: [
+        Expanded(
+          child: Arrive(
+            delay: at(4300),
+            child: PillBtn(key: const Key('welcome-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
+          ),
+        ),
+      ]),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -229,10 +270,6 @@ class WelcomeLayer extends StatelessWidget {
           const SizedBox(height: 28),
           Arrive(delay: at(3900), child: Text(Strings.welcomeFree, key: const Key('welcome-free'), style: sans(15, 21, p.ink3))),
           const SizedBox(height: 36),
-          Arrive(
-            delay: at(4300),
-            child: PillBtn(key: const Key('welcome-continue'), label: Strings.continueLabel, palette: p, kind: PillKind.primary, onTap: onContinue),
-          ),
         ],
       ),
     );

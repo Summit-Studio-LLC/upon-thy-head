@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 import 'person.dart';
 
 /// Handing a family member's ring to their own phone, the parent's side (design/entry-and-rings,
@@ -200,22 +201,24 @@ class HandOverSheetState extends State<HandOverSheet> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(color: p.ink.withValues(alpha: .05), borderRadius: BorderRadius.circular(24)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          MergeSemantics(
-            child: Row(children: [
-              RingThumb(palette: p),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(Strings.ringOf(_name), key: const Key('hand-over-title'), maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(21, 26, p.ink)),
-                  const SizedBox(height: 2),
-                  Text(widget.countLine, key: const Key('hand-over-count'), style: sans(14, 19, p.ink2)),
-                ]),
-              ),
-            ]),
-          ),
+          MergeSemantics(child: _heading(p)),
           ...below,
         ]),
       );
+
+  /// The ring's picture, its name and its count: side by side, and at the accessibility text sizes
+  /// the picture above, so the words have the card's width and no word is broken.
+  Widget _heading(Palette p) {
+    final words = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      WholeWords(Strings.ringOf(_name), textKey: const Key('hand-over-title'), maxScale: titleMaxScale, maxLines: 3, overflow: TextOverflow.ellipsis, style: serif(21, 26, p.ink)),
+      const SizedBox(height: 2),
+      WholeWords(widget.countLine, textKey: const Key('hand-over-count'), style: sans(14, 19, p.ink2)),
+    ]);
+    if (MediaQuery.textScalerOf(context).scale(15) > 28) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [RingThumb(palette: p), const SizedBox(height: 12), words]);
+    }
+    return Row(children: [RingThumb(palette: p), const SizedBox(width: 14), Expanded(child: words)]);
+  }
 
   Widget _keptByRow(Palette p) {
     final scaler = MediaQuery.textScalerOf(context);
@@ -233,6 +236,8 @@ class HandOverSheetState extends State<HandOverSheet> {
       keyboardAppearance: Brightness.dark,
       textCapitalization: TextCapitalization.words,
       textInputAction: TextInputAction.done,
+      // stacked (the largest text sizes), a long name wraps instead of running out of sight
+      maxLines: stacked ? null : 1,
       maxLength: nameLimit,
       onSubmitted: (_) => _focus.unfocus(),
       padding: EdgeInsets.zero,
@@ -332,7 +337,7 @@ class HandOverSheetState extends State<HandOverSheet> {
           Text(Strings.ringSent, key: const Key('hand-over-sent-line'), style: sans(15, 20, p.ink2)),
         ]),
         const SizedBox(height: 14),
-        Text(Strings.keepOrDelete(_name), key: const Key('hand-over-question'), style: serif(22, 28, p.ink)),
+        WholeWords(Strings.keepOrDelete(_name), textKey: const Key('hand-over-question'), maxScale: titleMaxScale, style: serif(22, 28, p.ink)),
         const SizedBox(height: 8),
         Text(Strings.keepOrDeleteBody(_name), style: sans(15, 21, p.ink2)),
         const SizedBox(height: 20),

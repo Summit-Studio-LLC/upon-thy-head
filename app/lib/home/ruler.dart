@@ -122,6 +122,47 @@ class _Dot extends StatelessWidget {
   }
 }
 
+/// The least clear space between two years' labels on the bar.
+const double rulerLabelGap = 8;
+
+/// Which years the bar names, and where: the centre of each labelled year's span across a bar
+/// [width] wide covering [years] years from [startYear], for labels [labelWidth] wide. Every year
+/// when they fit; otherwise every 2nd, 5th, 10th, 20th, 50th year (on the round years from the 5th
+/// up), the first of those steps that keeps [rulerLabelGap] clear between neighbours, so a ring of
+/// thirty years reads "2000 2005 2010…" rather than running its labels together. A ring of more
+/// than four years names every second year at the least, as it always has. No label runs past
+/// either end of the bar.
+@visibleForTesting
+List<({int year, double centre})> rulerYearLabels({
+  required int startYear,
+  required int years,
+  required double width,
+  required double labelWidth,
+}) {
+  if (years <= 0 || width <= 0) return const [];
+  final span = width / years;
+  final need = labelWidth + rulerLabelGap;
+  var step = years > 4 ? 2 : 1;
+  for (final s in const [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]) {
+    if (s < step) continue;
+    step = s;
+    if (s * span >= need) break;
+  }
+  final out = <({int year, double centre})>[];
+  for (var i = 0; i < years; i++) {
+    final year = startYear + i;
+    // every second: the second year of each pair from the start, as before; wider steps: round years
+    final named = step == 1 || (step == 2 ? i % 2 == 1 : year % step == 0);
+    if (!named) continue;
+    // kept inside the bar: a year at either end is drawn a little off its middle rather than left out
+    if (labelWidth > width) break;
+    final centre = (span * (i + .5)).clamp(labelWidth / 2, width - labelWidth / 2);
+    if (out.isNotEmpty && centre - out.last.centre < need) continue;
+    out.add((year: year, centre: centre));
+  }
+  return out;
+}
+
 class _TicksPainter extends CustomPainter {
   _TicksPainter(this.r);
   final Ruler r;
@@ -139,16 +180,19 @@ class _TicksPainter extends CustomPainter {
       final year = m % 12 == 0;
       paint.color = ink.withValues(alpha: t.isAfter(r.now) ? .09 : (year ? .5 : .22));
       canvas.drawLine(Offset(x, year ? 4 : 10), Offset(x, 15), paint);
-      if (year && m < years * 12 && (!sparse || (m ~/ 12) % 2 == 1)) {
-        final tp = TextPainter(
-          text: TextSpan(
-            text: '${t.year}',
-            style: sans(11, 14, r.palette.ink3).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, Offset(x + size.width / years / 2 - tp.width / 2, 22));
-      }
+    }
+    // the years' names, under the middle of each year named; never touching (see [rulerYearLabels])
+    final style = sans(11, 14, r.palette.ink3).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    TextPainter label(int year) => TextPainter(text: TextSpan(text: '$year', style: style), textDirection: TextDirection.ltr)..layout();
+    // the widest of the years shown (all four figures wide, the figures of one width)
+    final first = label(r._start.year), last = label(r._end.year - 1);
+    final widest = first.width > last.width ? first.width : last.width;
+    first.dispose();
+    last.dispose();
+    for (final l in rulerYearLabels(startYear: r._start.year, years: years, width: size.width, labelWidth: widest)) {
+      final tp = label(l.year);
+      tp.paint(canvas, Offset(l.centre - tp.width / 2, 22));
+      tp.dispose();
     }
   }
 

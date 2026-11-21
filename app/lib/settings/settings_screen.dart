@@ -19,6 +19,8 @@ import '../widgets/icons.dart';
 import '../widgets/measure.dart';
 import '../widgets/over_sky_page.dart';
 import '../widgets/pull_down.dart';
+import '../widgets/scrims.dart';
+import '../widgets/whole_words.dart';
 
 /// Settings, over the dimmed sky, in the reading page's family: the back chevron, a large serif
 /// title, and four quiet rows with hairlines, each explained in a line of small sans.
@@ -87,13 +89,17 @@ class SettingsLayer extends StatelessWidget {
           // the sky dims behind the page
           Positioned.fill(child: IgnorePointer(child: ColoredBox(color: p.ground.withValues(alpha: .55)))),
           Positioned.fill(
+            // scrolled under the status bar and the back button, the words go dark behind them
+            child: ScrolledUnderShade(
+            palette: p,
+            solid: 98 + dy,
             child: SingleChildScrollView(
               key: const Key('settings-scroll'),
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
               // an iPad: a form's measure, centred (a phone keeps its 28 at each side)
               padding: EdgeInsets.fromLTRB(side, 112 + dy, side, 64),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(Strings.settings, key: const Key('settings-title'), style: serif(34, 38, p.ink, tracking: -.012)),
+                WholeWords(Strings.settings, textKey: const Key('settings-title'), maxScale: titleMaxScale, style: serif(34, 38, p.ink, tracking: -.012)),
                 const SizedBox(height: 28),
                 hairline(),
                 // ---- the blessings for someone else, and the links sent ----
@@ -277,6 +283,7 @@ class SettingsLayer extends StatelessWidget {
                 ],
               ]),
             ),
+            ),
           ),
           // the sky darkens a little under the status bar and the back button, as on the reading page
           Positioned(
@@ -396,7 +403,8 @@ class _GoldWordState extends State<_GoldWord> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 44,
+          // at least a finger's height; at the largest text sizes as tall as its words, which wrap
+          constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(color: p.ink.withValues(alpha: _down ? .07 : 0), borderRadius: BorderRadius.circular(22)),

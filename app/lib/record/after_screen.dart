@@ -9,6 +9,7 @@ import '../widgets/balanced_text.dart';
 import '../widgets/buttons.dart';
 import '../widgets/scrims.dart';
 import '../widgets/measure.dart';
+import '../widgets/whole_words.dart';
 import '../not_yet.dart';
 import 'model_offer.dart';
 import 'session.dart';
@@ -115,8 +116,8 @@ class _AfterLayerState extends State<AfterLayer> {
             switchOutCurve: easeOut,
             layoutBuilder: (current, previous) => Stack(alignment: Alignment.bottomLeft, children: [...previous, ?current]),
             child: writing
-                ? Text(Strings.writingWords, key: const Key('after-writing'), style: serif(34, 38, p.ink3, italic: true, tracking: -.012))
-                : BalancedText(title, key: ValueKey(title), textKey: const Key('after-title'), style: serif(34, 38, p.ink, tracking: -.012)),
+                ? WholeWords(Strings.writingWords, key: const Key('after-writing-box'), textKey: const Key('after-writing'), maxScale: titleMaxScale, style: serif(34, 38, p.ink3, italic: true, tracking: -.012))
+                : BalancedText(title, key: ValueKey(title), textKey: const Key('after-title'), maxScale: titleMaxScale, style: serif(34, 38, p.ink, tracking: -.012)),
           ),
           const SizedBox(height: 12),
           ConstrainedBox(

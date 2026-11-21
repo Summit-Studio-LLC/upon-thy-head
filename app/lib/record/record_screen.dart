@@ -182,6 +182,8 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
       final h = box.maxHeight;
       // Begin sits on the look point, where the glow breathes
       final lookY = (1 - (SkyView.ready.cy * .5 + .5)) * h;
+      // where the column under the title begins: below the title and Close, so it never covers them
+      final areaTop = top + 64;
       return Stack(children: [
         Positioned(left: 0, right: 0, top: 0, height: 190, child: TopScrim(palette: p)),
         Positioned(left: 0, right: 0, bottom: 0, height: 230, child: BottomScrim(palette: p)),
@@ -245,62 +247,71 @@ class _RecordLayerState extends State<RecordLayer> with SingleTickerProviderStat
           ),
         ),
         // ---- before Begin ----
+        // Begin on the look point, what it does under it, and "Enter a past blessing" at the foot: one
+        // column from under the title to the bottom. At the usual sizes each is where it always was;
+        // at the largest text sizes, when they no longer fit between, the column scrolls instead of
+        // the button running over the hint, and Begin is the first thing in it.
         Positioned(
           left: 0,
           right: 0,
-          top: lookY - 66,
-          child: Center(
-            child: IgnorePointer(
-              ignoring: live,
-              child: AnimatedScale(
-                scale: live ? 1.55 : 1,
-                duration: const Duration(milliseconds: 900),
-                curve: easeOut,
-                child: AnimatedOpacity(
-                  opacity: live ? 0 : 1,
-                  duration: const Duration(milliseconds: 600),
-                  curve: easeOut,
-                  child: AnimatedOpacity(
-                    opacity: refused ? .35 : 1,
-                    duration: const Duration(milliseconds: 400),
-                    child: BeginButton(key: const Key('begin'), palette: p, onTap: refused ? null : widget.onBegin),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 32,
-          right: 32,
-          top: lookY + 89,
+          top: areaTop,
+          bottom: 0,
           child: IgnorePointer(
             ignoring: live,
-            child: AnimatedOpacity(
-              opacity: live ? 0 : 1,
-              duration: const Duration(milliseconds: 400),
-              child: refused ? _refused(p, perms!) : _hintAndLanguage(p),
+            child: CustomScrollView(
+              key: const Key('rec-start-scroll'),
+              physics: const ClampingScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Column(children: [
+                    SizedBox(height: math.max(0.0, lookY - 66 - areaTop)),
+                    AnimatedScale(
+                      scale: live ? 1.55 : 1,
+                      duration: const Duration(milliseconds: 900),
+                      curve: easeOut,
+                      child: AnimatedOpacity(
+                        opacity: live ? 0 : 1,
+                        duration: const Duration(milliseconds: 600),
+                        curve: easeOut,
+                        child: AnimatedOpacity(
+                          opacity: refused ? .35 : 1,
+                          duration: const Duration(milliseconds: 400),
+                          child: BeginButton(key: const Key('begin'), palette: p, onTap: refused ? null : widget.onBegin),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 23),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: AnimatedOpacity(
+                        opacity: live ? 0 : 1,
+                        duration: const Duration(milliseconds: 400),
+                        child: refused ? _refused(p, perms!) : _hintAndLanguage(p),
+                      ),
+                    ),
+                    // ---- far from Begin, at the foot: a blessing written down ----
+                    if (widget.onEnter != null) ...[
+                      const Spacer(),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(24, 0, 24, math.max(24.0, mq.viewPadding.bottom + 8)),
+                        child: ExcludeSemantics(
+                          excluding: live,
+                          child: AnimatedOpacity(
+                            opacity: live ? 0 : 1,
+                            duration: const Duration(milliseconds: 400),
+                            child: Center(child: EnterPastButton(key: const Key('enter-past'), palette: p, onTap: widget.onEnter!)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ]),
+                ),
+              ],
             ),
           ),
         ),
-        // ---- far from Begin, at the foot: a blessing written down ----
-        if (widget.onEnter != null)
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: math.max(24.0, mq.viewPadding.bottom + 8),
-            child: IgnorePointer(
-              ignoring: live,
-              child: ExcludeSemantics(
-                excluding: live,
-                child: AnimatedOpacity(
-                  opacity: live ? 0 : 1,
-                  duration: const Duration(milliseconds: 400),
-                  child: Center(child: EnterPastButton(key: const Key('enter-past'), palette: p, onTap: widget.onEnter!)),
-                ),
-              ),
-            ),
-          ),
         // ---- while it listens ----
         // The ring and, below it, what holding does: one column from the bottom, so a hint grown
         // by the text size pushes the ring up instead of running across it. At the usual sizes the

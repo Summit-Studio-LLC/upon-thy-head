@@ -5,6 +5,7 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 
 /// "A recording was kept": at launch, over the dimmed sky, when the app had been closed while a
 /// blessing was being recorded and what was recorded has been saved as a draft.
@@ -37,7 +38,7 @@ class RecoveredSheet extends StatelessWidget {
       barrier: true,
       onDismiss: onLater,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Text(title, key: const Key('recovered-title'), style: serif(22, 28, p.ink)),
+        WholeWords(title, textKey: const Key('recovered-title'), maxScale: titleMaxScale, style: serif(22, 28, p.ink)),
         const SizedBox(height: 6),
         Text(
           recovered.isEmpty ? '' : Strings.recoveredBody([for (final b in recovered) b.local]),

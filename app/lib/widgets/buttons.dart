@@ -33,7 +33,7 @@ class _TextBtnState extends State<TextBtn> {
         onTapUp: (_) => setState(() => _down = false),
         onTap: widget.onTap,
         child: Container(
-          height: 44,
+          constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           child: AnimatedDefaultTextStyle(

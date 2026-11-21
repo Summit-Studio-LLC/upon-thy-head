@@ -10,6 +10,7 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/icons.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 import 'blessing_file.dart';
 import 'link_service.dart';
 import 'links.dart';
@@ -263,7 +264,7 @@ class ShareSheetState extends State<ShareSheet> {
             const SizedBox(width: 14),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(b.shownTitle, key: const Key('share-card-title'), maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(21, 26, p.ink)),
+                WholeWords(b.shownTitle, textKey: const Key('share-card-title'), maxScale: titleMaxScale, maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(21, 26, p.ink)),
                 const SizedBox(height: 2),
                 Text(from.isEmpty ? Strings.aBlessing : Strings.blessingFrom(from), style: serif(16, 22, p.light, italic: true)),
               ]),

@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
+import '../widgets/whole_words.dart';
 import 'checks.dart';
 
 const _channel = MethodChannel('upon_thy_head/check');
@@ -199,7 +200,7 @@ class PhoneCheckPageState extends State<PhoneCheckPage> implements CheckHost {
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             padding: EdgeInsets.fromLTRB(28, 112 + dy, 28, 64),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Phone check', key: const Key('check-title'), style: serif(34, 38, pal.ink, tracking: -.012)),
+              WholeWords('Phone check', textKey: const Key('check-title'), maxScale: titleMaxScale, style: serif(34, 38, pal.ink, tracking: -.012)),
               const SizedBox(height: 10),
               Text('Checks what only a real iPhone can answer. This page is only in test builds.', style: hint),
               const SizedBox(height: 24),

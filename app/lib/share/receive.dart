@@ -5,6 +5,7 @@ import '../strings.dart';
 import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 import 'blessing_file.dart';
 import 'ring_file.dart';
 import 'share.dart';
@@ -164,7 +165,7 @@ class ReceiveSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(heading, key: const Key('receive-title'), style: record == null ? sans(17, 24, p.ink) : serif(22, 28, p.ink)),
+            WholeWords(heading, textKey: const Key('receive-title'), maxScale: titleMaxScale, style: record == null ? sans(17, 24, p.ink) : serif(22, 28, p.ink)),
             if (record != null) ...[
               const SizedBox(height: 6),
               Text(from.isEmpty ? Strings.aBlessing : Strings.blessingFrom(from), key: const Key('receive-from'), style: serif(17, 24, p.light, italic: true)),

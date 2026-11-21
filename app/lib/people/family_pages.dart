@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/over_sky_page.dart';
 import '../widgets/sheet.dart';
+import '../widgets/whole_words.dart';
 import 'hand_over_sheet.dart';
 import 'person.dart';
 
@@ -298,7 +299,7 @@ class PersonLayerState extends State<PersonLayer> {
           panelKey: const Key('born-sheet'),
           onDismiss: () => setState(() => _picking = false),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            Text(Strings.born, style: serif(22, 28, p.ink)),
+            WholeWords(Strings.born, maxScale: titleMaxScale, style: serif(22, 28, p.ink)),
             const SizedBox(height: 4),
             Text(Strings.bornNote, style: sans(14, 20, p.ink3)),
             const SizedBox(height: 8),
@@ -443,7 +444,7 @@ class FamilyLayer extends StatelessWidget {
             semantics: [person.name, countLine(person), if (person.born != null) Strings.bornOn(person.born!.local)].join('. '),
             onTap: () => onOpen(person),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(person.name, style: serif(20, 26, p.ink)),
+              WholeWords(person.name, style: serif(20, 26, p.ink)),
               const SizedBox(height: 3),
               Text(countLine(person), key: Key('family-count-${person.id}'), style: sans(13, 18, p.ink2)),
               if (person.born != null) ...[

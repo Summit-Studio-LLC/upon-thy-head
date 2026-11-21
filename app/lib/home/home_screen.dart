@@ -14,6 +14,7 @@ import '../data/blessing.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import '../lock/lock.dart';
+import 'caption_room.dart';
 import 'head_buttons.dart';
 import 'locked.dart';
 import '../not_yet.dart';
@@ -2376,9 +2377,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     Positioned(
                       left: Widths.side(mq.size.width, 0, Widths.foot),
                       right: Widths.side(mq.size.width, 0, Widths.foot),
+                      // the foot keeps below the ring: the caption never grows up over it (see [_foot])
+                      top: ringFloor(mq.size.height),
                       bottom: 30,
-                      // hidden under a ring arriving, whose own words sit there
-                      child: Fade(on: !_list && !(_receiving && _arrival is ArrivalRing), inDuration: listTime, outDuration: listTime, child: _locked ? _lockedFoot(p) : _foot(p)),
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          width: double.infinity,
+                          // hidden under a ring arriving, whose own words sit there
+                          child: Fade(on: !_list && !(_receiving && _arrival is ArrivalRing), inDuration: listTime, outDuration: listTime, child: _locked ? _lockedFoot(p) : _foot(p)),
+                        ),
+                      ),
                     ),
                     // the list view: the same blessings, by date (not built at all while locked)
                     if (!_locked)
@@ -2816,46 +2825,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // the caption: the blessing in focus
+        // the caption: the blessing in focus. At large text it grows only as far as the room between
+        // the ring and the ruler (found 2026-11-21: at the largest size on iPhone its date and title
+        // ran up over the ring and its lights)
         if (b != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 24, right: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: AnimatedOpacity(
-                    opacity: _swapping ? 0 : 1,
-                    duration: const Duration(milliseconds: 300),
-                    curve: easeOut,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(b.longDate, key: const Key('cap-date'), style: sans(13, 18, p.ink2, tracking: .005)),
-                        const SizedBox(height: 6),
-                        BalancedText(b.shownTitle, textKey: const Key('cap-title'), style: serif(30, 34, p.ink, tracking: -.012)),
-                        if (b.from.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(Strings.from(b.from), key: const Key('cap-from'), style: serif(18, 26, p.light, italic: true)),
-                        ],
-                      ],
+          Flexible(
+            child: CaptionRoom(
+              date: b.longDate,
+              title: b.shownTitle,
+              from: b.from.isEmpty ? null : Strings.from(b.from),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 24, right: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: AnimatedOpacity(
+                        opacity: _swapping ? 0 : 1,
+                        duration: const Duration(milliseconds: 300),
+                        curve: easeOut,
+                        child: Column(
+                          // its own height, as the room it is given (below the ring) is taller
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(b.longDate, key: const Key('cap-date'), style: sans(13, 18, p.ink2, tracking: .005)),
+                            const SizedBox(height: 6),
+                            BalancedText(b.shownTitle, textKey: const Key('cap-title'), style: serif(30, 34, p.ink, tracking: -.012)),
+                            if (b.from.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(Strings.from(b.from), key: const Key('cap-from'), style: serif(18, 26, p.light, italic: true)),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Transform.translate(
+                      offset: const Offset(0, 4),
+                      child: IconBtn(
+                        key: const Key('read'),
+                        icon: Glyph.forward,
+                        color: p.ink,
+                        palette: p,
+                        filled: true,
+                        semantics: Strings.readBlessing,
+                        onTap: _openRead,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Transform.translate(
-                  offset: const Offset(0, 4),
-                  child: IconBtn(
-                    key: const Key('read'),
-                    icon: Glyph.forward,
-                    color: p.ink,
-                    palette: p,
-                    filled: true,
-                    semantics: Strings.readBlessing,
-                    onTap: _openRead,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         // the ruler of months
@@ -3036,7 +3056,8 @@ class _UnlockButtonState extends State<UnlockButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 44,
+          // at least 44 high; at the largest text sizes as tall as its word, never cutting it
+          constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.only(left: 16, right: 22),
           decoration: BoxDecoration(
             color: p.ink.withValues(alpha: _down ? .15 : .09),
@@ -3047,7 +3068,13 @@ class _UnlockButtonState extends State<UnlockButton> {
             children: [
               SizedBox(width: 18, height: 18, child: GlyphIcon(Glyph.lock, color: p.light)),
               const SizedBox(width: 9),
-              Text(Strings.unlock, key: const Key('unlock-text'), style: sans(15, 20, p.ink, weight: FontWeight.w500)),
+              // as New blessing under it: at the largest text it stops growing at 1.6×, whole in its pill
+              Flexible(
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.6,
+                  child: Text(Strings.unlock, key: const Key('unlock-text'), style: sans(15, 20, p.ink, weight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ),
             ],
           ),
         ),

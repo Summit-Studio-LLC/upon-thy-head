@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/measure.dart';
+import '../widgets/whole_words.dart';
 import 'blessing_file.dart';
 import 'receive.dart';
 
@@ -95,7 +96,7 @@ class RingArrivalLayerState extends State<RingArrivalLayer> {
           max: Widths.form,
           alignment: Alignment.bottomCenter,
           child: Column(mainAxisAlignment: MainAxisAlignment.end, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Semantics(header: true, child: Text(title, key: const Key('ring-arrival-title'), style: serif(40, 46, p.ink, tracking: -.012))),
+            Semantics(header: true, child: WholeWords(title, textKey: const Key('ring-arrival-title'), maxScale: titleMaxScale, style: serif(40, 46, p.ink, tracking: -.012))),
             const SizedBox(height: 18),
             Text(body, key: const Key('ring-arrival-body'), style: sans(17, 25, p.ink2)),
             const SizedBox(height: 32),
@@ -183,7 +184,7 @@ class RingArrivalLayerState extends State<RingArrivalLayer> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(Strings.givenLong(_local(r), r.precision), key: const Key('ring-arrival-date'), style: sans(13, 18, p.ink2, tracking: .005)),
               const SizedBox(height: 6),
-              Semantics(header: true, child: Text(title, key: const Key('ring-arrival-read-title'), style: serif(30, 34.5, p.ink, tracking: -.012))),
+              Semantics(header: true, child: WholeWords(title, textKey: const Key('ring-arrival-read-title'), maxScale: titleMaxScale, style: serif(30, 34.5, p.ink, tracking: -.012))),
               const SizedBox(height: 4),
               Text(r.from.isEmpty ? Strings.aBlessing : Strings.blessingFrom(r.from), style: serif(18, 26, p.light, italic: true)),
               const SizedBox(height: 24),
