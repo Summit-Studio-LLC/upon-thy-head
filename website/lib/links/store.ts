@@ -7,6 +7,7 @@
 // A copy is exactly three things: the locked bytes, when it expires, and a hash of the stop token.
 // Nothing about who made it is ever kept.
 
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { neon } from "@neondatabase/serverless";
@@ -31,8 +32,12 @@ export interface Store {
   remove(id: string): Promise<void>;
   /** Erase every copy that expired before `now`. Returns how many. */
   sweep(now: number): Promise<number>;
+  /** Read a day's totals without changing anything. */
+  spent(day: string): Promise<Spent>;
   /** Add to a day's totals (day is "2026-11-16", UTC) and return them. Totals carry no identity. */
   spend(day: string, links: number, bytes: number): Promise<Spent>;
+  /** Add to a day's totals only if both stay within `maxLinks` and `maxBytes`. */
+  trySpend(day: string, links: number, bytes: number, maxLinks: number, maxBytes: number): Promise<{ ok: boolean; spent: Spent }>;
   /**
    * Add `by` to one of a day's named counts ("links:proven", "proof:ios:ok", …) and return it.
    * Like the totals, a count says how many, never who. Dropped with the day's totals.
@@ -84,11 +89,22 @@ export class MemoryStore implements Store {
     }
     return n;
   }
+  async spent(day: string) {
+    const s = this.days.get(day);
+    return s ? { links: s.links, bytes: s.bytes } : { links: 0, bytes: 0 };
+  }
   async spend(day: string, links: number, bytes: number) {
     const was = this.days.get(day) ?? { links: 0, bytes: 0 };
+    const now = { links: Math.max(0, was.links + links), bytes: Math.max(0, was.bytes + bytes) };
+    this.days.set(day, now);
+    return { ...now };
+  }
+  async trySpend(day: string, links: number, bytes: number, maxLinks: number, maxBytes: number) {
+    const was = this.days.get(day) ?? { links: 0, bytes: 0 };
+    if (was.links + links > maxLinks || was.bytes + bytes > maxBytes) return { ok: false, spent: { ...was } };
     const now = { links: was.links + links, bytes: was.bytes + bytes };
     this.days.set(day, now);
-    return now;
+    return { ok: true, spent: { ...now } };
   }
   private tallies = new Map<string, Record<string, number>>();
   async count(day: string, what: string, by = 1) {
@@ -109,11 +125,23 @@ export class MemoryStore implements Store {
 /** A folder: one file per copy, one per day's totals. For this machine only. */
 export class FileStore implements Store {
   private dir: string;
+  private queue: Promise<unknown> = Promise.resolve();
   constructor(dir: string) {
     this.dir = dir;
   }
 
   private file = (id: string) => path.join(this.dir, `${id}.copy`);
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(fn, fn);
+    this.queue = next.then(() => {}, () => {});
+    return next;
+  }
+  private async writeAtomic(file: string, text: string) {
+    await mkdir(this.dir, { recursive: true });
+    const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
+    await writeFile(tmp, text);
+    await rename(tmp, file);
+  }
 
   async put(id: string, copy: Copy) {
     await mkdir(this.dir, { recursive: true });
@@ -148,26 +176,38 @@ export class FileStore implements Store {
     }
     return n;
   }
-  async spend(day: string, links: number, bytes: number) {
-    await mkdir(this.dir, { recursive: true });
-    const file = path.join(this.dir, `${day}.day`);
-    let was: Spent = { links: 0, bytes: 0 };
+  async spent(day: string): Promise<Spent> {
     try {
-      was = JSON.parse(await readFile(file, "utf8")) as Spent;
-    } catch {}
-    const now = { links: was.links + links, bytes: was.bytes + bytes };
-    await writeFile(`${file}.tmp`, JSON.stringify(now));
-    await rename(`${file}.tmp`, file);
-    return now;
+      const s = JSON.parse(await readFile(path.join(this.dir, `${day}.day`), "utf8")) as Spent;
+      return { links: Number(s.links) || 0, bytes: Number(s.bytes) || 0 };
+    } catch {
+      return { links: 0, bytes: 0 };
+    }
   }
-  async count(day: string, what: string, by = 1) {
-    await mkdir(this.dir, { recursive: true });
-    const file = path.join(this.dir, `${day}.counts.day`);
-    const t = await this.counts(day);
-    t[what] = (t[what] ?? 0) + by;
-    await writeFile(`${file}.tmp`, JSON.stringify(t));
-    await rename(`${file}.tmp`, file);
-    return t[what];
+  spend(day: string, links: number, bytes: number) {
+    return this.serial(async () => {
+      const was = await this.spent(day);
+      const now = { links: Math.max(0, was.links + links), bytes: Math.max(0, was.bytes + bytes) };
+      await this.writeAtomic(path.join(this.dir, `${day}.day`), JSON.stringify(now));
+      return now;
+    });
+  }
+  trySpend(day: string, links: number, bytes: number, maxLinks: number, maxBytes: number) {
+    return this.serial(async () => {
+      const was = await this.spent(day);
+      if (was.links + links > maxLinks || was.bytes + bytes > maxBytes) return { ok: false, spent: was };
+      const now = { links: was.links + links, bytes: was.bytes + bytes };
+      await this.writeAtomic(path.join(this.dir, `${day}.day`), JSON.stringify(now));
+      return { ok: true, spent: now };
+    });
+  }
+  count(day: string, what: string, by = 1) {
+    return this.serial(async () => {
+      const t = await this.counts(day);
+      t[what] = (t[what] ?? 0) + by;
+      await this.writeAtomic(path.join(this.dir, `${day}.counts.day`), JSON.stringify(t));
+      return t[what];
+    });
   }
   async counts(day: string) {
     try {
@@ -176,7 +216,24 @@ export class FileStore implements Store {
       return {};
     }
   }
+  /** Wait for queued writes to finish (for tests cleaning up a temp folder). */
+  flush(): Promise<void> {
+    return this.queue.then(() => {});
+  }
 }
+
+const UPSTASH_TRY_SPEND = `
+local l = tonumber(redis.call('HGET', KEYS[1], 'links') or '0')
+local b = tonumber(redis.call('HGET', KEYS[1], 'bytes') or '0')
+local dl = tonumber(ARGV[1])
+local db = tonumber(ARGV[2])
+if l + dl > tonumber(ARGV[3]) or b + db > tonumber(ARGV[4]) then
+  return {0, l, b}
+end
+l = redis.call('HINCRBY', KEYS[1], 'links', dl)
+b = redis.call('HINCRBY', KEYS[1], 'bytes', db)
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
+return {1, l, b}`;
 
 /**
  * Upstash Redis, spoken to over its REST interface with plain fetch (no client library).
@@ -199,6 +256,7 @@ export class UpstashStore implements Store {
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
       body: JSON.stringify(command),
       cache: "no-store",
+      signal: AbortSignal.timeout(8000),
     });
     const answer = (await response.json()) as { result?: T; error?: string };
     if (!response.ok || answer.error) throw new Error("storage refused a command");
@@ -216,14 +274,15 @@ export class UpstashStore implements Store {
     await this.run("DEL", `b:${id}`);
   }
   async sweep(now: number) {
-    // Redis has already erased what expired. This looks anyway, and erases anything that is past
-    // its time or cannot be read.
+    // Redis has already erased what expired. This checks for keys missing a TTL or past their time.
     let cursor = "0";
     let n = 0;
     do {
       const [next, keys] = await this.run<[string, string[]]>("SCAN", cursor, "MATCH", "b:*", "COUNT", 200);
       cursor = String(next);
       for (const key of keys) {
+        const ttl = await this.run<number>("PTTL", key);
+        if (ttl > 0 || ttl === -2) continue;
         const kept = await this.run<string | null>("GET", key);
         const copy = kept ? unpack(kept) : null;
         if (kept && (!copy || copy.expires <= now)) {
@@ -234,11 +293,29 @@ export class UpstashStore implements Store {
     } while (cursor !== "0");
     return n;
   }
+  async spent(day: string): Promise<Spent> {
+    const [links, bytes] = (await this.run<(string | number | null)[] | null>("HMGET", `day:${day}`, "links", "bytes")) ?? [];
+    return { links: Number(links ?? 0), bytes: Number(bytes ?? 0) };
+  }
   async spend(day: string, links: number, bytes: number) {
     const key = `day:${day}`;
     const total = { links: await this.run<number>("HINCRBY", key, "links", links), bytes: await this.run<number>("HINCRBY", key, "bytes", bytes) };
     await this.run("EXPIRE", key, 3 * 86400);
     return total;
+  }
+  async trySpend(day: string, links: number, bytes: number, maxLinks: number, maxBytes: number) {
+    const [ok, totalLinks, totalBytes] = await this.run<[number, number, number]>(
+      "EVAL",
+      UPSTASH_TRY_SPEND,
+      1,
+      `day:${day}`,
+      links,
+      bytes,
+      maxLinks,
+      maxBytes,
+      3 * 86400,
+    );
+    return { ok: ok === 1, spent: { links: Number(totalLinks), bytes: Number(totalBytes) } };
   }
   async count(day: string, what: string, by = 1) {
     const n = await this.run<number>("HINCRBY", `count:${day}`, what, by);
@@ -286,10 +363,18 @@ export class PostgresStore implements Store {
 
   private tables() {
     this.ready ??= (async () => {
-      await this.query(`CREATE TABLE IF NOT EXISTS ${this.copies} (id text PRIMARY KEY, bytes bytea NOT NULL, expires bigint NOT NULL, stop_hash text NOT NULL)`, []);
-      await this.query(`CREATE INDEX IF NOT EXISTS ${this.copies}_expires ON ${this.copies} (expires)`, []);
-      await this.query(`CREATE TABLE IF NOT EXISTS ${this.days} (day text PRIMARY KEY, links bigint NOT NULL DEFAULT 0, bytes bigint NOT NULL DEFAULT 0)`, []);
-      await this.query(`CREATE TABLE IF NOT EXISTS ${this.tallies} (day text NOT NULL, what text NOT NULL, n bigint NOT NULL DEFAULT 0, PRIMARY KEY (day, what))`, []);
+      for (const ddl of [
+        `CREATE TABLE IF NOT EXISTS ${this.copies} (id text PRIMARY KEY, bytes bytea NOT NULL, expires bigint NOT NULL, stop_hash text NOT NULL)`,
+        `CREATE INDEX IF NOT EXISTS ${this.copies}_expires ON ${this.copies} (expires)`,
+        `CREATE TABLE IF NOT EXISTS ${this.days} (day text PRIMARY KEY, links bigint NOT NULL DEFAULT 0, bytes bigint NOT NULL DEFAULT 0)`,
+        `CREATE TABLE IF NOT EXISTS ${this.tallies} (day text NOT NULL, what text NOT NULL, n bigint NOT NULL DEFAULT 0, PRIMARY KEY (day, what))`,
+      ]) {
+        try {
+          await this.query(ddl, []);
+        } catch (error) {
+          if ((error as { code?: string })?.code !== "23505") throw error;
+        }
+      }
     })().catch((error) => {
       this.ready = null; // try again on the next request
       throw error;
@@ -327,13 +412,27 @@ export class PostgresStore implements Store {
     await this.query(`DELETE FROM ${this.tallies} WHERE day < $1`, [old]);
     return Number(rows[0]?.n ?? 0);
   }
+  async spent(day: string): Promise<Spent> {
+    await this.tables();
+    const rows = await this.query(`SELECT links, bytes FROM ${this.days} WHERE day = $1`, [day]);
+    return { links: Number(rows[0]?.links ?? 0), bytes: Number(rows[0]?.bytes ?? 0) };
+  }
   async spend(day: string, links: number, bytes: number) {
     await this.tables();
     const rows = await this.query(
-      `INSERT INTO ${this.days} (day, links, bytes) VALUES ($1, $2, $3) ON CONFLICT (day) DO UPDATE SET links = ${this.days}.links + EXCLUDED.links, bytes = ${this.days}.bytes + EXCLUDED.bytes RETURNING links, bytes`,
+      `INSERT INTO ${this.days} (day, links, bytes) VALUES ($1, GREATEST(0, $2::bigint), GREATEST(0, $3::bigint)) ON CONFLICT (day) DO UPDATE SET links = GREATEST(0, ${this.days}.links + $2::bigint), bytes = GREATEST(0, ${this.days}.bytes + $3::bigint) RETURNING links, bytes`,
       [day, links, bytes],
     );
     return { links: Number(rows[0]?.links ?? 0), bytes: Number(rows[0]?.bytes ?? 0) };
+  }
+  async trySpend(day: string, links: number, bytes: number, maxLinks: number, maxBytes: number) {
+    await this.tables();
+    const rows = await this.query(
+      `INSERT INTO ${this.days} (day, links, bytes) SELECT $1, $2::bigint, $3::bigint WHERE $2::bigint <= $4::bigint AND $3::bigint <= $5::bigint ON CONFLICT (day) DO UPDATE SET links = ${this.days}.links + EXCLUDED.links, bytes = ${this.days}.bytes + EXCLUDED.bytes WHERE ${this.days}.links + EXCLUDED.links <= $4::bigint AND ${this.days}.bytes + EXCLUDED.bytes <= $5::bigint RETURNING links, bytes`,
+      [day, links, bytes, maxLinks, maxBytes],
+    );
+    if (rows.length === 1) return { ok: true, spent: { links: Number(rows[0].links), bytes: Number(rows[0].bytes) } };
+    return { ok: false, spent: await this.spent(day) };
   }
   async count(day: string, what: string, by = 1) {
     await this.tables();

@@ -5,7 +5,7 @@
 //     "relation": ["delegate_permission/common.handle_all_urls"],
 //     "target": {
 //       "namespace": "android_app",
-//       "package_name": "<the Android package, e.g. dev.summitstudio.uponThyHead>",
+//       "package_name": "<the Android package, e.g. dev.summitstudio.uponthyhead>",
 //       "sha256_cert_fingerprints": ["<SHA-256 of the signing certificate, AA:BB:…>"]
 //     }
 //   }

@@ -172,7 +172,7 @@ await run("webkit", webkit);
 const made = await share(origin);
 const got = await fetch(`${origin}/api/b/${made.id}`);
 ok(got.headers.get("cache-control") === "no-store" && got.headers.get("x-content-type-options") === "nosniff" && got.headers.get("content-type") === "application/octet-stream" && !got.headers.get("access-control-allow-origin") && !got.headers.get("set-cookie"), "read headers");
-const big = await fetch(`${origin}/api/b`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: Buffer.alloc(65537, 1) });
+const big = await fetch(`${origin}/api/b`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: Buffer.alloc(524289, 1) });
 ok(big.status === 413, "too big over the wire");
 const aasa = await fetch(`${origin}/.well-known/apple-app-site-association`, { redirect: "manual" });
 ok(aasa.status === 200 && aasa.headers.get("content-type") === "application/json" && (await aasa.json()).applinks.details[0].components[0]["/"] === "/b/*", "apple-app-site-association");

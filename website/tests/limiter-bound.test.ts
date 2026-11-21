@@ -87,3 +87,42 @@ test("a stop request with no usable token is refused before anything is counted"
   for (let i = 0; i < LIMITS.stop[0] + 20; i++) assert.equal((await stop(deps, { id, authorization: null, client: "x" })).status, 401);
   assert.equal(limiter.size("stop"), 0);
 });
+
+test("a newcomer refused by the shared ceiling does not become known or bypass it on a second request", () => {
+  const limiter = new Limiter();
+  const own = [10, 60_000] as const;
+  const shared = [3, 60_000] as const;
+  for (let i = 0; i < 3; i++) assert.equal(limiter.takeWithCeiling("read", `ok${i}`, own, shared, 0), 0);
+  assert.equal(limiter.size("read"), 3);
+  // 4th newcomer hits the shared ceiling; must not enter the "read" table or slip past on a 2nd ask
+  assert.ok(limiter.takeWithCeiling("read", "late", own, shared, 1) > 0);
+  assert.equal(limiter.knows("read", "late", 1), false);
+  assert.equal(limiter.size("read"), 3);
+  assert.ok(limiter.takeWithCeiling("read", "late", own, shared, 2) > 0, "still held by the shared ceiling on the 2nd request");
+});
+
+test("takeAll takes from every bucket or from none when a later check refuses", () => {
+  const limiter = new Limiter();
+  const checks = [
+    { what: "create", client: "a", limit: [10, 60_000] as const },
+    { what: "create-day", client: "a", limit: [40, 86_400_000] as const },
+    { what: "create-bytes-day", client: "a", limit: [1000, 86_400_000] as const, amount: 2000 },
+  ];
+  assert.ok(limiter.takeAll(checks, 0) > 0);
+  assert.equal(limiter.size("create"), 0);
+  assert.equal(limiter.size("create-day"), 0);
+  assert.equal(limiter.size("create-bytes-day"), 0);
+});
+
+test("challenge and prove share the single proof-all newcomer ceiling", async () => {
+  const { challenge, prove, LIMITS } = await import("../lib/links/service.ts");
+  const limiter = new Limiter();
+  const deps = { store: null, limiter, now: () => 0 };
+  const half = LIMITS.proofAll[0] / 2;
+  for (let i = 0; i < half; i++) assert.notEqual((await challenge(deps, { client: `c${i}` })).status, 429);
+  for (let i = 0; i < half; i++) {
+    assert.notEqual((await prove(deps, { contentType: "application/json", body: new Uint8Array(2), client: `p${i}` })).status, 429);
+  }
+  assert.equal((await challenge(deps, { client: "one-more-c" })).status, 429);
+  assert.equal((await prove(deps, { contentType: "application/json", body: new Uint8Array(2), client: "one-more-p" })).status, 429);
+});
