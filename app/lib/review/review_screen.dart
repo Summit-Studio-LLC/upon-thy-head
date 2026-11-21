@@ -9,6 +9,7 @@ import '../data/blessing.dart';
 import '../not_yet.dart';
 import '../people/person.dart';
 import '../people/whose_choice.dart';
+import '../polish/change.dart';
 import '../polish/model.dart';
 import '../polish/polish.dart';
 import '../record/model_offer.dart';
@@ -22,6 +23,7 @@ import '../widgets/sheet.dart';
 import '../widgets/whole_words.dart';
 import 'date_sheet.dart';
 import 'player.dart';
+import 'polish_light.dart';
 import 'tags.dart';
 
 /// Reviewing a blessing: hear the recording, put right the words the phone misheard, and fill
@@ -126,6 +128,18 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   /// rules. Asked as the page opens; until it answers, polish is the rules alone.
   bool _modelReady = false;
 
+  /// For the light over the words (polish_light.dart): the pieces the model takes, the one with it
+  /// now, and the words they were measured in; then the words polish changed, which glint once.
+  List<TextRange> _pieces = const [], _glints = const [];
+  int _at = -1, _glint = 0;
+  String _basis = '';
+
+  /// The changes screen opens when the glint has settled.
+  Timer? _changesTimer;
+
+  /// How long the words glint at the finish before the changes screen opens.
+  static final glintTime = PolishLight.glintRise + PolishLight.glintFall;
+
   Blessing? get _b => widget.blessing;
 
   /// The words are still being written from the recording.
@@ -207,6 +221,7 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
+    _changesTimer?.cancel();
     _work?.cancel();
     for (final c in [_scroll, _title, _from, _for, _tag, _words]) {
       c.dispose();
@@ -251,6 +266,11 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
   void _stopPolish() {
     _work?.cancel();
     _work = null;
+    _changesTimer?.cancel();
+    _changesTimer = null;
+    _pieces = const [];
+    _glints = const [];
+    _at = -1;
   }
 
   void _setQuietly(TextEditingController c, String text) {
@@ -323,12 +343,32 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     final b = _b;
     if (b == null) return;
     FocusManager.instance.primaryFocus?.unfocus();
+    if (_work != null || _changesTimer != null) return;
+    // what polish adds is what glints at the finish
+    String sig(Change c) => '${c.start}|${c.was}|${c.now}';
+    final had = {for (final c in b.changes) sig(c)};
     if (_modelReady) {
-      if (_work != null) return;
       final work = _work = PolishWork();
-      setState(() {});
+      setState(() {
+        _pieces = const [];
+        _at = -1;
+        _basis = b.rawText;
+      });
       final person = [for (final p in widget.people) if (p.id == b.personId) p.name];
-      final n = await Polish.runWithModel(b, model: phoneModel, names: Polish.namesOf(b, person), work: work);
+      final n = await Polish.runWithModel(
+        b,
+        model: phoneModel,
+        names: Polish.namesOf(b, person),
+        work: work,
+        onPiece: (i, pieces) {
+          if (_work == work && mounted) {
+            setState(() {
+              _pieces = pieces;
+              _at = i;
+            });
+          }
+        },
+      );
       if (_work == work) _work = null;
       // left the page, or another blessing opened in the meantime: nothing was added
       if (n == null || !mounted || !widget.on || _b?.id != b.id) {
@@ -340,13 +380,23 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     }
     _dirty = true;
     await flush();
-    if (!mounted) return;
-    if (b.changes.isEmpty) {
-      setState(() => _nothingFor = b.rawText);
-    } else {
-      setState(() {});
+    if (!mounted || !widget.on || _b?.id != b.id) return;
+    final added = [for (final c in b.changes) if (!had.contains(sig(c))) TextRange(start: c.start, end: c.end)];
+    setState(() {
+      if (_pieces.isNotEmpty) _at = _pieces.length;
+      _basis = b.rawText;
+      _glints = added;
+      _glint++;
+      if (b.changes.isEmpty) _nothingFor = b.rawText;
+    });
+    if (b.changes.isEmpty) return;
+    // the words glint where the changes landed, and settle; then the changes screen
+    _changesTimer = Timer(glintTime, () {
+      _changesTimer = null;
+      if (!mounted || !widget.on || _b?.id != b.id) return;
+      setState(() => _glints = const []);
       widget.onChanges?.call();
-    }
+    });
   }
 
   void _addTag([String? typed]) {
@@ -955,18 +1005,28 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
           ExcludeSemantics(child: Text(Strings.spokenWords, key: const Key('review-spoken-label'), style: sans(15, 20, p.ink2))),
           const SizedBox(height: 10),
         ],
-        _field(
-          key: const Key('review-words'),
-          label: Strings.wordsLabel,
-          controller: _words,
-          focus: _wordsFocus,
-          style: wordStyle,
-          placeholder: b.entered ? Strings.typeOrPaste : Strings.typeWords,
-          placeholderColor: p.ink3,
-          capitalization: TextCapitalization.sentences,
-          action: TextInputAction.newline,
-          maxLines: null,
-          minLines: 4,
+        PolishLight(
+          key: const Key('review-light'),
+          palette: p,
+          text: _words.text,
+          basis: _basis,
+          pieces: _pieces,
+          at: _at,
+          glints: _glints,
+          glint: _glint,
+          child: _field(
+            key: const Key('review-words'),
+            label: Strings.wordsLabel,
+            controller: _words,
+            focus: _wordsFocus,
+            style: wordStyle,
+            placeholder: b.entered ? Strings.typeOrPaste : Strings.typeWords,
+            placeholderColor: p.ink3,
+            capitalization: TextCapitalization.sentences,
+            action: TextInputAction.newline,
+            maxLines: null,
+            minLines: 4,
+          ),
         ),
         // entered: a Paste chip while there are no words yet; polish never runs on them
         if (b.entered) ...[
@@ -998,13 +1058,18 @@ class ReviewLayerState extends State<ReviewLayer> with WidgetsBindingObserver {
     } else if (_work != null) {
       child = Container(
         key: const Key('review-polishing'),
-        height: 44,
+        // at least a row's height; taller at the largest text sizes, where a fixed 44 cut the words off
+        constraints: const BoxConstraints(minHeight: 44),
         alignment: Alignment.centerLeft,
-        child: Semantics(liveRegion: true, child: Text(Strings.polishing, style: sans(15, 20, p.ink3))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          BreathingLight(key: const Key('review-polishing-light'), palette: p),
+          const SizedBox(width: 8),
+          Flexible(child: Semantics(liveRegion: true, child: Text(Strings.polishing, style: sans(15, 20, p.ink3)))),
+        ]),
       );
     } else if (_nothingFor == b.rawText) {
       child = Container(
-        height: 44,
+        constraints: const BoxConstraints(minHeight: 44),
         alignment: Alignment.centerLeft,
         child: Semantics(liveRegion: true, child: Text(Strings.nothingToPolish, key: const Key('review-nothing'), style: sans(15, 20, p.ink3))),
       );

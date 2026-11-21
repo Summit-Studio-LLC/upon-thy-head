@@ -1,6 +1,7 @@
 // The review page with the phone's own model: "Polish the words" shows "Polishing…" while it works,
 // leaving the page stops it and adds nothing, and when it finishes its changes open on the changes
-// screen beside the rules'. With no model, the page is as it always was.
+// screen beside the rules' (once the words that changed have glinted). With no model, the page is as
+// it always was, but for the glint.
 //
 //   flutter test test/polish_model_widget_test.dart
 
@@ -73,6 +74,8 @@ void main() {
         expect(find.byKey(const Key('review-polish')), findsNothing, reason: 'no second press while it works');
         await t.pump(const Duration(seconds: 3));
         await t.pump();
+        // the changed words glint, then the changes screen opens
+        await t.pump(ReviewLayerState.glintTime);
         expect(opened, 1);
         expect(b.changes.where((c) => c.source == 'rules'), isNotEmpty);
         expect(b.changes.where((c) => c.source == ModelSource.name), isNotEmpty);
@@ -108,6 +111,8 @@ void main() {
         await t.tap(find.byKey(const Key('review-polish')));
         await t.pump();
         expect(find.byKey(const Key('review-polishing')), findsNothing);
+        expect(opened, 0, reason: 'the glint first');
+        await t.pump(ReviewLayerState.glintTime);
         expect(opened, 1);
         expect(b.changes.every((c) => c.source == 'rules'), isTrue);
       });

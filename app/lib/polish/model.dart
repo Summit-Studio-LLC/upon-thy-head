@@ -111,14 +111,22 @@ class ModelSource {
 
   /// Changes to [spoken], in order, none overlapping; empty when the model is not there, and for
   /// any piece it refused, failed on, or answered badly.
-  Future<List<Change>> find(String spoken, String language, {Set<String> names = const {}, PolishWork? work}) async {
+  ///
+  /// [onPiece] hears where the work is, for the light over the words: piece [index] of [pieces]
+  /// (where each sits in [spoken]) as it goes to the model, and [index] == pieces.length once
+  /// every piece is answered. Not called when there is no model, nor after a cancel.
+  Future<List<Change>> find(String spoken, String language,
+      {Set<String> names = const {}, PolishWork? work, void Function(int index, List<TextRange> pieces)? onPiece}) async {
     final lang = language == 'es' ? 'es' : 'en';
     if (spoken.trim().isEmpty || !await model.ready(lang)) return const [];
     work?._model = model;
     final instructions = ModelInstructions.of(lang, names: names);
     final out = <Change>[];
-    for (final p in pieces(spoken)) {
+    final all = pieces(spoken);
+    final ranges = List<TextRange>.unmodifiable([for (final p in all) TextRange(start: p.start, end: p.start + p.text.length)]);
+    for (final (i, p) in all.indexed) {
       if (work?.cancelled ?? false) return const [];
+      onPiece?.call(i, ranges);
       final id = 'p${_calls++}';
       work?._running.add(id);
       String? answer;
@@ -134,6 +142,7 @@ class ModelSource {
       if (answer == null) continue;
       out.addAll(ModelCheck.changes(p.text, answer, language: lang, names: names, offset: p.start, source: name));
     }
+    if (!(work?.cancelled ?? false)) onPiece?.call(ranges.length, ranges);
     return out;
   }
 

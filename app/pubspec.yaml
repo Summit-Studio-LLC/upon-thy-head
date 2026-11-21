@@ -1,7 +1,7 @@
 name: upon_thy_head
 description: "Upon Thy Head. A written record of priesthood blessings, kept on the device."
 publish_to: 'none'
-version: 1.1.0+14
+version: 1.1.0+15
 
 environment:
   sdk: ^3.12.2

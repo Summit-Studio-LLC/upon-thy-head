@@ -1,3 +1,5 @@
+import 'dart:ui' show TextRange;
+
 import '../data/blessing.dart';
 import '../strings.dart';
 import 'change.dart';
@@ -39,10 +41,12 @@ class Polish {
   /// The model is asked only here, never after a correction ([refresh] is the rules alone).
   ///
   /// [work] stops it (leaving the page); then nothing is added and null is returned. Words corrected
-  /// while the model worked carry its changes along where their words are untouched.
-  static Future<int?> runWithModel(Blessing b, {required PhoneModel model, Set<String> names = const {}, PolishWork? work}) async {
+  /// while the model worked carry its changes along where their words are untouched. [onPiece]
+  /// hears which piece of the words is with the model ([ModelSource.find]).
+  static Future<int?> runWithModel(Blessing b,
+      {required PhoneModel model, Set<String> names = const {}, PolishWork? work, void Function(int index, List<TextRange> pieces)? onPiece}) async {
     final spoken = b.rawText;
-    final found = await ModelSource(model).find(spoken, b.language, names: names, work: work);
+    final found = await ModelSource(model).find(spoken, b.language, names: names, work: work, onPiece: onPiece);
     if (work?.cancelled ?? false) return null;
     final fromModel = b.rawText == spoken ? found : rebaseChanges(spoken, b.rawText, found);
     final n = run(b);
