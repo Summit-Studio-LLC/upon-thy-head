@@ -124,6 +124,8 @@ void main() {
     }
 
     final store = SqliteBlessingStore.open(await SqliteBlessingStore.defaultPath(), audioDir: await defaultAudioDir());
+    // the ruler's value is read from the semantics tree, which is only built while semantics is on
+    final semantics = t.ensureSemantics();
     bool stage(String name) => t.widget<Fade>(find.byKey(Key('stage-$name'))).on;
     SkyEngine engine() => t.widget<SkyWidget>(find.byKey(const Key('sky'))).engine;
     String? text(String key) {
@@ -132,7 +134,7 @@ void main() {
     }
 
     bool shown(String key) => find.byKey(Key(key)).hitTestable().evaluate().isNotEmpty;
-    String rulerValue() => t.getSemantics(find.byKey(const Key('ruler'))).getSemanticsData().value;
+    String rulerValue() => t.getSemantics(find.descendant(of: find.byKey(const Key('ruler')), matching: find.byType(Semantics)).first).getSemanticsData().value;
 
     Future<void> launch() async {
       final lock = unlockedLock();
@@ -353,8 +355,11 @@ void main() {
           log('AFTER: count "${text('count')}", ruler "${rulerValue()}"');
           await shot('after-1998');
           await checkRead(b, shotName: 'read-1998');
-          await scrollRead(find.textContaining('I bless you that you will love to learn'));
-          expect(find.textContaining('I bless you that you will love to learn'), findsOneWidget);
+          // on the reading page only: the review page's words are still built behind it
+          final learn = find.descendant(of: find.byKey(const Key('read-scroll')), matching: find.textContaining('I bless you that you will love to learn'));
+          await scrollRead(learn);
+          expect(learn, findsOneWidget);
+          await backHome();
           await checkList(b, '1998', shotName: 'list-1998');
 
           // ---- the share text, the PDF and its name ----
@@ -363,7 +368,7 @@ void main() {
           await tap('share-text', settle: 2500);
           var items = await NativeShareApi.debugItems();
           log('TEXT ITEMS ${jsonEncode(items)}');
-          expect(jsonEncode(items), contains('1998'));
+          expect(jsonEncode(items), contains('"kind":"text"')); // the native side names only the kind of a text item
           expect(shareText(b, Strings.wordsFor(Strings.language)).split('\n')[1], '1998');
           for (var i = 0; i < 3 && await NativeShareApi.debugShowing(); i++) {
             await act('appdismiss $i');
@@ -512,6 +517,8 @@ void main() {
       log('FAILED $err\n${st.toString().split('\n').take(12).join('\n')}');
       status.writeAsStringSync('failed ${'$err'.split('\n').take(3).join(' ')}', flush: true);
       rethrow;
+    } finally {
+      semantics.dispose();
     }
   });
 }
