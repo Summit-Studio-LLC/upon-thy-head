@@ -58,7 +58,7 @@ async function run(name, type) {
   ok(shown.length === 2 && shown[0] === "Emma, I lay my hands upon your head, to give you a blessing of comfort.", `kept changes applied: ${shown[0]}`);
   ok(shown[1].includes("and, uh, He wants you"), "the restored change shows the spoken words");
   ok((await p.textContent(".notes")).includes("with 2 small changes"), "polished note");
-  ok((await p.textContent("#keep")).includes("coming to iPhone and Android") && (await p.$$("#keep a")).length === 0, "coming soon, with no dead button");
+  ok((await p.getAttribute("#keep a", "href")) === "https://apps.apple.com/app/id6836352663" && (await p.textContent("#keep a")) === "Keep it in Upon Thy Head", "the App Store button");
   ok((await p.evaluate(() => location.href)) === made.link, "the address, with its key, is left as it came");
   ok((await p.context().cookies()).length === 0 && (await p.evaluate(() => localStorage.length + sessionStorage.length)) === 0, "no cookies, nothing stored");
   const h = response.headers();
@@ -172,7 +172,7 @@ await run("webkit", webkit);
 const made = await share(origin);
 const got = await fetch(`${origin}/api/b/${made.id}`);
 ok(got.headers.get("cache-control") === "no-store" && got.headers.get("x-content-type-options") === "nosniff" && got.headers.get("content-type") === "application/octet-stream" && !got.headers.get("access-control-allow-origin") && !got.headers.get("set-cookie"), "read headers");
-const big = await fetch(`${origin}/api/b`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: Buffer.alloc(65537, 1) });
+const big = await fetch(`${origin}/api/b`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: Buffer.alloc(524288 + 1, 1) }); // one byte over the 512 KiB limit
 ok(big.status === 413, "too big over the wire");
 const aasa = await fetch(`${origin}/.well-known/apple-app-site-association`, { redirect: "manual" });
 ok(aasa.status === 200 && aasa.headers.get("content-type") === "application/json" && (await aasa.json()).applinks.details[0].components[0]["/"] === "/b/*", "apple-app-site-association");

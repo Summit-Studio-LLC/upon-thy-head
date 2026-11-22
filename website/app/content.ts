@@ -4,11 +4,11 @@ export const en = {
   lang: "en",
   // The App Store page. While `url` is empty the app is not in a store yet: the button is plain
   // words, not a link. When it is, put the address here and set the label to "Download on the App Store".
-  download: { label: "Coming soon to iPhone and Android", url: "" },
+  download: { label: "Download on the App Store", url: "https://apps.apple.com/app/id6836352663" },
   meta: {
     title: "Upon Thy Head",
     description:
-      "Record a priesthood blessing and keep its words, for yourself and for your children. Everything stays on your phone. Free, and coming soon to iPhone and Android.",
+      "Record a priesthood blessing and keep its words, for yourself and for your children. Everything stays on your phone. Free, on iPhone and iPad, and coming soon to Android.",
   },
   hero: {
     name: "Upon Thy Head",
