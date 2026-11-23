@@ -4,6 +4,14 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ## Decisions
 
+### 2026-11-22
+
+- **The App Store pictures become captioned frames (Noah, after two plainer tries: "all the same shape and forgettable … cross over two screenshots … different colors and shapes to highlight what's important").** The seven pictures are drawn as one strip and cut apart, so the home screen sits across pictures 1 and 2 and its ring runs out of the phone on both sides; the ring does the same from the family screen in 6. Two night-sky pairs, one gold panel, one black, one cream. The piece that matters in each screen is drawn again large: the Listening pill, the spoken words with the left-out words struck, the two family cards, the Send button.
+  - **Wording** is the website's own headings, and the Spanish follows the Spanish store text. Noah turned down "One light for each blessing" as a cliché; picture 2 reads "Every blessing, where you can find it."
+  - **Made by** `app/tool/store_frames/build.mjs` from the plain screenshots (`tool/store_shots.sh`), into `design/store/framed/<lang>/<device>/`. iPhone and iPad, English and Spanish.
+  - **Not real captures:** the enlarged pieces, the lights at 2019, 2021 and 2023, and the small background stars are drawn to match the app. The screens inside the phones are real.
+  - **Left out:** typing in an old blessing (screenshot 6 of the plain set) has no frame. They go to Apple with version 1.1, at Noah's word.
+
 ### 2026-11-21
 
 - **Your links: the Stop button crushed the title (found by Noah watching the simulator; in the released build 12).** A pill button was held to 420 points wide for the iPad on 2026-11-18. Beside other things in a row that made it 420 points wide, so on Your links a live link's title was squeezed into a one-letter column. A pill now takes that limit only where its space has an edge; in a row it keeps its own width (`widgets/buttons.dart`, `test/pill_width_test.dart`). Seen right on a simulator in English and Spanish. The link script had passed with this fault on screen: the scripts take pictures but do not fail on an overflow.

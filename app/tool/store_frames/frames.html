@@ -1,0 +1,200 @@
+<!doctype html><meta charset="utf-8">
+<!-- The App Store pictures: seven frames drawn as one strip, so the home screen and its ring can
+     cross from one frame into the next. build.mjs opens this page once for each language and
+     device (?lang=en|es&device=iphone|ipad) and cuts the strip into the seven pictures.
+     The screens themselves are the plain screenshots from tool/store_shots.sh. -->
+<style>
+@font-face{font-family:N;src:url("../../assets/fonts/Newsreader.ttf");font-weight:200 800}
+@font-face{font-family:N;font-style:italic;src:url("../../assets/fonts/Newsreader-Italic.ttf");font-weight:200 800}
+:root{--ground:#0b0907;--ink:#efe6d4;--ink2:#b5ab98;--gold:#f0c987;--dark:#15100a}
+html,body{margin:0;background:var(--ground)}
+body{overflow:hidden}
+#strip{position:absolute;left:0;top:0;font-family:N,serif;color:var(--ink);overflow:hidden}
+.abs{position:absolute}
+.panel{position:absolute;top:0;overflow:hidden}
+.sky{background:var(--ground)}
+.sky .mw{position:absolute;inset:0;background:url("../../assets/sky/milkyway_4k.jpg") no-repeat;filter:contrast(1.25) brightness(1.25) saturate(1.15)}
+.sky canvas{position:absolute;left:0;top:0}
+.sky .shade{position:absolute;inset:0;background:linear-gradient(rgba(11,9,7,.82) 0,rgba(11,9,7,.5) 22%,rgba(11,9,7,0) 46%,rgba(11,9,7,0) 80%,rgba(11,9,7,.6) 100%)}
+h1{position:absolute;margin:0;font-weight:400;line-height:.98;letter-spacing:-.028em;white-space:nowrap}
+.sub{position:absolute;margin:0;line-height:1.3;color:var(--ink2);letter-spacing:-.005em}
+.sans{font-family:-apple-system,"SF Pro Text","Helvetica Neue",sans-serif}
+.dev{position:absolute;box-sizing:border-box;background:#0d0a07;box-shadow:0 0 0 3px rgba(239,230,212,.22),0 60px 150px rgba(0,0,0,.5)}
+.dev img{display:block;width:100%;height:100%}
+.dev.light{box-shadow:0 0 0 3px rgba(21,16,10,.9),0 70px 140px rgba(60,40,5,.38)}
+svg{position:absolute;left:0;top:0;pointer-events:none}
+.year{position:absolute;font-weight:500;color:var(--ink2);transform:translateX(-50%);letter-spacing:.02em}
+.pill{position:absolute;display:flex;align-items:center;border-radius:999px;white-space:nowrap;box-sizing:border-box}
+s{text-decoration:none;color:#6f6656;background:linear-gradient(var(--gold),var(--gold)) 0 56%/100% .07em no-repeat}
+</style>
+<body><div id="strip"></div>
+<script>
+const q=new URLSearchParams(location.search), lang=q.get('lang')||'en', device=q.get('device')||'iphone';
+const shots=`../../../design/store/${lang}/${device}/`;
+
+const WORDS={
+ en:{
+  f1h:'Keep every<br>blessing you<br>are given.', f1s:'Record a priesthood blessing<br>and keep its words.', free:'Free. No ads. No account.',
+  f2h:'Every blessing,<br>where you can<br>find it.', f2s:'Touch a light and the blessing opens.',
+  f3h:'Record<br>the blessing.', f3s:'Set the phone nearby and press Begin. It keeps listening with the screen locked.', listening:'Listening',
+  f4h:'The phone writes<br>the words.',
+  f4t:'I lay my hands upon your head, <s>um,</s> and give you a blessing of health. Your body <s>is,</s> is a gift, and it will heal. I bless the doctors and, <s>uh,</s> the nurses who care for you.',
+  f4p:'3 words left out. Touch one to put it back.',
+  f5h:'Read it<br>and keep it.', f5s:'The recording is erased. The writing stays.',
+  f6h:'For you,<br>and for your<br>children.', me:'For me', meS:'Seven blessings since 2019', emma:'For Emma', emmaS:'Two blessings since 2025',
+  f7h:'Yours<br>to share.', f7s:'A link that opens in the app, or only the words as text or a PDF.', send:'Send this blessing'},
+ es:{
+  f1h:'Guarda cada<br>bendición<br>que recibas.', f1s:'Graba una bendición del sacerdocio<br>y conserva sus palabras.', free:'Gratis. Sin anuncios. Sin cuenta.',
+  f2h:'Cada bendición,<br>donde puedas<br>encontrarla.', f2s:'Toca una luz para leerla.',
+  f3h:'Graba<br>la bendición.', f3s:'Pon el teléfono cerca y toca Comenzar. Sigue escuchando con la pantalla bloqueada.', listening:'Escuchando',
+  f4h:'El teléfono escribe<br>las palabras.',
+  f4t:'Pongo mis manos sobre tu cabeza, <s>eh,</s> y te doy una bendición de salud. Tu cuerpo <s>es,</s> es un don, y sanará. Bendigo a los médicos y, <s>este,</s> a las enfermeras que te cuidan.',
+  f4p:'3 palabras omitidas. Toca una para devolverla.',
+  f5h:'Léela<br>y consérvala.', f5s:'La grabación se borra. Lo escrito se queda.',
+  f6h:'Para ti<br>y para<br>tus hijos.', me:'Para mí', meS:'Siete bendiciones desde 2019', emma:'Para Emma', emmaS:'Dos bendiciones desde 2025',
+  f7h:'Tuya para<br>compartir.', f7s:'Un enlace que se abre en la app, o solo las palabras como texto o PDF.', send:'Enviar esta bendición'}};
+const T=WORDS[lang];
+
+// Each device: the frame, the shape of its screen, and where the ring lies in its home screenshot
+// (a circle, in the screenshot's own pixels, measured from 01-home.png).
+const D={
+ iphone:{FW:1320,FH:2868,shotW:1320,asp:2868/1320,pad:.015,rad:.135,inner:.121,ring:{x:660,y:-912.6,r:2059}},
+ ipad:{FW:2064,FH:2752,shotW:2064,asp:2752/2064,pad:.02,rad:.05,inner:.032,ring:{x:1032,y:-864.9,r:1965}},
+}[device];
+const {FW,FH}=D, strip=document.getElementById('strip');
+strip.style.width=7*FW+'px'; strip.style.height=FH+'px';
+window.FRAME={FW,FH};
+
+let html='', svg='';
+const X=(frame,x)=>(frame-1)*FW+x;                        // a frame's own x, as a place on the strip
+const add=s=>{html+=s};
+const dev=(shot,W,left,top,o={})=>{
+  const pad=W*D.pad;
+  add(`<div class="dev ${o.light?'light':''}" id="${o.id||''}" style="width:${W}px;height:${W*D.asp}px;left:${left}px;top:${top}px;padding:${pad}px;border-radius:${W*D.rad}px;${o.style||''}"><img style="border-radius:${W*D.inner}px" src="${shots}${shot}"></div>`);
+  const k=(W-2*pad)/D.shotW;                              // screenshot pixels to strip pixels
+  return {k,x0:left+pad,y0:top+pad,W,left,top};
+};
+const ringOf=p=>{const cx=p.x0+D.ring.x*p.k,cy=p.y0+D.ring.y*p.k,R=D.ring.r*p.k;return {cx,cy,R,Y:x=>cy+Math.sqrt(Math.max(0,R*R-(x-cx)*(x-cx)))}};
+const ringPath=(g,from,to,id)=>{let d='';for(let x=Math.max(from,g.cx-g.R+1);x<=Math.min(to,g.cx+g.R-1);x+=6)d+=(d?'L':'M')+x.toFixed(1)+' '+g.Y(x).toFixed(1)+' ';
+  svg+=`<path d="${d}" fill="none" stroke="url(#${id})" stroke-width="3"/>`};
+const light=(g,x,r,year,ys)=>{const y=g.Y(x);svg+=`<circle cx="${x}" cy="${y}" r="${r*5}" fill="url(#glow)"/><circle cx="${x}" cy="${y}" r="${r}" fill="#fbe6bd"/>`;
+  if(year)add(`<div class="year sans" style="left:${x}px;top:${y+ys*1.55}px;font-size:${ys}px">${year}</div>`)};
+const sky=(frame,seed,bx,by,bs)=>add(`<div class="panel sky" style="left:${X(frame,0)}px;width:${2*FW}px;height:${FH}px"><div class="mw" style="background-size:${bs}px ${bs/2}px;background-position:${bx}px ${by}px"></div><canvas width="${2*FW}" height="${FH}" data-seed="${seed}"></canvas><div class="shade"></div></div>`);
+const flat=(frame,colour,inside='')=>add(`<div class="panel" style="left:${X(frame,0)}px;width:${FW}px;height:${FH}px;background:${colour}">${inside}</div>`);
+const h1=(frame,x,y,size,text,colour='var(--ink)')=>add(`<h1 data-max="${FW-x-x*.55}" style="left:${X(frame,x)}px;top:${y}px;font-size:${size}px;color:${colour}">${text}</h1>`);
+const sub=(frame,x,y,size,w,text,colour='var(--ink2)')=>add(`<p class="sub" style="left:${X(frame,x)}px;top:${y}px;font-size:${size}px;width:${w}px;color:${colour}">${text}</p>`);
+
+if(device==='iphone'){
+  sky(1,7,-6650,-1150,10650); flat(3,'#eec27a'); flat(4,'#0b0907');
+  flat(5,'#efe6d4','<div class="abs" style="left:-190px;top:1180px;width:1700px;height:1700px;border-radius:50%;background:#f0c987"></div>');
+  sky(6,23,-1500,-1250,10650);
+  add('<svg id="arcs"></svg>');
+  // 1 and 2: the home screen across the join, its ring carried out over both
+  h1(1,110,236,176,T.f1h); sub(1,114,806,56,1000,T.f1s);
+  add(`<div class="pill sans fit" data-right="${X(1,1320-110)}" style="left:${X(1,110)}px;top:2500px;height:118px;padding:0 54px;border:3px solid rgba(240,201,135,.75);color:var(--gold);font-size:48px;font-weight:500">${T.free}</div>`);
+  const home=dev('01-home.png',1240,1000,1010), g=ringOf(home);
+  ringPath(g,0,2640,'fadeA'); light(g,150,11,'2019',40); light(g,450,15,'2021',40); light(g,770,11,'2023',40);
+  h1(2,110,236,176,T.f2h); sub(2,114,806,56,1100,T.f2s);
+  // 3: recording, on gold
+  h1(3,110,236,196,T.f3h,'var(--dark)'); sub(3,114,680,56,1080,T.f3s,'#5b441a');
+  dev('02-recording.png',960,X(3,260),1120,{light:1,style:'transform:rotate(5deg);transform-origin:50% 30%'});
+  add(`<div class="pill" style="left:${X(3,76)}px;top:1730px;height:190px;padding:0 76px 0 62px;background:#15100a;color:var(--ink);font-size:104px;font-style:italic;box-shadow:0 30px 80px rgba(60,40,5,.45)"><span style="width:38px;height:38px;border-radius:50%;background:#fbe6bd;box-shadow:0 0 0 14px rgba(240,201,135,.28),0 0 60px 20px rgba(240,201,135,.5);margin-right:50px"></span>${T.listening}</div>`);
+  // 4: the words themselves
+  h1(4,110,236,150,T.f4h);
+  add(`<div class="abs" id="words" style="left:${X(4,110)}px;top:660px;width:1130px;font-size:103px;line-height:1.2;letter-spacing:-.012em">${T.f4t}</div>`);
+  add(`<div class="pill sans fit" id="note" data-gap="110" data-right="${X(4,1320-90)}" style="left:${X(4,110)}px;top:1890px;height:124px;padding:0 56px;background:var(--gold);color:#15100a;font-size:48px;font-weight:600">${T.f4p}</div>`);
+  dev('03-review.png',1040,X(4,140),2180,{id:'under',style:'--gap:170'});
+  // 5: reading, on cream
+  h1(5,110,236,196,T.f5h,'var(--dark)'); sub(5,114,680,56,1080,T.f5s,'#5f5646');
+  dev('04-reading.png',960,X(5,180),1010,{light:1});
+  // 6 and 7: family and sharing, the family screen's ring carried on
+  h1(6,110,236,176,T.f6h);
+  const fam=dev('05-family.png',900,X(6,110),1100), g2=ringOf(fam);
+  ringPath(g2,X(6,0),X(7,380),'gold'); light(g2,X(6,1170),11); light(g2,X(7,190),15);
+  card(X(6,600),1930,640,84,38,T.me,T.meS,false); card(X(6,600),2210,640,84,38,T.emma,T.emmaS,true);
+  h1(7,110,236,176,T.f7h); sub(7,114,620,56,1100,T.f7s);
+  const share=dev('07-sharing.png',900,X(7,330),1100);
+  sendButton(share,'07-sharing.png',X(7,70),X(7,1250),76);
+}else{
+  sky(1,7,-9900,-1900,15500); flat(3,'#eec27a'); flat(4,'#0b0907');
+  flat(5,'#efe6d4','<div class="abs" style="left:-170px;top:1180px;width:2400px;height:2400px;border-radius:50%;background:#f0c987"></div>');
+  sky(6,23,-2500,-2000,15500);
+  add('<svg id="arcs"></svg>');
+  h1(1,170,200,236,T.f1h); sub(1,176,940,78,1500,T.f1s);
+  add(`<div class="pill sans fit" data-right="${X(1,1400)}" style="left:${X(1,170)}px;top:2400px;height:164px;padding:0 76px;border:4px solid rgba(240,201,135,.75);color:var(--gold);font-size:66px;font-weight:500">${T.free}</div>`);
+  const home=dev('01-home.png',1900,1584,1260), g=ringOf(home);
+  ringPath(g,0,2*FW,'fadeB'); light(g,1010,15,'2021',54); light(g,1300,20,'2023',54);
+  h1(2,170,200,236,T.f2h); sub(2,176,940,78,1500,T.f2s);
+  h1(3,170,200,260,T.f3h,'var(--dark)'); sub(3,176,790,78,1560,T.f3s,'#5b441a');
+  dev('02-recording.png',1380,X(3,500),1230,{light:1,style:'transform:rotate(5deg);transform-origin:50% 30%'});
+  add(`<div class="pill" style="left:${X(3,150)}px;top:1790px;height:270px;padding:0 110px 0 90px;background:#15100a;color:var(--ink);font-size:150px;font-style:italic;box-shadow:0 30px 80px rgba(60,40,5,.45)"><span style="width:54px;height:54px;border-radius:50%;background:#fbe6bd;box-shadow:0 0 0 20px rgba(240,201,135,.28),0 0 80px 28px rgba(240,201,135,.5);margin-right:70px"></span>${T.listening}</div>`);
+  h1(4,170,200,210,T.f4h);
+  add(`<div class="abs" id="words" style="left:${X(4,170)}px;top:700px;width:1740px;font-size:128px;line-height:1.2;letter-spacing:-.012em">${T.f4t}</div>`);
+  add(`<div class="pill sans fit" id="note" data-gap="100" data-right="${X(4,FW-150)}" style="left:${X(4,170)}px;top:1640px;height:170px;padding:0 78px;background:var(--gold);color:#15100a;font-size:66px;font-weight:600">${T.f4p}</div>`);
+  dev('03-review.png',1560,X(4,252),1990,{id:'under',style:'--gap:150'});
+  h1(5,170,200,260,T.f5h,'var(--dark)'); sub(5,176,790,78,1560,T.f5s,'#5f5646');
+  dev('04-reading.png',1400,X(5,332),1060,{light:1});
+  h1(6,170,200,236,T.f6h);
+  const fam=dev('05-family.png',1350,X(6,170),1180), g2=ringOf(fam);
+  ringPath(g2,X(6,0),X(7,0)+10,'fadeUp'); light(g2,X(6,1700),15); light(g2,X(6,1940),20);
+  card(X(6,1080),1900,860,112,50,T.me,T.meS,false); card(X(6,1080),2270,860,112,50,T.emma,T.emmaS,true);
+  h1(7,170,200,236,T.f7h); sub(7,176,720,78,1600,T.f7s);
+  const share=dev('07-sharing.png',1220,X(7,674),1050);
+  sendButton(share,'07-sharing.png',X(7,170),X(7,FW-110),104);
+}
+function card(left,top,w,big,small,title,line,gold){
+  add(`<div class="abs" style="left:${left}px;top:${top}px;min-width:${w}px;white-space:nowrap;border-radius:${big*.84}px;padding:${big*.52}px ${big*.67}px ${big*.57}px;box-sizing:border-box;${gold?'background:var(--gold);color:#15100a;box-shadow:0 40px 100px rgba(0,0,0,.55)':'background:rgba(38,32,24,.92);box-shadow:0 0 0 3px rgba(239,230,212,.16),0 40px 100px rgba(0,0,0,.55)'}">
+   <div style="font-size:${big}px;line-height:1.05">${title}</div><div class="sans" style="font-size:${small}px;color:${gold?'#5b441a':'var(--ink2)'};margin-top:${small*.3}px">${line}</div></div>`);
+}
+// The share sheet's own gold button, drawn again larger over the place where it sits.
+function sendButton(p,shot,minLeft,maxRight,font){
+  add(`<div class="pill sans" id="send" data-shot="${shots}${shot}" data-k="${p.k}" data-x0="${p.x0}" data-y0="${p.y0}" data-min="${minLeft}" data-max="${maxRight}" style="justify-content:center;background:var(--gold);color:#15100a;font-size:${font}px;font-weight:600;box-shadow:0 40px 100px rgba(0,0,0,.6)"><span>${T.send}</span></div>`);
+}
+
+strip.innerHTML=html;
+const arcs=document.getElementById('arcs');
+arcs.setAttribute('width',7*FW); arcs.setAttribute('height',FH); arcs.setAttribute('viewBox',`0 0 ${7*FW} ${FH}`);
+arcs.innerHTML=`<defs><radialGradient id="glow"><stop offset="0" stop-color="#f0c987" stop-opacity=".6"/><stop offset="1" stop-color="#f0c987" stop-opacity="0"/></radialGradient>
+ <linearGradient id="gold"><stop offset="0" stop-color="#f0c987" stop-opacity=".8"/><stop offset="1" stop-color="#f0c987" stop-opacity=".8"/></linearGradient>
+ <linearGradient id="fadeA" gradientUnits="userSpaceOnUse" x1="0" x2="${2*FW}" y1="0" y2="0"><stop offset="0" stop-color="#f0c987" stop-opacity=".85"/><stop offset=".8" stop-color="#f0c987" stop-opacity=".8"/><stop offset="1" stop-color="#f0c987" stop-opacity=".15"/></linearGradient>
+ <linearGradient id="fadeB" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="1150" y2="1500"><stop offset="0" stop-color="#f0c987" stop-opacity="0"/><stop offset="1" stop-color="#f0c987" stop-opacity=".85"/></linearGradient>
+ <linearGradient id="fadeUp" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="950" y2="1250"><stop offset="0" stop-color="#f0c987" stop-opacity="0"/><stop offset="1" stop-color="#f0c987" stop-opacity=".85"/></linearGradient></defs>`+svg;
+
+// the small stars over the Milky Way picture
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const big=FW/1320;
+for(const c of document.querySelectorAll('canvas')){
+  const r=rng(+c.dataset.seed),g=c.getContext('2d');
+  for(let i=0;i<5200;i++){
+    const x=r()*c.width,y=r()*c.height,m=Math.pow(r(),11),rad=(.55+m*3.4)*big,a=.22+.55*r()+m*.3;
+    const t=r(),col=t<.72?'255,247,232':t<.9?'255,214,160':'205,222,255';
+    if(m>.55){const gr=g.createRadialGradient(x,y,0,x,y,rad*3.5);gr.addColorStop(0,`rgba(${col},${.22*a})`);gr.addColorStop(1,`rgba(${col},0)`);g.fillStyle=gr;g.beginPath();g.arc(x,y,rad*3.5,0,7);g.fill();}
+    g.fillStyle=`rgba(${col},${Math.min(1,a)})`;g.beginPath();g.arc(x,y,rad,0,7);g.fill();
+  }
+}
+
+(async()=>{
+  await document.fonts.ready;
+  const shrink=(el,ok)=>{let s=parseFloat(el.style.fontSize),n=0;while(!ok()&&n++<60){s*=.98;el.style.fontSize=s+'px'}};
+  for(const el of document.querySelectorAll('h1'))shrink(el,()=>el.getBoundingClientRect().width<=+el.dataset.max);
+  for(const el of document.querySelectorAll('.pill.fit'))shrink(el,()=>el.getBoundingClientRect().right<=+el.dataset.right);
+  const words=document.getElementById('words'),note=document.getElementById('note'),under=document.getElementById('under');
+  const noteTop=words.offsetTop+words.offsetHeight+(+note.dataset.gap);
+  note.style.top=noteTop+'px';
+  under.style.top=Math.max(parseFloat(under.style.top),noteTop+note.offsetHeight+(+getComputedStyle(under).getPropertyValue('--gap')))+'px';
+  // find the gold button in the sharing screenshot and lay the larger one over it
+  const send=document.getElementById('send');
+  const im=new Image(); im.src=send.dataset.shot; await im.decode();
+  const c=document.createElement('canvas'); c.width=im.width; c.height=im.height; const g=c.getContext('2d'); g.drawImage(im,0,0);
+  const px=g.getImageData(0,0,im.width,im.height).data; let x1=1e9,x2=0,y1=1e9,y2=0;
+  for(let y=0;y<im.height;y+=2){let n=0,a=1e9,b=0;for(let x=0;x<im.width;x+=2){const i=(y*im.width+x)*4;if(px[i]>222&&px[i+1]>178&&px[i+1]<222&&px[i+2]>105&&px[i+2]<170){n++;if(x<a)a=x;if(x>b)b=x}}
+    if(n*2>im.width*.2){x1=Math.min(x1,a);x2=Math.max(x2,b);y1=Math.min(y1,y);y2=Math.max(y2,y)}}
+  const k=+send.dataset.k, cx=+send.dataset.x0+(x1+x2)/2*k, cy=+send.dataset.y0+(y1+y2)/2*k;
+  let w=(x2-x1)*k*1.5, h=(y2-y1)*k*1.75; const font=parseFloat(send.style.fontSize);
+  h=Math.max(h,font*2.5); w=Math.max(w,h*4.2);
+  let left=cx-w/2; left=Math.max(+send.dataset.min,Math.min(left,+send.dataset.max-w));
+  Object.assign(send.style,{left:left+'px',top:Math.min(cy-h/2,FH-h-FW*.06)+'px',width:w+'px',height:h+'px'});
+  shrink(send,()=>send.firstChild.getBoundingClientRect().width<=w-h*.9);
+  window.ready=true;
+})();
+</script>
