@@ -1,7 +1,7 @@
-// The App Store pictures, from the plain screenshots in design/store/<lang>/<device>/ (made by
-// tool/store_shots.sh) to the captioned frames in design/store/framed/<lang>/<device>/01.png … 07.png.
+// The store pictures, from the plain screenshots in design/store/<lang>/<device>/ (made by
+// tool/store_shots.sh and tool/store_shots_android.sh) to the captioned frames in design/store/framed/<lang>/<device>/01.png … 07.png.
 //
-//   node tool/store_frames/build.mjs [en|es ...] [iphone|ipad ...]
+//   node tool/store_frames/build.mjs [en|es ...] [iphone|ipad|android ...]
 //
 // Needs Playwright and Google Chrome. PLAYWRIGHT can point at another copy of Playwright.
 // Each set also gets one small picture of the whole row, beside it: framed/<lang>-<device>.jpg.
@@ -22,7 +22,7 @@ const browser = await chromium.launch({
   args: ['--allow-file-access-from-files'],
 });
 for (const lang of pick(['en', 'es'])) {
-  for (const device of pick(['iphone', 'ipad'])) {
+  for (const device of pick(['iphone', 'ipad', 'android'])) {
     const dir = path.join(out, lang, device);
     fs.mkdirSync(dir, { recursive: true });
     const page = await browser.newPage({ viewport: { width: 1320, height: 2868 } });

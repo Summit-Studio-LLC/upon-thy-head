@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8">
+<!-- Google Play's feature graphic, 1024 x 500: the night sky, the ring with three lights, the name.
+     play.mjs opens this page (?lang=en|es) and saves it. -->
+<style>
+@font-face{font-family:N;src:url("../../assets/fonts/Newsreader.ttf");font-weight:200 800}
+html,body{margin:0;background:#0b0907}
+#g{position:relative;width:1024px;height:500px;overflow:hidden;font-family:N,serif;color:#efe6d4}
+.mw{position:absolute;inset:0;background:url("../../assets/sky/milkyway_4k.jpg") no-repeat;background-size:4200px 2100px;background-position:-2380px -520px;filter:contrast(1.25) brightness(1.2) saturate(1.15)}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(11,9,7,.78) 0,rgba(11,9,7,.45) 45%,rgba(11,9,7,0) 75%),linear-gradient(rgba(11,9,7,0) 55%,rgba(11,9,7,.5) 100%)}
+canvas,svg{position:absolute;left:0;top:0}
+h1{position:absolute;left:64px;top:304px;margin:0;font-weight:400;font-size:78px;line-height:1;letter-spacing:-.028em;white-space:nowrap}
+p{position:absolute;left:67px;top:402px;margin:0;font-size:28px;color:#b5ab98;letter-spacing:-.005em;white-space:nowrap}
+</style>
+<body><div id="g"><div class="mw"></div><canvas width="1024" height="500"></canvas><div class="shade"></div><svg width="1024" height="500" id="s"></svg>
+<h1>Upon Thy Head</h1><p id="t"></p></div>
+<script>
+const lang=new URLSearchParams(location.search).get('lang')||'en';
+document.getElementById('t').textContent={en:'Keep every blessing you are given.',es:'Guarda cada bendición que recibas.'}[lang];
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const c=document.querySelector('canvas'),r=rng(11),g=c.getContext('2d');
+for(let i=0;i<620;i++){const x=r()*1024,y=r()*500,m=Math.pow(r(),11),rad=.45+m*1.6,a=.22+.55*r()+m*.3,t=r(),col=t<.72?'255,247,232':t<.9?'255,214,160':'205,222,255';
+  g.fillStyle=`rgba(${col},${Math.min(1,a)})`;g.beginPath();g.arc(x,y,rad,0,7);g.fill()}
+// the ring: one circle, entering at the top and running out at the right
+const cx=1100,cy=-700,R=1100,Y=x=>cy+Math.sqrt(R*R-(x-cx)*(x-cx));
+let d='';for(let x=250;x<=1024;x+=3)d+=(d?'L':'M')+x+' '+Y(x).toFixed(1)+' ';
+const light=(x,rad)=>`<circle cx="${x}" cy="${Y(x)}" r="${rad*5}" fill="url(#glow)"/><circle cx="${x}" cy="${Y(x)}" r="${rad}" fill="#fbe6bd"/>`;
+document.getElementById('s').innerHTML=`<defs><radialGradient id="glow"><stop offset="0" stop-color="#f0c987" stop-opacity=".6"/><stop offset="1" stop-color="#f0c987" stop-opacity="0"/></radialGradient>
+<linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="250" x2="1024" y1="0" y2="0"><stop offset="0" stop-color="#f0c987" stop-opacity="0"/><stop offset=".3" stop-color="#f0c987" stop-opacity=".85"/><stop offset="1" stop-color="#f0c987" stop-opacity=".85"/></linearGradient></defs>
+<path d="${d}" fill="none" stroke="url(#fade)" stroke-width="1.6"/>`+light(690,4.5)+light(820,6.5)+light(945,4.5);
+document.fonts.ready.then(()=>{window.ready=true});
+</script>

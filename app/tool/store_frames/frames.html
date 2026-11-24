@@ -1,8 +1,10 @@
 <!doctype html><meta charset="utf-8">
-<!-- The App Store pictures: seven frames drawn as one strip, so the home screen and its ring can
+<!-- The store pictures: seven frames drawn as one strip, so the home screen and its ring can
      cross from one frame into the next. build.mjs opens this page once for each language and
-     device (?lang=en|es&device=iphone|ipad) and cuts the strip into the seven pictures.
-     The screens themselves are the plain screenshots from tool/store_shots.sh. -->
+     device (?lang=en|es&device=iphone|ipad|android) and cuts the strip into the seven pictures.
+     The screens themselves are the plain screenshots from tool/store_shots.sh and
+     tool/store_shots_android.sh. Google Play takes phone pictures at 9:16 only, so the Android
+     frames are shorter than the iPhone's. -->
 <style>
 @font-face{font-family:N;src:url("../../assets/fonts/Newsreader.ttf");font-weight:200 800}
 @font-face{font-family:N;font-style:italic;src:url("../../assets/fonts/Newsreader-Italic.ttf");font-weight:200 800}
@@ -60,6 +62,7 @@ const T=WORDS[lang];
 const D={
  iphone:{FW:1320,FH:2868,shotW:1320,asp:2868/1320,pad:.015,rad:.135,inner:.121,ring:{x:660,y:-912.6,r:2059}},
  ipad:{FW:2064,FH:2752,shotW:2064,asp:2752/2064,pad:.02,rad:.05,inner:.032,ring:{x:1032,y:-864.9,r:1965}},
+ android:{FW:1350,FH:2400,shotW:1280,asp:2856/1280,pad:.015,rad:.115,inner:.1,ring:{x:640,y:-893.6,r:2035.4}},
 }[device];
 const {FW,FH}=D, strip=document.getElementById('strip');
 strip.style.width=7*FW+'px'; strip.style.height=FH+'px';
@@ -115,6 +118,32 @@ if(device==='iphone'){
   h1(7,110,236,176,T.f7h); sub(7,114,620,56,1100,T.f7s);
   const share=dev('07-sharing.png',900,X(7,330),1100);
   sendButton(share,'07-sharing.png',X(7,70),X(7,1250),76);
+}else if(device==='android'){
+  sky(1,7,-6650,-1150,10650); flat(3,'#eec27a'); flat(4,'#0b0907');
+  flat(5,'#efe6d4','<div class="abs" style="left:-180px;top:1060px;width:1710px;height:1710px;border-radius:50%;background:#f0c987"></div>');
+  sky(6,23,-1500,-1250,10650);
+  add('<svg id="arcs"></svg>');
+  h1(1,112,200,176,T.f1h); sub(1,116,762,56,1000,T.f1s);
+  add(`<div class="pill sans fit" data-right="${X(1,770)}" style="left:${X(1,112)}px;top:2140px;height:112px;padding:0 50px;border:3px solid rgba(240,201,135,.75);color:var(--gold);font-size:46px;font-weight:500">${T.free}</div>`);
+  const home=dev('01-home.png',1100,800,1010), g=ringOf(home);
+  ringPath(g,0,2*FW,'fadeA'); light(g,130,11,'2019',40); light(g,400,15,'2021',40); light(g,650,11,'2023',40);
+  h1(2,112,200,176,T.f2h); sub(2,116,762,56,1100,T.f2s);
+  h1(3,112,200,196,T.f3h,'var(--dark)'); sub(3,116,640,54,1100,T.f3s,'#5b441a');
+  dev('02-recording.png',880,X(3,270),930,{light:1,style:'transform:rotate(5deg);transform-origin:50% 30%'});
+  add(`<div class="pill" style="left:${X(3,76)}px;top:1440px;height:180px;padding:0 72px 0 58px;background:#15100a;color:var(--ink);font-size:98px;font-style:italic;box-shadow:0 30px 80px rgba(60,40,5,.45)"><span style="width:36px;height:36px;border-radius:50%;background:#fbe6bd;box-shadow:0 0 0 13px rgba(240,201,135,.28),0 0 56px 19px rgba(240,201,135,.5);margin-right:46px"></span>${T.listening}</div>`);
+  h1(4,112,200,150,T.f4h);
+  add(`<div class="abs" id="words" style="left:${X(4,112)}px;top:610px;width:1150px;font-size:104px;line-height:1.2;letter-spacing:-.012em">${T.f4t}</div>`);
+  add(`<div class="pill sans fit" id="note" data-gap="90" data-right="${X(4,FW-92)}" style="left:${X(4,112)}px;top:1600px;height:118px;padding:0 54px;background:var(--gold);color:#15100a;font-size:46px;font-weight:600">${T.f4p}</div>`);
+  dev('03-review.png',1040,X(4,155),1700,{id:'under',style:'--gap:140'});
+  h1(5,112,200,196,T.f5h,'var(--dark)'); sub(5,116,640,54,1100,T.f5s,'#5f5646');
+  dev('04-reading.png',900,X(5,225),900,{light:1});
+  h1(6,112,200,176,T.f6h);
+  const fam=dev('05-family.png',840,X(6,112),900), g2=ringOf(fam);
+  ringPath(g2,X(6,0),X(7,350),'gold'); light(g2,X(6,1190),11); light(g2,X(7,190),15);
+  card(X(6,640),1720,620,82,37,T.me,T.meS,false); card(X(6,640),1990,620,82,37,T.emma,T.emmaS,true);
+  h1(7,112,200,176,T.f7h); sub(7,116,600,54,1120,T.f7s);
+  const share=dev('07-sharing.png',840,X(7,360),900);
+  sendButton(share,'07-sharing.png',X(7,70),X(7,1280),72);
 }else{
   sky(1,7,-9900,-1900,15500); flat(3,'#eec27a'); flat(4,'#0b0907');
   flat(5,'#efe6d4','<div class="abs" style="left:-170px;top:1180px;width:2400px;height:2400px;border-radius:50%;background:#f0c987"></div>');
