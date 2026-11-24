@@ -33,7 +33,14 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // 64-bit only. The speech engine (jniLibs) is built for arm64 and x86_64; a 32-bit-only
+        // phone could install the app and never write a word, so Google Play is not to offer it there.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
+
+    // A plugin's build hook still puts its own 32-bit library in; one stray file would make Play
+    // offer the app to 32-bit phones, where it could not start.
+    packaging { jniLibs { excludes += listOf("lib/armeabi-v7a/**", "lib/x86/**") } }
 
     signingConfigs {
         create("upload") {

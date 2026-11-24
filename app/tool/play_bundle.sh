@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ -f android/key.properties ]] || { echo "android/key.properties is missing: see important/readme.txt"; exit 1; }
 STAMP="$(mktemp)"; trap 'rm -f "$STAMP"' EXIT
-flutter build appbundle --release
+flutter build appbundle --release --target-platform android-arm64,android-x64
 AAB=build/app/outputs/bundle/release/app-release.aab
 [[ -f "$AAB" && "$AAB" -nt "$STAMP" ]] || { echo "no fresh $AAB came out of this build"; exit 1; }
 WANT="$(keytool -list -v -keystore "$(sed -n 's/^storeFile=//p' android/key.properties)" \

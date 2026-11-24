@@ -20,8 +20,16 @@ from android_ui import Device  # noqa: E402
 def add(d, pin):
     d.sh('locksettings set-disabled false')
     print(d.sh(f'locksettings set-pin {pin}').strip())
+    # just after boot the Play Store can come up over Settings with its own "Sign in": closed,
+    # and enrolment started again
+    d.sh('am force-stop com.android.vending')
     d.sh('am start -a android.settings.FINGERPRINT_ENROLL')
     d.wait('PIN', 20)
+    time.sleep(3)
+    if d.has('^Sign in to find'):
+        d.sh('am force-stop com.android.vending')
+        d.sh('am start -a android.settings.FINGERPRINT_ENROLL')
+        d.wait('PIN', 20)
     # just after boot the PIN field can miss the first typing: tap it and type again
     for _ in range(3):
         time.sleep(1.5)
@@ -33,7 +41,10 @@ def add(d, pin):
             d.wait('^MORE$|^More$|^I agree$|^I AGREE$', 12)
             break
         except TimeoutError:
-            pass
+            if d.has('^Sign in to find'):
+                d.sh('am force-stop com.android.vending')
+                d.sh('am start -a android.settings.FINGERPRINT_ENROLL')
+                d.wait('PIN', 20)
     d.wait('^MORE$|^More$|^I agree$|^I AGREE$', 8)
     for _ in range(8):
         if d.has('^(I agree|I AGREE|Agree)$'):

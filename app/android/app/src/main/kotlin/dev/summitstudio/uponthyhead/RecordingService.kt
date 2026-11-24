@@ -28,7 +28,12 @@ import android.util.Log
 class RecordingService : Service() {
     companion object {
         private const val TAG = "speech"
-        private const val CHANNEL = "recording"
+        // "recording_v2": the first channel ("recording") was IMPORTANCE_LOW, which Android files
+        // under Silent, and a Pixel hides silent notifications on the lock screen by default, so
+        // the recording could not be seen there. A channel's importance cannot be raised once made,
+        // hence a new id; the old channel is deleted.
+        private const val CHANNEL = "recording_v2"
+        private const val OLD_CHANNEL = "recording"
         private const val ID = 1
 
         /** Tests: the service is up now. */
@@ -54,7 +59,7 @@ class RecordingService : Service() {
 
         private fun channel(context: Context) {
             val m = context.getSystemService(NotificationManager::class.java)
-            val c = NotificationChannel(CHANNEL, context.getString(R.string.recording_channel), NotificationManager.IMPORTANCE_LOW).apply {
+            val c = NotificationChannel(CHANNEL, context.getString(R.string.recording_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = context.getString(R.string.recording_channel_about)
                 setSound(null, null)
                 enableVibration(false)
@@ -62,6 +67,7 @@ class RecordingService : Service() {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             m.createNotificationChannel(c)
+            m.deleteNotificationChannel(OLD_CHANNEL)
         }
 
         fun notification(context: Context, paused: Boolean): Notification {

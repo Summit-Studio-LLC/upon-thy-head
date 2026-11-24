@@ -26,6 +26,7 @@ class SkySwitch extends StatefulWidget {
     required this.onChosen,
     this.onOpening,
     this.onClosed,
+    this.controller,
   });
 
   final Palette palette;
@@ -45,6 +46,9 @@ class SkySwitch extends StatefulWidget {
   /// The menu began to close, with a row chosen or without.
   final VoidCallback? onClosed;
 
+  /// The menu's controller, when its owner must close it (Android's back); else its own.
+  final GlassMenuController? controller;
+
   @override
   State<SkySwitch> createState() => _SkySwitchState();
 }
@@ -53,7 +57,7 @@ class SkySwitch extends StatefulWidget {
 const _capsuleMaxScale = 1.6;
 
 class _SkySwitchState extends State<SkySwitch> {
-  final _menu = GlassMenuController();
+  late final _menu = widget.controller ?? GlassMenuController();
   List<PullDownItem> _items = const [];
   bool _opening = false;
 

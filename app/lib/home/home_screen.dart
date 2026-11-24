@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassMenuController;
 import 'package:path/path.dart' as path;
 
 import '../data/samples.dart' show seedWithFirstRun;
@@ -175,6 +176,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// The sky's menu is being opened or is open (it goes at once if the app locks: the capsule and
   /// the glass menu it morphs into leave the tree with the head).
   bool _skyMenuOpen = false;
+  // the capsule's menu, so Android's back closes it rather than leaving the app
+  final _skyMenu = GlassMenuController();
 
   /// When the ring showing begins: a family member's birth, if given.
   DateTime? get _begins => _family.person(_ring)?.born?.local;
@@ -2019,7 +2022,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Before the capsule's menu opens: the family read afresh, and false to keep it shut.
   Future<bool> _openingSkyMenu() async {
     if (_locked || _stage != Stage.home || _skyMenuOpen || _recoveredSheet || _receiving) return false;
-    _skyMenuOpen = true;
+    // rebuilt, so Android's back closes the menu (see _backLeavesApp)
+    setState(() => _skyMenuOpen = true);
     await _reloadFamily();
     if (!mounted || _locked) {
       _skyMenuOpen = false;
@@ -2188,7 +2192,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_locked) return true;
     if (_onboard == Onboard.practice) return false;
     if (_onboard != Onboard.none) return true;
-    return _stage == Stage.home && !_list && !_recoveredSheet && !_receiving;
+    return _stage == Stage.home && !_list && !_recoveredSheet && !_receiving && !_skyMenuOpen;
   }
 
   /// Back on Android: closes a sheet; otherwise goes back as the page's chevron does. It never ends
@@ -2206,6 +2210,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case Stage.home:
         // a shared blessing is declined only by its own button (question 49)
         if (_receiving) return;
+        if (_skyMenuOpen) return _skyMenu.close();
         if (_recoveredSheet) return _laterRecovered();
         if (_list) setState(() => _list = false);
       case Stage.record:
@@ -2775,7 +2780,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   menu: () => _family.menu(_ring),
                   onOpening: _openingSkyMenu,
                   onChosen: (code) => unawaited(_skyMenuChosen(code)),
-                  onClosed: () => _skyMenuOpen = false,
+                  onClosed: () {
+                    if (mounted) setState(() => _skyMenuOpen = false);
+                  },
+                  controller: _skyMenu,
                 ),
               ),
               const SizedBox(height: 4),

@@ -100,6 +100,11 @@ class Run:
         time.sleep(2)
 
     def home(self):
+        # the speech model's one-time download is offered after the first run: Later, as
+        # android_record.py does
+        self.d.wait('^Later$|^New blessing', 30)
+        if self.d.has('^Later$'):
+            self.d.tap('^Later$')
         self.d.wait('^New blessing', 30)
 
     def install(self):
@@ -396,6 +401,12 @@ class Run:
         return got[0] if got else None
 
     def use_my_location(self):
+        # Android 17 can put its "No location access" up as soon as location is turned off for
+        # the phone, before the tap: closed first
+        time.sleep(1.5)
+        if self.d.has('^No location access'):
+            self.shot('location-off-system-dialog')
+            self.d.tap('^Close')
         at = self.d.wait('^Use my location')
         t = time.monotonic()
         self.d.sh(f'input tap {at[0]} {at[1]}')
