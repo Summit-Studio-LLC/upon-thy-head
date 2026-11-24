@@ -5,3 +5,6 @@
 design/sim/
 # the App Store screenshots: made again by app/tool/store_shots.sh
 design/store/
+
+# Signing keys and other credentials. Nothing in here is ever committed.
+important/

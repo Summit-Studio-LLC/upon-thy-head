@@ -177,7 +177,7 @@ ok(big.status === 413, "too big over the wire");
 const aasa = await fetch(`${origin}/.well-known/apple-app-site-association`, { redirect: "manual" });
 ok(aasa.status === 200 && aasa.headers.get("content-type") === "application/json" && (await aasa.json()).applinks.details[0].components[0]["/"] === "/b/*", "apple-app-site-association");
 const links = await fetch(`${origin}/.well-known/assetlinks.json`, { redirect: "manual" });
-ok(links.status === 200 && links.headers.get("content-type") === "application/json" && JSON.stringify(await links.json()) === "[]", "assetlinks.json");
+ok(links.status === 200 && links.headers.get("content-type") === "application/json" && (await links.json())[0]?.target?.package_name === "dev.summitstudio.uponthyhead", "assetlinks.json");
 ok((await fetch(`${origin}/api/sweep`)).status === 401, "the clean-up cannot be run without its secret");
 // What is on disk for a link: no key, no title, no words.
 const dir = process.env.LINKS_LOCAL_DIR;
