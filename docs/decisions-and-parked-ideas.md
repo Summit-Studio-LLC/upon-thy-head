@@ -4,6 +4,15 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ## Decisions
 
+### 2026-11-24
+
+- **Android is sent to Google's review (Noah: "ok, i made the choice, keep going").**
+  - **AI asset declaration: "Don't label assets".** Noah chose it himself in Play Console. (Claude had recommended labelling the icon, which came from an image generator.)
+  - **Countries:** everywhere Play offers, including "rest of world", except China, as on the App Store.
+  - **The production release** is build 1.1.0 (17), a full rollout, with first-release notes in English and Spanish.
+  - **Managed publishing is on** (it could be switched on once the release was drafted). An approved app waits in Publishing overview until someone presses Publish; it does not go live by itself. Publishing is at Noah's word.
+  - Sent as 15 changes on 2026-11-24. Google says a first review usually finishes within 7 days.
+
 ### 2026-11-23
 
 - **Version 1.1 (build 16) is submitted to Apple with the captioned pictures (Noah: "let's push these, they look great").** Created through Apple's API with "What's New" in English and Spanish, build 16 attached, the 42 captioned pictures in place of the plain ones (the Spanish set serves es-MX and es-ES). Release is manual: after approval it waits for Noah's word.
