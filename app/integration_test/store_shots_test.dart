@@ -294,6 +294,16 @@ void main() {
       if (top < clear) {
         rs.jumpTo((rs.pixels - (clear - top).clamp(0, room)).clamp(0, rs.maxScrollExtent));
       }
+      // Android: the page has one more line (the words written on this phone), so the title and the
+      // polished row do not both fit; the title goes up under the bar's fade, so no sliver of it shows.
+      if (Platform.isAndroid) {
+        await t.pump();
+        final under = MediaQuery.of(t.element(polished)).padding.top + 30;
+        final titleTop = t.getTopLeft(title.first).dy, titleBottom = t.getBottomLeft(title.first).dy;
+        if (titleTop < clear && titleBottom > under) {
+          rs.jumpTo((rs.pixels + titleBottom - under).clamp(0, rs.maxScrollExtent));
+        }
+      }
     }
     await wait(800);
     await shot('03-review');
