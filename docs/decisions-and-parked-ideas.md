@@ -6,6 +6,7 @@ Kept so nothing said in conversation is lost. Newest decisions first. Dates are 
 
 ### 2026-11-24
 
+- **iPhone and iPad 1.1 (build 16) is live on the App Store** since 2026-11-24 15:10 UTC, with the captioned pictures. Claude did not release it; the version was set to manual release, so it was released from App Store Connect by someone else (not yet confirmed who). The two checks that were to come before release (polish with the phone's own model on Noah's iPhone Air; the scripts that play speech aloud) had not been done.
 - **Android is sent to Google's review (Noah: "ok, i made the choice, keep going").**
   - **AI asset declaration: "Don't label assets".** Noah chose it himself in Play Console. (Claude had recommended labelling the icon, which came from an image generator.)
   - **Countries:** everywhere Play offers, including "rest of world", except China, as on the App Store.
